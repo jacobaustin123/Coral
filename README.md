@@ -11,7 +11,7 @@ This will generate an executable called coral.native which acts as an interprete
 
 ## Debugging
 
-For debugging, it can be useful to use menhir. Menhir is a tool which extends ocamlyacc, and can be installed by running opam install menhir. With menhir install, you can simply run 
+For debugging, it can be useful to use menhir. Menhir is a tool which extends ocamlyacc, and can be installed by running ```opam install menhir```. With menhir install, you can simply run 
 
 ```menhir --interpret --interpret-show-cst ~/.../parser.mly```
 
