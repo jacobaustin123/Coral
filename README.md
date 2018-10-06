@@ -42,3 +42,107 @@ parser.mly is an ocamlyacc file which describes the CFG structure of our languag
 ### 4. coral.ml
 
 coral.ml is an interpreter for our language, reading inputs from stdin, lexing and parsing them, and then printing the output. Many of the methods we intend to support have not been fully implemented, but most basic calculator functions should work. This file also handles the indentation in the _indent_ method.
+
+
+## Examples
+
+```python
+def gcd(a, b):
+	while a != b:
+		if a > b:
+			a = a - b
+		else:
+			b = b - a
+	return a
+```
+
+generates the tokens "DEF VARIABLE LPAREN VARIABLE COMMA VARIABLE RPAREN COLON INDENT SEP WHILE VARIABLE NEQ VARIABLE COLON INDENT SEP IF VARIABLE GT VARIABLE COLON INDENT SEP VARIABLE ASN VARIABLE MINUS VARIABLE SEP DEDENT ELSE COLON INDENT SEP VARIABLE ASN"
+
+which are accepted by menhir as
+
+```menhir
+program: DEF VARIABLE LPAREN VARIABLE COMMA VARIABLE RPAREN COLON INDENT SEP WHILE VARIABLE NEQ VARIABLE COLON INDENT SEP IF VARIABLE GT VARIABLE COLON INDENT SEP VARIABLE ASN VARIABLE MINUS VARIABLE SEP DEDENT ELSE COLON INDENT SEP VARIABLE ASN VARIABLE MINUS VARIABLE SEP DEDENT DEDENT RETURN VARIABLE SEP DEDENT SEP
+ACCEPT
+[program:
+  [stmt_list:
+    [stmt_list:]
+    [stmt:
+      [stmt:
+        DEF
+        VARIABLE
+        LPAREN
+        [formals_opt:
+          [formal_list: [formal_list: VARIABLE] COMMA VARIABLE]
+        ]
+        RPAREN
+        COLON
+        [stmt_block:
+          INDENT
+          SEP
+          [stmt_list:
+            [stmt_list:
+              [stmt_list:]
+              [stmt:
+                WHILE
+                [expr: [expr: VARIABLE] NEQ [expr: VARIABLE]]
+                COLON
+                [stmt_block:
+                  INDENT
+                  SEP
+                  [stmt_list:
+                    [stmt_list:]
+                    [stmt:
+                      IF
+                      [expr: [expr: VARIABLE] GT [expr: VARIABLE]]
+                      COLON
+                      [stmt_block:
+                        INDENT
+                        SEP
+                        [stmt_list:
+                          [stmt_list:]
+                          [stmt:
+                            [expr:
+                              VARIABLE
+                              ASN
+                              [expr: [expr: VARIABLE] MINUS [expr: VARIABLE]]
+                            ]
+                            SEP
+                          ]
+                        ]
+                        DEDENT
+                      ]
+                      ELSE
+                      COLON
+                      [stmt_block:
+                        INDENT
+                        SEP
+                        [stmt_list:
+                          [stmt_list:]
+                          [stmt:
+                            [expr:
+                              VARIABLE
+                              ASN
+                              [expr: [expr: VARIABLE] MINUS [expr: VARIABLE]]
+                            ]
+                            SEP
+                          ]
+                        ]
+                        DEDENT
+                      ]
+                    ]
+                  ]
+                  DEDENT
+                ]
+              ]
+            ]
+            [stmt: RETURN [expr: VARIABLE] SEP]
+          ]
+          DEDENT
+        ]
+      ]
+      SEP
+    ]
+  ]
+  EOF
+]
+```
