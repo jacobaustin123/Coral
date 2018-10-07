@@ -21,7 +21,7 @@ to open a debugging interpreter which allows you to test the parser. For instanc
 program: DEF VARIABLE LPAREN VARIABLE RPAREN COLON INDENT SEP RETURN VARIABLE SEP DEDENT SEP
 ```
 
-to see if it accepts that sequence of parser tokens.
+to see if it accepts that sequence of parser tokens. Here, the program tab indicates that menhir should be querying the program entry point, since I use multiple entry points for different parsing tasks.
 
 ## Status
 
@@ -42,6 +42,10 @@ Warning: 42 shift/reduce conflicts were arbitrarily resolved.
 Furthermore, there is currently no support for non-float literals. That needs to be implemented along with the var : type tags. I have already added INT, FLOAT, STRING, and BOOL to the lexer, and these will simply need to be added to the parser in the expr method. I'm going to wait a few days before adding them, but it should be a simple matter of creating a Var type which can take one of those 4 types, or creating a general type which has a field to specify its type. We can talk about the best way to approach this. 
 
 I have also not exhaustively tested the parser for validity. The indentation system in particular may have issues I have not discovered so far. The tester should try and come up with a systematic way of testig these things. Otherwise, everything looks good.
+
+### What currently works?
+
+Right now, I have patched together an interpreter written in OCaml, which can handle variable assignment, if/else statements, while loops, and functions. Basically every statement returns a value, so you may see some weird results, but in those respects it should work exactly like Python. You have to use tabs, since I haven't thought about the logic for doing tabs/whitespace. There are no classes, no lists, and no types besides floats.
 
 ## Structure
 
