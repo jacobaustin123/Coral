@@ -2,16 +2,22 @@ open Ast
 
 module StringMap = Map.Make(String);; (* map from string -> expr *)
 
-let float_of_bool b = if b then 1.0 else 0.0
+(* converts floats to bools, so we can hack in support for if statements. 1.0 is true, etc. *)
+
+let float_of_bool b = if b then 1.0 else 0.0 
 ;;
 
-let rec zip lst1 lst2 = match lst1,lst2 with
+(* combine two lists, used to match the argument names and their values *)
+
+let rec zip lst1 lst2 = match lst1,lst2 with 
   | [], [] -> []
   | [],_::_-> raise (Failure "TypeError: invalid arguments passed to function.")
   | _::_, []-> raise (Failure "TypeError: invalid arguments passed to function.")
   | (x::xs),(y::ys) -> (x, y) :: (zip xs ys)
 
-let rec eval_expr map = function (* expr -> (float, map) *)
+(* expr -> (float, map), used to evaluate expressions *)
+
+let rec eval_expr map = function 
   | Lit(x) -> (x, map)
   | Var(x) -> (try let Expr(v) = (StringMap.find x map) in eval_expr map v with Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" x; flush stdout; raise Not_found)
   | Asn(n, v) -> let (v1, m1) = eval_expr map v in let m2 = (StringMap.add n (Expr (Lit v1)) m1) in (v1, m2)
@@ -42,10 +48,14 @@ match op with
   | Eq -> (float_of_bool (v1 = v2), m2)
   | If -> if v1 = 1.0 then (v2, m2) else (0.0, m2) (* this doesn't work *)
 
-and add_to_map map = function
+(* used to add a list of function arguments to the map of local variables *)
+
+and add_to_map map = function 
   | (a, b) -> let (v1, m1) = eval_expr map b in let m2 = (StringMap.add a (Expr (Lit v1)) m1) in m2
 
-and eval_stmt map = function (* takes a statement, returns a float and a map *)
+(* takes a statement, returns a float and a map, used to evaluate all expressions *)
+
+and eval_stmt map = function 
   | Block(a) -> main map 0.0 a                                     
   | Func(a, b, c) -> let m1 = (StringMap.add a (Func(a, b, c)) map) in (0.0, m1) (* raise (Failure "NotImplementedError: Functions have not yet been implemented");        *)(*string * string list * stmt list*)                                         (* stmt list *)
   | Expr(a) -> let (x, m1) = eval_expr map a in (x, m1)                                                                              (* expr *)          
@@ -54,20 +64,28 @@ and eval_stmt map = function (* takes a statement, returns a float and a map *)
   | While(a, b) -> let rec recurse map = let (x, m1) = eval_expr map a in if x = 1.0 then let (x1, m2) = eval_stmt m1 (Block b) in recurse m2 else (0.0, map) in recurse map                                          (*raise (Failure "NotImplementedError: While loops have not yet been implemented"); *)      (* expr * stmt *)
   | Return(a) ->  raise (Failure "NotImplementedError: Return statements have not yet been implemented");  (* expr *)
 
-and main map value = function (* takes a stmt list *)
+(* takes a stmt list, evaluates it in order *)
+
+and main map value = function 
   | [] -> (value, map)
   | a :: t -> let (v1, m1) = eval_stmt map a in main m1 v1 t
 ;;
 
-let explode s =
+(* converts a string to a list of chars *)
+
+let explode s = 
   let rec exp i l =
     if i < 0 then l else exp (i - 1) (s.[i] :: l) in
   exp (String.length s - 1) []
 ;;
 
-let impode s = String.concat "" (List.map (String.make 1) s)
+(* does the reverse *)
 
-let print = function
+let impode s = String.concat "" (List.map (String.make 1) s) 
+
+(* utility function used for printing parsed tokens. can be replaced by menhir mostly *)
+
+let print = function 
   | Parser.COLON -> "COLON"
   | Parser.TAB -> "TAB"
   | Parser.NOT -> "NOT"
@@ -110,7 +128,9 @@ let print = function
   | _ -> "I'm too lazy"
 ;;
 
-let remove_double_semicolons = function
+(* used to hackily fix a big where multiple semicolons cause issues. there may be a more elegant way *)
+
+let remove_double_semicolons = function 
   | [] -> []
   | x :: t -> 
       let rec aux nums = function
@@ -119,6 +139,12 @@ let remove_double_semicolons = function
        else aux (a :: nums) t in
       List.rev (aux [x] t)
 ;;
+
+
+(* this is a complicated function. it takes the lexed buffer, runs it through the tokenize parser in order to 
+extract a list of tokens. once this list has been extracted, we iterate over it to check if the indentations 
+are correct, and to insert Parser.INDENT and Parser.DEDENT tokens as desired. We also sanitize it using the 
+above methods *)
 
 let indent tokens base current =
     let rec aux curr s out stack = match s with
@@ -139,6 +165,11 @@ let indent tokens base current =
   let _ = List.iter (Printf.printf "%s ") (List.map print out) in
   (* let _ = List.iter print_endline (List.map print tokens) in *)
   out *)
+
+(* this is the main function loop for the interpreter. We lex the input from stdin,
+convert it to a list of Parser.token, apply the appropriate indentation corrections,
+check to make sure we are at 0 indentation level, print more dots otherwise, and then
+compute the correct value and repeat *)
 
 let rec loop map = 
   try 
@@ -172,7 +203,7 @@ let rec loop map =
 ;;
 
 let _ =
-	Printf.printf "Welcome to my simple OCaml calculator!\n\n"; flush stdout;
+	Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout;
   try
     let emptymap = StringMap.empty in loop emptymap
   with 
