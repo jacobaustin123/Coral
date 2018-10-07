@@ -21,7 +21,7 @@ def gcd(a, b):
     return a
 ```
 
-works correctly. 
+works correctly. Note that Coral currently doesn't support space-based indentation, and you can't copy and paste into the interpreter for some reason.
 
 ## Debugging
 
@@ -60,6 +60,20 @@ I have also not exhaustively tested the parser for validity. The indentation sys
 ### What currently works?
 
 Right now, I have patched together an interpreter written in OCaml, which can handle variable assignment, if/else statements, while loops, and functions. Basically every statement returns a value, so you may see some weird results, but in those respects it should work exactly like Python. You have to use tabs, since I haven't thought about the logic for doing tabs/whitespace. There are no classes, no lists, and no types besides floats.
+
+### Some helpful utilities
+
+The pattern list under tokenizer must fully reflect the list in the Scanner.mll. If you update the lexer, you can generate part of the revised list using the following awk script:
+
+```awk
+cat /.../.../Coral/scanner.mll | gawk '{ match($0, /{\s+([A-Z]+)\s+}/, arr); if(arr[1] != "" && arr[1] != "EOL") printf "  | %s { [%s] }\n", arr[1], arr[1] }'
+```
+
+You may need to install gawk first using brew. This isn't the whole list, so make sure to compare the existing list against the new one. In particular, the end is different. You can also update the print function in coral.ml in the same way, using
+
+```awk
+cat /.../.../Coral/scanner.mll | gawk '{ match($0, /{\s+([A-Z]+)\s+}/, arr); if(arr[1] != "" && arr[1] != "EOL") printf "  | Parser.%s -> \”%s\”\n", arr[1], arr[1] }'
+```
 
 ## Structure
 
