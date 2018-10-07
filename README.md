@@ -146,3 +146,23 @@ ACCEPT
   EOF
 ]
 ```
+
+## Status
+
+The lexer and parser are both partially complete. The lexer should be totally complete, baring changes which need to be made due to parser changes. The parser works in its current state, but it throws a variety of errors which need to be resolved. No effort has been made on that front so far. In particular, according to menhir,
+
+```
+File "/.../.../Coral/parser.mly", line 15, characters 0-9:
+Warning: the precedence level assigned to ELSE is never useful.
+File "/Users/JAustin/Desktop/Coral/parser.mly", line 14, characters 0-9:
+Warning: the precedence level assigned to NOELSE is never useful.
+File "/Users/JAustin/Desktop/Coral/parser.mly", line 25, characters 0-5:
+Warning: the precedence level assigned to SEP is never useful.
+File "/Users/JAustin/Desktop/Coral/parser.mly", line 95, characters 35-41:
+Warning: this %prec declaration is never useful.
+Warning: one state has shift/reduce conflicts.
+Warning: 42 shift/reduce conflicts were arbitrarily resolved.
+```
+Furthermore, there is currently no support for non-float literals. That needs to be implemented along with the var : type tags. I have already added INT, FLOAT, STRING, and BOOL to the lexer, and these will simply need to be added to the parser in the expr method. I'm going to wait a few days before adding them, but it should be a simple matter of creating a Var type which can take one of those 4 types, or creating a general type which has a field to specify its type. We can talk about the best way to approach this. 
+
+I have also not exhaustively tested the parser for validity. The indentation system in particular may have issues I have not discovered so far. The tester should try and come up with a systematic way of testig these things. Otherwise, everything looks good.
