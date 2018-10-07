@@ -9,6 +9,20 @@ To build the language, clone the repository and run
 
 This will generate an executable called coral.native which acts as an interpreter for our language. 
 
+## Examples
+
+```python
+def gcd(a, b):
+    while a != b:
+        if a > b:
+	    a = a - b
+        else:
+	    b = b - a
+    a
+```
+
+works correctly. The return function has not been fully implemented, but this works. 
+
 ## Debugging
 
 For debugging, it can be useful to use menhir. Menhir is a tool which extends ocamlyacc, and can be installed by running ```opam install menhir```. With menhir install, you can simply run 
@@ -68,7 +82,7 @@ parser.mly is an ocamlyacc file which describes the CFG structure of our languag
 coral.ml is an interpreter for our language, reading inputs from stdin, lexing and parsing them, and then printing the output. Many of the methods we intend to support have not been fully implemented, but most basic calculator functions should work. This file also handles the indentation in the _indent_ method.
 
 
-## Examples
+## Parser Examples
 
 ```python
 def gcd(a, b):
