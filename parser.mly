@@ -2,8 +2,8 @@
 	open Ast
 %}
 
-%token PLUS MINUS TIMES DIVIDE EXP ASN SEP EQ TAB COLON NOT EOF EOL
-%token IF ELSE FOR WHILE COMMA DEF NEQ GT LT LEQ GEQ AND OR IN TRUE FALSE IS RETURN
+%token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE EXP NOT NEG SEP AND OR
+%token TAB COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN
 %token BOOL INT FLOAT STRING
 %token INDENT DEDENT
 %token LPAREN RPAREN
@@ -23,6 +23,12 @@
 %left EXP
 %right NOT NEG
 %left SEP
+
+/* this is done to eliminate shift/reduce conflicts. none of these tokens need precedence declarations. */
+%left RPAREN RBRACK
+%right LPAREN LBRACK
+%nonassoc TAB COLON EOF EOL IF FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN INDENT DEDENT LITERAL VARIABLE BOOL INT FLOAT STRING
+%nonassoc RECURSE
 
 %start tokenize
 %type <token list> tokenize
@@ -78,8 +84,8 @@ token: /* used by the parser to read the input into the indentation function. ge
   | DEDENT { [DEDENT] }
   | VARIABLE { [VARIABLE($1)] }
   | LITERAL { [LITERAL($1)] }
-  | EOF { [EOF] }	
-  | token token { $1 @ $2 }
+  | EOF { [EOF] }
+  | token token %prec RECURSE { $1 @ $2 }
 
 program: stmt_list EOF { $1 }
 
