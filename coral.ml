@@ -5,15 +5,24 @@ module StringMap = Map.Make(String);; (* map from string -> expr *)
 let float_of_bool b = if b then 1.0 else 0.0
 ;;
 
-let rec eval_expr map = function
+let rec zip lst1 lst2 = match lst1,lst2 with
+  | [], [] -> []
+  | [],_::_-> raise (Failure "TypeError: invalid arguments passed to function.")
+  | _::_, []-> raise (Failure "TypeError: invalid arguments passed to function.")
+  | (x::xs),(y::ys) -> (x, y) :: (zip xs ys)
+
+let rec eval_expr map = function (* expr -> (float, map) *)
   | Lit(x) -> (x, map)
-  | Var(x) -> (try let v = (StringMap.find x map) in eval_expr map v with Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" x; flush stdout; raise Not_found)
-  | Asn(n, v) -> let (v1, m1) = eval_expr map v in let m2 = (StringMap.add n (Lit(v1)) m1) in (v1, m2)
+  | Var(x) -> (try let Expr(v) = (StringMap.find x map) in eval_expr map v with Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" x; flush stdout; raise Not_found)
+  | Asn(n, v) -> let (v1, m1) = eval_expr map v in let m2 = (StringMap.add n (Expr (Lit v1)) m1) in (v1, m2)
   | Unop(op, v) -> let (v1, m1) = eval_expr map v in
       (match op with
         | Neg -> (-.v1, m1)
         | Not -> if v1 = 0.0 then (1.0, m1) else (0.0, m1))
-  | Call(name, args) -> raise (Failure "NotImplementedError: Functions have not yet been implemented");
+  | Call(name, args) -> (try let Func(_, a, ex) = StringMap.find name map in 
+                            let zipped = zip a args in let m1 = List.fold_left add_to_map map zipped in 
+                            let (v2, m2) = eval_stmt m1 (Block ex) in (v2, map) with 
+                            Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" name; flush stdout; raise Not_found) (* raise (Failure "NotImplementedError: Functions have not yet been implemented"); *)
   | Binop(e1, op, e2) ->
 
 let (v1, m1) = eval_expr map e1 in let (v2, m2) = eval_expr m1 e2 in
@@ -32,20 +41,22 @@ match op with
   | Or -> (float_of_bool (v1 <> 0.0|| v2 <> 0.0), m2)
   | Eq -> (float_of_bool (v1 = v2), m2)
   | If -> if v1 = 1.0 then (v2, m2) else (0.0, m2) (* this doesn't work *)
-;;
 
-let rec main map value = function 
+and add_to_map map = function
+  | (a, b) -> let (v1, m1) = eval_expr map b in let m2 = (StringMap.add a (Expr (Lit v1)) m1) in m2
+
+and eval_stmt map = function (* takes a statement, returns a float and a map *)
+  | Block(a) -> main map 0.0 a                                     
+  | Func(a, b, c) -> let m1 = (StringMap.add a (Func(a, b, c)) map) in (0.0, m1) (* raise (Failure "NotImplementedError: Functions have not yet been implemented");        *)(*string * string list * stmt list*)                                         (* stmt list *)
+  | Expr(a) -> let (x, m1) = eval_expr map a in (x, m1)                                                                              (* expr *)          
+  | If(a, b, c) -> let (x, m1) = eval_expr map a in if x = 1.0 then eval_stmt m1 (Block b) else eval_stmt m1 (Block c) (* raise (Failure "NotImplementedError: If statements have not yet been implemented"); *)     (* expr * stmt * stmt *)
+  | For(a, b, c) -> raise (Failure "NotImplementedError: For loops have not yet been implemented");        (* string * expr * expr *)
+  | While(a, b) -> let rec recurse map = let (x, m1) = eval_expr map a in if x = 1.0 then let (x1, m2) = eval_stmt m1 (Block b) in recurse m2 else (0.0, map) in recurse map                                          (*raise (Failure "NotImplementedError: While loops have not yet been implemented"); *)      (* expr * stmt *)
+  | Return(a) ->  raise (Failure "NotImplementedError: Return statements have not yet been implemented");  (* expr *)
+
+and main map value = function (* takes a stmt list *)
   | [] -> (value, map)
   | a :: t -> let (v1, m1) = eval_stmt map a in main m1 v1 t
-
-and eval_stmt map = function
-  | Func(a, b, c) -> raise (Failure "NotImplementedError: Functions have not yet been implemented");       (*string * string list * stmt list*)
-  | Block(a) -> main map 0.0 a                                                                                 (* stmt list *)
-  | Expr(a) -> eval_expr map a                                                                                  (* expr *)          
-  | If(a, b, c) -> raise (Failure "NotImplementedError: If statements have not yet been implemented");     (* expr * stmt * stmt *)
-  | For(a, b, c) -> raise (Failure "NotImplementedError: For loops have not yet been implemented");        (* string * expr * expr *)
-  | While(a, b) -> raise (Failure "NotImplementedError: While loops have not yet been implemented");       (* expr * stmt *)
-  | Return(a) ->  raise (Failure "NotImplementedError: Return statements have not yet been implemented");  (* expr *)
 ;;
 
 let explode s =
@@ -129,8 +140,6 @@ let indent tokens base current =
   (* let _ = List.iter print_endline (List.map print tokens) in *)
   out *)
 
-
-
 let rec loop map = 
   try 
     Printf.printf ">>> "; flush stdout;
@@ -146,7 +155,7 @@ let rec loop map =
         formatted @ (read curr stack))
 
     in let formatted = ref (read 0 base) in
-    let _ = List.iter (Printf.printf "%s ") (List.map print !formatted) in
+    (* let _ = List.iter (Printf.printf "%s ") (List.map print !formatted) in *)
 
     let token lexbuf = 
     match !formatted with 

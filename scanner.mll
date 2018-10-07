@@ -43,6 +43,10 @@ rule token = parse
   | "==" { EQ }
   | '=' { ASN }  
   | ';' { SEP }
+  | "int" { INT }
+  | "float" { FLOAT }
+  | "string" { STRING }
+  | "bool" { BOOL }
   | letter+ as id { VARIABLE(id) }
   | number as lit { LITERAL(float_of_string lit) }
   | eof { raise Eof }

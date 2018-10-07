@@ -4,6 +4,7 @@
 
 %token PLUS MINUS TIMES DIVIDE EXP ASN SEP EQ TAB COLON NOT EOF EOL
 %token IF ELSE FOR WHILE COMMA DEF NEQ GT LT LEQ GEQ AND OR IN TRUE FALSE IS RETURN
+%token BOOL INT FLOAT STRING
 %token INDENT DEDENT
 %token LPAREN RPAREN
 %token LBRACK RBRACK
@@ -69,6 +70,10 @@ token: /* used by the parser to read the input into the indentation function. ge
   | EQ { [EQ] }
   | ASN { [ASN] }
   | SEP { [SEP] }
+  | BOOL { [BOOL] }
+  | INT { [INT] }
+  | FLOAT { [FLOAT] }
+  | STRING { [STRING] }
   | INDENT { [INDENT] }
   | DEDENT { [DEDENT] }
   | VARIABLE { [VARIABLE($1)] }
@@ -87,10 +92,10 @@ stmt:
   | stmt SEP { $1 }
   | DEF VARIABLE LPAREN formals_opt RPAREN COLON stmt_block { Func($2, $4, $7) }
   | RETURN expr SEP { Return $2 }
-  | IF expr COLON stmt_block %prec NOELSE { If($2, Block($4), Block([])) }
-  | IF expr COLON stmt_block ELSE COLON stmt_block { If($2, Block($4), Block($7)) }
-  | FOR VARIABLE IN expr COLON stmt_block { For($2, $4, Block($6)) }
-  | WHILE LPAREN expr RPAREN COLON stmt_block { While($3, Block($6)) }
+  | IF expr COLON stmt_block %prec NOELSE { If($2, $4, []) }
+  | IF expr COLON stmt_block ELSE COLON stmt_block { If($2, $4, $7) } /* to do figure out (Block) */
+  | FOR VARIABLE IN expr COLON stmt_block { For($2, $4, $6) }
+  | WHILE expr COLON stmt_block { While($2, $4) }
 
 stmt_block: 
   | INDENT SEP stmt_list DEDENT { List.rev $3 }
