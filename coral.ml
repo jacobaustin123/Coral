@@ -62,7 +62,7 @@ and eval_stmt map = function
   | If(a, b, c) -> let (x, m1) = eval_expr map a in if x = 1.0 then eval_stmt m1 (Block b) else eval_stmt m1 (Block c) (* raise (Failure "NotImplementedError: If statements have not yet been implemented"); *)     (* expr * stmt * stmt *)
   | For(a, b, c) -> raise (Failure "NotImplementedError: For loops have not yet been implemented");        (* string * expr * expr *)
   | While(a, b) -> let rec recurse map = let (x, m1) = eval_expr map a in if x = 1.0 then let (x1, m2) = eval_stmt m1 (Block b) in recurse m2 else (0.0, map) in recurse map                                          (*raise (Failure "NotImplementedError: While loops have not yet been implemented"); *)      (* expr * stmt *)
-  | Return(a) ->  raise (Failure "NotImplementedError: Return statements have not yet been implemented");  (* expr *)
+  | Return(a) ->  eval_expr map a;       (* expr *)
 
 (* takes a stmt list, evaluates it in order *)
 
