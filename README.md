@@ -21,7 +21,7 @@ def gcd(a, b):
     return a
 ```
 
-works correctly. 
+works correctly. Note that Coral currently doesn't support space-based indentation, and you can't copy and paste into the interpreter for some reason.
 
 ## Debugging
 
