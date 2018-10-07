@@ -18,10 +18,10 @@ def gcd(a, b):
 	    a = a - b
         else:
 	    b = b - a
-    a
+    return a
 ```
 
-works correctly. The return function has not been fully implemented, but this works. 
+works correctly. 
 
 ## Debugging
 
