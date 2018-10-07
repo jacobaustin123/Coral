@@ -19,6 +19,10 @@ def gcd(a, b):
         else:
 	    b = b - a
     return a
+
+x = 54
+y = 26
+gcd(x, y)
 ```
 
 works correctly. Note that Coral currently doesn't support space-based indentation, and you can't copy and paste into the interpreter for some reason.
