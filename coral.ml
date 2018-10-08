@@ -178,7 +178,7 @@ let rec loop map =
 
     let rec read current stack =
         let lexbuf = (Lexing.from_channel stdin) in
-        let temp = (Parser.tokenize Scanner.token) lexbuf in 
+        let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
         let (curr, stack, formatted) = indent temp stack current in 
         (* let _ = List.iter (Printf.printf "%s ") (List.map print formatted) in *)
         if Stack.top stack = 0 then formatted else
@@ -188,7 +188,7 @@ let rec loop map =
     in let formatted = ref (read 0 base) in
     (* let _ = List.iter (Printf.printf "%s ") (List.map print !formatted) in *)
 
-    let token lexbuf = 
+    let token lexbuf = (* hack i found online *)
     match !formatted with 
       | []     -> Parser.EOF 
       | h :: t -> formatted := t ; h in
