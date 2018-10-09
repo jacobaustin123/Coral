@@ -16,9 +16,10 @@ let rec zip lst1 lst2 = match lst1,lst2 with
   | (x::xs),(y::ys) -> (x, y) :: (zip xs ys)
 
 (* expr -> (float, map), used to evaluate expressions *)
-
+  
 let rec eval_expr map = function 
   | Lit(x) -> (x, map)
+  | List(x) -> raise (Failure "NotImplementedError: Lists have not yet been implemented"); 
   | Var(x) -> (try let Expr(v) = (StringMap.find x map) in eval_expr map v with Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" x; flush stdout; raise Not_found)
   | Asn(n, v) -> let (v1, m1) = eval_expr map v in let m2 = (StringMap.add n (Expr (Lit v1)) m1) in (v1, m2)
   | Unop(op, v) -> let (v1, m1) = eval_expr map v in
@@ -58,6 +59,7 @@ and add_to_map map = function
 and eval_stmt map = function 
   | Block(a) -> main map 0.0 a                                     
   | Func(a, b, c) -> let m1 = (StringMap.add a (Func(a, b, c)) map) in (0.0, m1) (* raise (Failure "NotImplementedError: Functions have not yet been implemented");        *)(*string * string list * stmt list*)                                         (* stmt list *)
+  | Class(a, b) -> raise (Failure "NotImplementedError: Classes have not yet been implemented"); 
   | Expr(a) -> let (x, m1) = eval_expr map a in (x, m1)                                                                              (* expr *)          
   | If(a, b, c) -> let (x, m1) = eval_expr map a in if x = 1.0 then eval_stmt m1 (Block b) else eval_stmt m1 (Block c) (* raise (Failure "NotImplementedError: If statements have not yet been implemented"); *)     (* expr * stmt * stmt *)
   | For(a, b, c) -> raise (Failure "NotImplementedError: For loops have not yet been implemented");        (* string * expr * expr *)
@@ -118,6 +120,7 @@ let print = function
   | Parser.RBRACK -> "RBRACK"
   | Parser.EQ -> "EQ"
   | Parser.ASN -> "ASN"
+  | Parser.CLASS -> "CLASS"
   | Parser.SEP -> "SEP"
   | Parser.EOF -> "EOF"
   | Parser.EOL -> "EOL"

@@ -5,11 +5,18 @@
 %token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE EXP NOT NEG SEP AND OR
 %token TAB COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE TRIPLE
 %token BOOL INT FLOAT STRING
+%token CLASS 
 %token INDENT DEDENT
 %token LPAREN RPAREN
 %token LBRACK RBRACK
+%token LBRACE RBRACE
 %token <float> LITERAL
 %token <string> VARIABLE
+
+%token <string> STRING_LITERAL
+%token <int> INT_LITERAL
+%token <bool> BOOL_LITERAL
+
 
 %nonassoc NOELSE
 %nonassoc ELSE
@@ -25,8 +32,8 @@
 %left SEP
 
 /* this is done to eliminate shift/reduce conflicts. none of these tokens need precedence declarations. */
-%left RPAREN RBRACK
-%right LPAREN LBRACK
+%left RPAREN RBRACK RBRACE
+%right LPAREN LBRACK LBRACE
 %nonassoc TAB COLON EOF EOL IF FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN INDENT DEDENT LITERAL VARIABLE BOOL INT FLOAT STRING
 %nonassoc RECURSE
 
@@ -73,6 +80,8 @@ token: /* used by the parser to read the input into the indentation function. ge
   | RPAREN { [RPAREN] }
   | LBRACK { [LBRACK] }
   | RBRACK { [RBRACK] }
+  | LBRACE { [LBRACE] }
+  | RBRACE { [RBRACE] }
   | EQ { [EQ] }
   | ASN { [ASN] }
   | SEP { [SEP] }
@@ -85,6 +94,7 @@ token: /* used by the parser to read the input into the indentation function. ge
   | VARIABLE { [VARIABLE($1)] }
   | LITERAL { [LITERAL($1)] }
   | EOF { [EOF] }
+  | CLASS { [CLASS] }
   | token token %prec RECURSE { $1 @ $2 }
 
 program: stmt_list EOF { $1 }
@@ -96,6 +106,7 @@ stmt_list:
 stmt:
   | expr SEP { Expr $1 }
   | stmt SEP { $1 }
+  | CLASS VARIABLE COLON stmt_block { Class($2, $4) }
   | DEF VARIABLE LPAREN formals_opt RPAREN COLON stmt_block { Func($2, $4, $7) }
   | RETURN expr SEP { Return $2 }
   | IF expr COLON stmt_block %prec NOELSE { If($2, $4, []) }
@@ -129,6 +140,7 @@ expr:
 | LPAREN expr RPAREN { $2 }
 | LITERAL { Lit($1) }
 | VARIABLE { Var($1) }
+| LBRACK actuals_opt RBRACK { List($2) }
 | VARIABLE ASN expr { Asn($1, $3) }
 | expr EQ expr { Binop($1, Eq, $3) }
 | expr NEQ expr { Binop($1, Neq, $3) }

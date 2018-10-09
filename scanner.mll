@@ -5,6 +5,10 @@
 
 let letter = ['a'-'z''A'-'Z']
 let number = ['0'-'9']+('.')?['0'-'9']*
+let stringliteral = ('"'[^'"''\\']*('\\'_[^'"''\\']*)*'"')
+let digit = ['0'-'9']
+
+let cstylefloat = (((digit+'.'digit*)|(digit*'.'digit+))(('e'|'E')('+'|'-')?digit+)?|digit(('e'|'E')('+'|'-')?digit+)) 
 
 rule token = parse
   | [' ' '\r'] { token lexbuf }
@@ -19,7 +23,7 @@ rule token = parse
   | "pass" { raise (Failure("NotImplementedError: pass is not yet implemented." )) }
   | "continue" { raise (Failure("NotImplementedError: continue is not yet implemented." )) }
   | "break" { raise (Failure("NotImplementedError: break is not yet implemented." )) }
-  | "class" { raise (Failure("NotImplementedError: classes are not yet implemented." )) }
+  | "class" { CLASS }
   | "for" { FOR }
   | "while" { WHILE }
   | "def" { DEF }
@@ -33,8 +37,6 @@ rule token = parse
   | "or" { OR }
   | "in" { IN }
   | "return" { RETURN }
-  | "True" { TRUE }
-  | "False" { FALSE }
   | "is" { IS }
   | "None" { NONE }
   | "\"\"\"" { TRIPLE }
@@ -46,8 +48,10 @@ rule token = parse
   | "**" { EXP }
   | '(' { LPAREN }
   | ')' { RPAREN }
-  | '{' { LBRACK }
-  | '}' { RBRACK }
+  | '{' { LBRACE }
+  | '}' { RBRACE }
+  | '[' { LBRACK }
+  | ']' { RBRACK }
   | "==" { EQ }
   | '=' { ASN }  
   | ';' { SEP }
@@ -56,8 +60,20 @@ rule token = parse
   | "string" { STRING }
   | "bool" { BOOL }
   | ("global"|"await"|"import"|"from"|"as"|"nonlocal"|"async"|"yield"|"raise"|"except"|"finally"|"is"|"lambda"|"try"|"with") { raise (Failure("NotImplementedError: these Python 3.7 features are not currently being implemented in the Coral language." )) }
+
+  | "True" { TRUE }
+  | "False" { FALSE }
+
+
+(*  | stringliteral { raise (Failure("NotImplementedError: string literals are not yet implemented." )) }
+  | cstylefloat { raise (Failure("NotImplementedError: c-style floats are not yet implemented." )) }
+  | ['0'-'9']+ { raise (Failure("NotImplementedError: integer literals are not yet implemented." )) }
+  | ("True"|"False") { raise (Failure("NotImplementedError: boolean literals are not yet implemented." )) }
+*)
+
   | letter+ as id { VARIABLE(id) }
   | number as lit { LITERAL(float_of_string lit) }
+
   | eof { raise Eof }
   | _ as char { raise (Failure("SyntaxError: invalid character in identifier " ^ Char.escaped char)) }
 
