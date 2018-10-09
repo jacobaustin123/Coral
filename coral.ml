@@ -11,15 +11,15 @@ let float_of_bool b = if b then 1.0 else 0.0
 
 let rec zip lst1 lst2 = match lst1,lst2 with 
   | [], [] -> []
-  | [],_::_-> raise (Failure "TypeError: invalid arguments passed to function.")
-  | _::_, []-> raise (Failure "TypeError: invalid arguments passed to function.")
+  | [],_::_-> raise (Failure "TypeError: invalid arguments passed to function!")
+  | _::_, []-> raise (Failure "TypeError: invalid arguments passed to function!")
   | (x::xs),(y::ys) -> (x, y) :: (zip xs ys)
 
 (* expr -> (float, map), used to evaluate expressions *)
   
 let rec eval_expr map = function 
   | Lit(x) -> (x, map)
-  | List(x) -> raise (Failure "NotImplementedError: Lists have not yet been implemented"); 
+  | List(x) -> raise (Failure "NotImplementedError: Lists have not yet been implemented!"); 
   | Var(x) -> (try let Expr(v) = (StringMap.find x map) in eval_expr map v with Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" x; flush stdout; raise Not_found)
   | Asn(n, v) -> let (v1, m1) = eval_expr map v in let m2 = (StringMap.add n (Expr (Lit v1)) m1) in (v1, m2)
   | Unop(op, v) -> let (v1, m1) = eval_expr map v in
@@ -59,10 +59,10 @@ and add_to_map map = function
 and eval_stmt map = function 
   | Block(a) -> main map 0.0 a                                     
   | Func(a, b, c) -> let m1 = (StringMap.add a (Func(a, b, c)) map) in (0.0, m1) (* raise (Failure "NotImplementedError: Functions have not yet been implemented");        *)(*string * string list * stmt list*)                                         (* stmt list *)
-  | Class(a, b) -> raise (Failure "NotImplementedError: Classes have not yet been implemented"); 
+  | Class(a, b) -> raise (Failure "NotImplementedError: Classes have not yet been implemented!"); 
   | Expr(a) -> let (x, m1) = eval_expr map a in (x, m1)                                                                              (* expr *)          
   | If(a, b, c) -> let (x, m1) = eval_expr map a in if x = 1.0 then eval_stmt m1 (Block b) else eval_stmt m1 (Block c) (* raise (Failure "NotImplementedError: If statements have not yet been implemented"); *)     (* expr * stmt * stmt *)
-  | For(a, b, c) -> raise (Failure "NotImplementedError: For loops have not yet been implemented");        (* string * expr * expr *)
+  | For(a, b, c) -> raise (Failure "NotImplementedError: For loops have not yet been implemented!");        (* string * expr * expr *)
   | While(a, b) -> let rec recurse map = let (x, m1) = eval_expr map a in if x = 1.0 then let (x1, m2) = eval_stmt m1 (Block b) in recurse m2 else (0.0, map) in recurse map                                          (*raise (Failure "NotImplementedError: While loops have not yet been implemented"); *)      (* expr * stmt *)
   | Return(a) ->  eval_expr map a;       (* expr *)
 
@@ -161,7 +161,7 @@ let indent tokens base current =
     | a :: t -> (* Printf.printf "indent level: %d (%s)\n" curr (print a); *) if Stack.top stack = curr then aux curr t (a::out) stack (* do nothing, continue with next character *)
       else if Stack.top stack > curr then let _ = Stack.pop stack in aux curr (a :: t) (Parser.DEDENT :: out) stack (* if dedented, pop off the stack and add a DEDENT token *)
       else if curr = (Stack.top stack) + 1 then let _ = Stack.push curr stack in aux curr (a :: t) (Parser.INDENT :: out) stack (* if indented by one, push onto the stack and add an indent token *)
-      else raise (Failure "SyntaxError: invalid indentation detected"); (* else raise an error *)
+      else raise (Failure "SyntaxError: invalid indentation detected!"); (* else raise an error *)
   in let (a, b, c) = aux current tokens [] base in
   (a, b, remove_double_semicolons c)
 ;;
@@ -204,8 +204,8 @@ let rec loop map =
     in print_endline (string_of_float result); flush stdout; loop mymap
   with
     | Not_found -> loop map
-    | Stdlib.Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax\n"; flush stdout; loop map
-    | Failure explanation -> Printf.printf "SyntaxError: invalid syntax (%s)\n" explanation; flush stdout; loop map
+    | Stdlib.Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout; loop map
+    | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map
 ;;
 
 let _ =

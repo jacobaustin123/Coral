@@ -146,7 +146,7 @@ expr:
 | FLOAT_LITERAL { Lit($1) }
 | BOOL_LITERAL { Lit(float_of_bool $1) (*raise (Failure "NotImplementedError: Booleans have not yet been implemented");*) }
 | INT_LITERAL { Lit(float_of_int $1) (*raise (Failure "NotImplementedError: Integers have not yet been implemented");*) }
-| STRING_LITERAL { raise (Failure "NotImplementedError: Strings have not yet been implemented"); }
+| STRING_LITERAL { raise (Failure "NotImplementedError: Strings have not yet been implemented!"); }
 | VARIABLE { Var($1) }
 | LBRACK actuals_opt RBRACK { List($2) }
 | VARIABLE ASN expr { Asn($1, $3) }

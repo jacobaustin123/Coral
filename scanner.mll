@@ -23,11 +23,11 @@ rule token = parse
   | '!' { NOT }
   | "if" { IF }
   | "else" { ELSE }
-  | "elif" { raise (Failure("NotImplementedError: elif is not implemented." )) }
-  | "assert" { raise (Failure("NotImplementedError: assert is not implemented." )) }
-  | "pass" { raise (Failure("NotImplementedError: pass is not yet implemented." )) }
-  | "continue" { raise (Failure("NotImplementedError: continue is not yet implemented." )) }
-  | "break" { raise (Failure("NotImplementedError: break is not yet implemented." )) }
+  | "elif" { raise (Failure("NotImplementedError: elif has not been implemented!" )) }
+  | "assert" { raise (Failure("NotImplementedError: assert has not been implemented!" )) }
+  | "pass" { raise (Failure("NotImplementedError: pass has not been implemented!" )) }
+  | "continue" { raise (Failure("NotImplementedError: continue has not been implemented!" )) }
+  | "break" { raise (Failure("NotImplementedError: break has not been implemented!" )) }
   | "class" { CLASS }
   | "for" { FOR }
   | "while" { WHILE }
@@ -65,7 +65,7 @@ rule token = parse
   | "string" { STRING }
   | "bool" { BOOL }
   | ("global"|"await"|"import"|"from"|"as"|"nonlocal"|"async"|"yield"|"raise"|"except"|"finally"|"is"|"lambda"|"try"|"with") { raise (Failure("NotImplementedError: these Python 3.7 features are not currently being implemented in the Coral language." )) }
-  
+
 (* to do capture groups for string literal to extract everything but the quotes *)
 
   | stringliteral as id { STRING_LITERAL(strip_quotes id) } 
