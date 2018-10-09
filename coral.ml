@@ -127,7 +127,10 @@ let print = function
   | Parser.INDENT -> "INDENT"
   | Parser.DEDENT -> "DEDENT"
   | Parser.VARIABLE(x) -> "VARIABLE" (*Printf.sprintf "Var(%s)" x *)
-  | Parser.LITERAL(x) -> "LITERAL" (*Printf.sprintf "Lit(%f)" x *)
+  | Parser.STRING_LITERAL(x) -> "STRING_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
+  | Parser.FLOAT_LITERAL(x) -> "FLOAT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
+  | Parser.BOOL_LITERAL(x) -> "BOOL_ITERAL" (*Printf.sprintf "Lit(%f)" x *)
+  | Parser.INT_LITERAL(x) -> "INT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
   | _ -> "I'm too lazy"
 ;;
 

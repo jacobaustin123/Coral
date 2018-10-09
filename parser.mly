@@ -1,5 +1,7 @@
 %{ 
 	open Ast
+
+  let float_of_bool b = if b then 1.0 else 0.0
 %}
 
 %token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE EXP NOT NEG SEP AND OR
@@ -10,13 +12,12 @@
 %token LPAREN RPAREN
 %token LBRACK RBRACK
 %token LBRACE RBRACE
-%token <float> LITERAL
 %token <string> VARIABLE
 
+%token <float> FLOAT_LITERAL
 %token <string> STRING_LITERAL
 %token <int> INT_LITERAL
 %token <bool> BOOL_LITERAL
-
 
 %nonassoc NOELSE
 %nonassoc ELSE
@@ -34,7 +35,8 @@
 /* this is done to eliminate shift/reduce conflicts. none of these tokens need precedence declarations. */
 %left RPAREN RBRACK RBRACE
 %right LPAREN LBRACK LBRACE
-%nonassoc TAB COLON EOF EOL IF FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN INDENT DEDENT LITERAL VARIABLE BOOL INT FLOAT STRING
+%nonassoc TAB COLON EOF EOL IF FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN INDENT DEDENT VARIABLE BOOL INT FLOAT STRING
+%nonassoc CLASS TRIPLE NONE FLOAT_LITERAL INT_LITERAL STRING_LITERAL BOOL_LITERAL
 %nonassoc RECURSE
 
 %start tokenize
@@ -92,7 +94,10 @@ token: /* used by the parser to read the input into the indentation function. ge
   | INDENT { [INDENT] }
   | DEDENT { [DEDENT] }
   | VARIABLE { [VARIABLE($1)] }
-  | LITERAL { [LITERAL($1)] }
+  | FLOAT_LITERAL { [FLOAT_LITERAL($1)] }
+  | INT_LITERAL { [INT_LITERAL($1)] }
+  | BOOL_LITERAL { [BOOL_LITERAL($1)] }
+  | STRING_LITERAL { [STRING_LITERAL($1)] }
   | EOF { [EOF] }
   | CLASS { [CLASS] }
   | token token %prec RECURSE { $1 @ $2 }
@@ -125,7 +130,7 @@ formal_list:
   | VARIABLE { [$1] }
   | formal_list COMMA VARIABLE { $3 :: $1 }
 
-actuals_opt: /* used for parsing argument lists in function calls */
+actuals_opt: /* used for parsing argument lists in function calls and normal [1, 2, 3, 4] lists */
   | { [] }
   | actuals_list { List.rev $1 }
 
@@ -138,7 +143,10 @@ expr:
 | MINUS expr %prec NEG { Unop(Neg, $2) }
 | NOT expr %prec NOT { Unop(Not, $2) }
 | LPAREN expr RPAREN { $2 }
-| LITERAL { Lit($1) }
+| FLOAT_LITERAL { Lit($1) }
+| BOOL_LITERAL { Lit(float_of_bool $1) (*raise (Failure "NotImplementedError: Booleans have not yet been implemented");*) }
+| INT_LITERAL { Lit(float_of_int $1) (*raise (Failure "NotImplementedError: Integers have not yet been implemented");*) }
+| STRING_LITERAL { raise (Failure "NotImplementedError: Strings have not yet been implemented"); }
 | VARIABLE { Var($1) }
 | LBRACK actuals_opt RBRACK { List($2) }
 | VARIABLE ASN expr { Asn($1, $3) }

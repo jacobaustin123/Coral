@@ -1,6 +1,11 @@
 { 
 	open Parser
 	exception Eof
+
+  let strip_quotes str =
+  match String.length str with
+  | 0 | 1 | 2 -> ""
+  | len -> String.sub str 1 (len - 2)
 }
 
 let letter = ['a'-'z''A'-'Z']
@@ -60,19 +65,14 @@ rule token = parse
   | "string" { STRING }
   | "bool" { BOOL }
   | ("global"|"await"|"import"|"from"|"as"|"nonlocal"|"async"|"yield"|"raise"|"except"|"finally"|"is"|"lambda"|"try"|"with") { raise (Failure("NotImplementedError: these Python 3.7 features are not currently being implemented in the Coral language." )) }
+  
+(* to do capture groups for string literal to extract everything but the quotes *)
 
-  | "True" { TRUE }
-  | "False" { FALSE }
-
-
-(*  | stringliteral { raise (Failure("NotImplementedError: string literals are not yet implemented." )) }
-  | cstylefloat { raise (Failure("NotImplementedError: c-style floats are not yet implemented." )) }
-  | ['0'-'9']+ { raise (Failure("NotImplementedError: integer literals are not yet implemented." )) }
-  | ("True"|"False") { raise (Failure("NotImplementedError: boolean literals are not yet implemented." )) }
-*)
-
+  | stringliteral as id { STRING_LITERAL(strip_quotes id) } 
+  | ("True"|"False") as id { if id = "True" then BOOL_LITERAL(true) else BOOL_LITERAL(false) }
+  | cstylefloat as lit { FLOAT_LITERAL(float_of_string lit) } 
+  | ['0'-'9']+ as id { INT_LITERAL(int_of_string id) }
   | letter+ as id { VARIABLE(id) }
-  | number as lit { LITERAL(float_of_string lit) }
 
   | eof { raise Eof }
   | _ as char { raise (Failure("SyntaxError: invalid character in identifier " ^ Char.escaped char)) }
