@@ -198,7 +198,7 @@ let rec loop map =
         formatted @ (read curr stack))
 
     in let formatted = ref (read 0 base) in
-    let _ = List.iter (Printf.printf "%s ") (List.map print !formatted) in
+    (* let _ = List.iter (Printf.printf "%s ") (List.map print !formatted) in *)
 
     let token lexbuf = (* hack i found online *)
     match !formatted with 

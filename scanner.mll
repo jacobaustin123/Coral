@@ -12,8 +12,8 @@ let letter = ['a'-'z''A'-'Z']
 let number = ['0'-'9']+('.')?['0'-'9']*
 let stringliteral = ('"'[^'"''\\']*('\\'_[^'"''\\']*)*'"')
 let digit = ['0'-'9']
-
-let cstylefloat = (((digit+'.'digit*)|(digit*'.'digit+))(('e'|'E')('+'|'-')?digit+)?|digit+(('e'|'E')('+'|'-')?digit+)) 
+let exp = ('e'|'E')('+'|'-')?['0'-'9']+
+let cstylefloat = ('.'['0'-'9']+exp?|['0'-'9']+('.'['0'-'9']*exp?|exp))
 
 rule token = parse
   | [' ' '\r'] { token lexbuf }
