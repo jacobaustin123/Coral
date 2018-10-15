@@ -102,6 +102,7 @@ token: /* used by the parser to read the input into the indentation function. ge
   | CLASS { [CLASS] }
   | token token %prec RECURSE { $1 @ $2 }
 
+
 program: stmt_list EOF { $1 }
 
 stmt_list:
@@ -143,10 +144,10 @@ expr:
 | MINUS expr %prec NEG { Unop(Neg, $2) }
 | NOT expr %prec NOT { Unop(Not, $2) }
 | LPAREN expr RPAREN { $2 }
-| FLOAT_LITERAL { Lit($1) }
-| BOOL_LITERAL { Lit(float_of_bool $1) (*raise (Failure "NotImplementedError: Booleans have not yet been implemented");*) }
-| INT_LITERAL { Lit(float_of_int $1) (*raise (Failure "NotImplementedError: Integers have not yet been implemented");*) }
-| STRING_LITERAL { raise (Failure "NotImplementedError: Strings have not yet been implemented!"); }
+| FLOAT_LITERAL { Lit(Float($1)) }
+| BOOL_LITERAL { Lit(Bool($1)) }
+| INT_LITERAL { Lit(Int($1)) }
+| STRING_LITERAL { Lit(String($1)) }
 | VARIABLE { Var($1) }
 | LBRACK actuals_opt RBRACK { List($2) }
 | VARIABLE ASN expr { Asn($1, $3) }

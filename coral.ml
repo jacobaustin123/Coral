@@ -18,10 +18,15 @@ let rec zip lst1 lst2 = match lst1,lst2 with
 (* expr -> (float, map), used to evaluate expressions *)
   
 let rec eval_expr map = function 
-  | Lit(x) -> (x, map)
+  | Lit(x) -> (match x with 
+     | Float(y) -> (y, map)
+     | Int(y) -> (float_of_int y, map)
+     | Bool(y) -> (float_of_bool y, map)
+     | String(y) -> raise (Failure "NotImplementedError: Strings have not yet been implemented!");
+   )
   | List(x) -> raise (Failure "NotImplementedError: Lists have not yet been implemented!"); 
   | Var(x) -> (try let Expr(v) = (StringMap.find x map) in eval_expr map v with Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" x; flush stdout; raise Not_found)
-  | Asn(n, v) -> let (v1, m1) = eval_expr map v in let m2 = (StringMap.add n (Expr (Lit v1)) m1) in (v1, m2)
+  | Asn(n, v) -> let (v1, m1) = eval_expr map v in let m2 = (StringMap.add n (Expr (Lit(Float(v1)))) m1) in (v1, m2)
   | Unop(op, v) -> let (v1, m1) = eval_expr map v in
       (match op with
         | Neg -> (-.v1, m1)
@@ -52,7 +57,7 @@ match op with
 (* used to add a list of function arguments to the map of local variables *)
 
 and add_to_map map = function 
-  | (a, b) -> let (v1, m1) = eval_expr map b in let m2 = (StringMap.add a (Expr (Lit v1)) m1) in m2
+  | (a, b) -> let (v1, m1) = eval_expr map b in let m2 = (StringMap.add a (Expr (Lit (Float(v1)))) m1) in m2
 
 (* takes a statement, returns a float and a map, used to evaluate all expressions *)
 
@@ -192,7 +197,7 @@ let rec loop map =
         formatted @ (read curr stack))
 
     in let formatted = ref (read 0 base) in
-    (* let _ = List.iter (Printf.printf "%s ") (List.map print !formatted) in *)
+    let _ = List.iter (Printf.printf "%s ") (List.map print !formatted) in
 
     let token lexbuf = (* hack i found online *)
     match !formatted with 

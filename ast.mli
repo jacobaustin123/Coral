@@ -2,9 +2,15 @@ type operator = Add | Sub | Mul | Div | Exp | If | Eq | Neq | Less | Leq | Great
 
 type uop = Neg | Not
 
+type literal = 
+  | Int of int
+  | Bool of bool
+  | Float of float
+  | String of string
+
 type expr =
   | Binop of expr * operator * expr
-  | Lit of float
+  | Lit of literal
   | Asn of string * expr
   | Var of string
   | Unop of uop * expr

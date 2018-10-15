@@ -13,7 +13,7 @@ let number = ['0'-'9']+('.')?['0'-'9']*
 let stringliteral = ('"'[^'"''\\']*('\\'_[^'"''\\']*)*'"')
 let digit = ['0'-'9']
 
-let cstylefloat = (((digit+'.'digit*)|(digit*'.'digit+))(('e'|'E')('+'|'-')?digit+)?|digit(('e'|'E')('+'|'-')?digit+)) 
+let cstylefloat = (((digit+'.'digit*)|(digit*'.'digit+))(('e'|'E')('+'|'-')?digit+)?|digit+(('e'|'E')('+'|'-')?digit+)) 
 
 rule token = parse
   | [' ' '\r'] { token lexbuf }
