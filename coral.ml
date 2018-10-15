@@ -35,6 +35,8 @@ let rec eval_expr map = function
                             let zipped = zip a args in let m1 = List.fold_left add_to_map map zipped in 
                             let (v2, m2) = eval_stmt m1 (Block ex) in (v2, map) with 
                             Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" name; flush stdout; raise Not_found) (* raise (Failure "NotImplementedError: Functions have not yet been implemented"); *)
+  | Method(a, b, c) -> raise (Failure "NotImplementedError: Methods have not yet been implemented!");
+  | Field(a, b) -> raise (Failure "NotImplementedError: Fields have not yet been implemented!");
   | Binop(e1, op, e2) ->
 
 let (v1, m1) = eval_expr map e1 in let (v2, m2) = eval_expr m1 e2 in
@@ -129,6 +131,7 @@ let print = function
   | Parser.SEP -> "SEP"
   | Parser.EOF -> "EOF"
   | Parser.EOL -> "EOL"
+  | Parser.DOT -> "DOT"
   | Parser.INDENT -> "INDENT"
   | Parser.DEDENT -> "DEDENT"
   | Parser.VARIABLE(x) -> "VARIABLE" (*Printf.sprintf "Var(%s)" x *)

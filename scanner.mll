@@ -8,7 +8,7 @@
   | len -> String.sub str 1 (len - 2)
 }
 
-let letter = ['a'-'z''A'-'Z']
+let letter = ['a'-'z''A'-'Z''_''0'-'9']
 let number = ['0'-'9']+('.')?['0'-'9']*
 let stringliteral = ('"'[^'"''\\']*('\\'_[^'"''\\']*)*'"')
 let digit = ['0'-'9']
@@ -33,6 +33,7 @@ rule token = parse
   | "while" { WHILE }
   | "def" { DEF }
   | ',' { COMMA }
+  | '.' { DOT }
   | "!=" { NEQ }
   | '<' { LT }
   | '>' { GT }
@@ -45,7 +46,7 @@ rule token = parse
   | "is" { IS }
   | "None" { NONE }
   | '#' { comment lexbuf }
-  | "\"\"\"" { comment2 lexbuf }
+  | "\"\"\"" { multiline lexbuf }
   | '+' { PLUS }
   | '-' { MINUS } 
   | '*' { TIMES }
@@ -81,6 +82,6 @@ and comment = parse
   | '\n' { EOL }
   | _ { comment lexbuf }
 
-and comment2 = parse
+and multiline = parse
   | "\"\"\"" { SEP }
-  | _ { comment2 lexbuf }
+  | _ { multiline lexbuf }

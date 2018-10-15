@@ -15,6 +15,8 @@ type expr =
   | Var of string
   | Unop of uop * expr
   | Call of string * expr list
+  | Method of expr * string * expr list
+  | Field of expr * string
   | List of expr list
 
 type stmt = (* this can be refactored using Blocks, but I haven't quite figured it out yet *)

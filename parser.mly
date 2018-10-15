@@ -3,7 +3,7 @@
 %}
 
 %token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE EXP NOT NEG SEP AND OR
-%token TAB COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE
+%token TAB COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE DOT
 %token BOOL INT FLOAT STRING
 %token CLASS 
 %token INDENT DEDENT
@@ -20,13 +20,14 @@
 %nonassoc NOELSE
 %nonassoc ELSE
 %right ASN
+%left DOT
 %left OR
 %left AND
 %left EQ NEQ
 %left LT GT LEQ GEQ
 %left PLUS MINUS
 %left TIMES DIVIDE
-%left EXP
+%right EXP
 %right NOT NEG
 %left SEP
 
@@ -101,6 +102,7 @@ token: /* used by the parser to read the input into the indentation function. ge
   | EOF { [EOF] }
   | CLASS { [CLASS] }
   | NONE { [NONE] }
+  | DOT { [DOT] }
   | token token %prec RECURSE { $1 @ $2 }
 
 /* this code is found in coral.ml, and is used to convert tabs to INDENT and DEDENT tokens.
@@ -159,6 +161,8 @@ actuals_list:
 
 expr:
 | VARIABLE LPAREN actuals_opt RPAREN { Call($1, $3) }
+| expr DOT VARIABLE LPAREN actuals_opt RPAREN { Method($1, $3, $5) }
+| expr DOT VARIABLE { Field($1, $3) }
 | MINUS expr %prec NEG { Unop(Neg, $2) }
 | NOT expr %prec NOT { Unop(Not, $2) }
 | LPAREN expr RPAREN { $2 }
