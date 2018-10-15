@@ -1,11 +1,9 @@
 %{ 
 	open Ast
-
-  let float_of_bool b = if b then 1.0 else 0.0
 %}
 
 %token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE EXP NOT NEG SEP AND OR
-%token TAB COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE TRIPLE
+%token TAB COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE
 %token BOOL INT FLOAT STRING
 %token CLASS 
 %token INDENT DEDENT
@@ -32,15 +30,17 @@
 %right NOT NEG
 %left SEP
 
-/* this is done to eliminate shift/reduce conflicts. none of these tokens need precedence declarations. */
+/* this is done to eliminate shift/reduce conflicts in the first lexing stage. 
+none of these tokens need precedence declarations. */
+
 %left RPAREN RBRACK RBRACE
 %right LPAREN LBRACK LBRACE
 %nonassoc TAB COLON EOF EOL IF FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN INDENT DEDENT VARIABLE BOOL INT FLOAT STRING
-%nonassoc CLASS TRIPLE NONE FLOAT_LITERAL INT_LITERAL STRING_LITERAL BOOL_LITERAL
+%nonassoc CLASS NONE FLOAT_LITERAL INT_LITERAL STRING_LITERAL BOOL_LITERAL
 %nonassoc RECURSE
 
 %start tokenize
-%type <token list> tokenize
+%type <token list> tokenize /* used to handle indentation */
 
 %start program
 %type <Ast.stmt list> program
@@ -100,12 +100,30 @@ token: /* used by the parser to read the input into the indentation function. ge
   | STRING_LITERAL { [STRING_LITERAL($1)] }
   | EOF { [EOF] }
   | CLASS { [CLASS] }
+  | NONE { [NONE] }
   | token token %prec RECURSE { $1 @ $2 }
 
+/* this code is found in coral.ml, and is used to convert tabs to INDENT and DEDENT tokens.
 
-program: stmt_list EOF { $1 }
+let indent tokens base current =
+    let rec aux curr s out stack = match s with
+    | [] -> (curr, stack, List.rev out)
+    | Parser.TAB :: t -> aux (curr + 1) t out stack;
+    | Parser.COLON :: t -> (Stack.push (curr + 1) stack; aux curr t (Parser.INDENT :: (Parser.COLON :: out)) stack)
+    | Parser.EOL :: t -> aux 0 t (Parser.SEP :: out) stack 
+    | a :: t -> (* Printf.printf "indent level: %d (%s)\n" curr (print a); *) if Stack.top stack = curr then aux curr t (a::out) stack (* do nothing, continue with next character *)
+      else if Stack.top stack > curr then let _ = Stack.pop stack in aux curr (a :: t) (Parser.DEDENT :: out) stack (* if dedented, pop off the stack and add a DEDENT token *)
+      else if curr = (Stack.top stack) + 1 then let _ = Stack.push curr stack in aux curr (a :: t) (Parser.INDENT :: out) stack (* if indented by one, push onto the stack and add an indent token *)
+      else raise (Failure "SyntaxError: invalid indentation detected!"); (* else raise an error *)
+  in let (a, b, c) = aux current tokens [] base in
+  (a, b, remove_double_semicolons c)
+;;
 
-stmt_list:
+*/
+
+program: stmt_list EOF { $1 } /* the main program function */
+
+stmt_list: /* lists of statements in a function body. modified from Micro C */
   | { [] }
   | stmt_list stmt { $2 :: $1 }
 

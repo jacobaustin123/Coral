@@ -141,8 +141,9 @@ let print = function
 
 (* used to hackily fix a big where multiple semicolons cause issues. there may be a more elegant way *)
 
-let remove_double_semicolons = function 
+let rec remove_double_semicolons = function 
   | [] -> []
+  | Parser.SEP :: t -> (remove_double_semicolons t)
   | x :: t -> 
       let rec aux nums = function
         | [] -> nums
@@ -197,7 +198,7 @@ let rec loop map =
         formatted @ (read curr stack))
 
     in let formatted = ref (read 0 base) in
-    (* let _ = List.iter (Printf.printf "%s ") (List.map print !formatted) in *)
+    let _ = List.iter (Printf.printf "%s ") (List.map print !formatted) in
 
     let token lexbuf = (* hack i found online *)
     match !formatted with 

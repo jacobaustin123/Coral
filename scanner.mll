@@ -44,8 +44,8 @@ rule token = parse
   | "return" { RETURN }
   | "is" { IS }
   | "None" { NONE }
-  | "\"\"\"" { TRIPLE }
   | '#' { comment lexbuf }
+  | "\"\"\"" { comment2 lexbuf }
   | '+' { PLUS }
   | '-' { MINUS } 
   | '*' { TIMES }
@@ -80,3 +80,7 @@ rule token = parse
 and comment = parse
   | '\n' { EOL }
   | _ { comment lexbuf }
+
+and comment2 = parse
+  | "\"\"\"" { SEP }
+  | _ { comment2 lexbuf }
