@@ -20,7 +20,7 @@ rule token = parse
   | ':' { COLON }
   | '\t' { TAB }
   | '\n' { EOL }
-  | '!' { NOT }
+  | "not" { NOT }
   | "if" { IF }
   | "else" { ELSE }
   | "elif" { raise (Failure("NotImplementedError: elif has not been implemented!" )) }
