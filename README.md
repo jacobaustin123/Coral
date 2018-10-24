@@ -29,7 +29,9 @@ works correctly. Note that Coral currently doesn't support space-based indentati
 
 ## Debugging
 
-For debugging, it can be useful to use menhir. Menhir is a tool which extends ocamlyacc, and can be installed by running ```opam install menhir```. With menhir install, you can simply run 
+For debugging the parser or lexer, the interpreter supports a debug mode entered by running the executable with the ```-d``` option, i.e. ```./coral.native -d```. This will print the lexed input along with the result of each line. 
+
+For debugging the parser, it can be useful to use menhir. Menhir is a tool which extends ocamlyacc, and can be installed by running ```opam install menhir```. With menhir install, you can simply run 
 
 ```menhir --interpret --interpret-show-cst ~/.../parser.mly```
 
