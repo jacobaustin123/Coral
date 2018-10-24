@@ -1,24 +1,25 @@
 open Ast
-open Getopt
+open Getopt (* package used to handle command line arguments *)
 
+module StringMap = Map.Make(String);; (* map from string -> expr *)
+
+
+(* boolean flag used to handle debug flag from command line *)
 let debug = ref 0
 ;;
 
-let specs = 
+(* function used to handle command line arguments *)
+let specs =
 [
   ( 'd', "debug", (incr debug), None);
 ]
 ;;
 
-module StringMap = Map.Make(String);; (* map from string -> expr *)
-
 (* converts floats to bools, so we can hack in support for if statements. 1.0 is true, etc. *)
-
 let float_of_bool b = if b then 1.0 else 0.0 
 ;;
 
 (* combine two lists, used to match the argument names and their values *)
-
 let rec zip lst1 lst2 = match lst1,lst2 with 
   | [], [] -> []
   | [],_::_-> raise (Failure "TypeError: invalid arguments passed to function!")
@@ -26,7 +27,6 @@ let rec zip lst1 lst2 = match lst1,lst2 with
   | (x::xs),(y::ys) -> (x, y) :: (zip xs ys)
 
 (* expr -> (float, map), used to evaluate expressions *)
-  
 let rec eval_expr map = function 
   | Lit(x) -> (match x with 
      | Float(y) -> (y, map)
@@ -66,13 +66,11 @@ match op with
   | Eq -> (float_of_bool (v1 = v2), m2)
   | If -> if v1 = 1.0 then (v2, m2) else (0.0, m2) (* this doesn't work *)
 
-(* used to add a list of function arguments to the map of local variables *)
-
+(* helper function used to add a list of function arguments to the map of local variables *)
 and add_to_map map = function 
   | (a, b) -> let (v1, m1) = eval_expr map b in let m2 = (StringMap.add a (Expr (Lit (Float(v1)))) m1) in m2
 
-(* takes a statement, returns a float and a map, used to evaluate all expressions *)
-
+(* takes a statement and evaluates it, returning a float and a map, used to evaluate all expressions *)
 and eval_stmt map = function 
   | Block(a) -> main map 0.0 a                                     
   | Func(a, b, c) -> let m1 = (StringMap.add a (Func(a, b, c)) map) in (0.0, m1) (* raise (Failure "NotImplementedError: Functions have not yet been implemented");        *)(*string * string list * stmt list*)                                         (* stmt list *)
@@ -83,27 +81,23 @@ and eval_stmt map = function
   | While(a, b) -> let rec recurse map = let (x, m1) = eval_expr map a in if x = 1.0 then let (x1, m2) = eval_stmt m1 (Block b) in recurse m2 else (0.0, map) in recurse map                                          (*raise (Failure "NotImplementedError: While loops have not yet been implemented"); *)      (* expr * stmt *)
   | Return(a) ->  eval_expr map a;       (* expr *)
 
-(* takes a stmt list, evaluates it in order *)
-
+(* takes a stmt list, iterates through the list and evaluates it in order *)
 and main map value = function 
   | [] -> (value, map)
   | a :: t -> let (v1, m1) = eval_stmt map a in main m1 v1 t
 ;;
 
 (* converts a string to a list of chars *)
-
 let explode s = 
   let rec exp i l =
     if i < 0 then l else exp (i - 1) (s.[i] :: l) in
   exp (String.length s - 1) []
 ;;
 
-(* does the reverse *)
-
+(* does the reverse, i.e. converts a list of chars to a string *)
 let impode s = String.concat "" (List.map (String.make 1) s) 
 
-(* utility function used for printing parsed tokens. can be replaced by menhir mostly *)
-
+(* utility function used for printing parsed tokens. can be replaced by menhir mostly. not exhaustive *)
 let print = function 
   | Parser.COLON -> "COLON"
   | Parser.TAB -> "TAB"
@@ -153,7 +147,6 @@ let print = function
 ;;
 
 (* used to hackily fix a big where multiple semicolons cause issues. there may be a more elegant way *)
-
 let rec remove_double_semicolons = function 
   | [] -> []
   | Parser.SEP :: t -> (remove_double_semicolons t)
@@ -170,7 +163,6 @@ let rec remove_double_semicolons = function
 extract a list of tokens. once this list has been extracted, we iterate over it to check if the indentations 
 are correct, and to insert Parser.INDENT and Parser.DEDENT tokens as desired. We also sanitize it using the 
 above methods *)
-
 let indent tokens base current =
     let rec aux curr s out stack = match s with
     | [] -> (curr, stack, List.rev out)
@@ -185,23 +177,16 @@ let indent tokens base current =
   (a, b, remove_double_semicolons c)
 ;;
 
-(* let rec empty stack tokens = if Stack.top stack = 0 then tokens else (Stack.pop stack; empty stack (Parser.DEDENT :: tokens)) in (* empty stack after function has returned *)
-  let out = List.rev (empty base ttemp) in (* reverse the list *)
-  let _ = List.iter (Printf.printf "%s ") (List.map print out) in
-  (* let _ = List.iter print_endline (List.map print tokens) in *)
-  out *)
-
 (* this is the main function loop for the interpreter. We lex the input from stdin,
 convert it to a list of Parser.token, apply the appropriate indentation corrections,
 check to make sure we are at 0 indentation level, print more dots otherwise, and then
 compute the correct value and repeat *)
-
 let rec loop map = 
   try 
     Printf.printf ">>> "; flush stdout;
     let base = Stack.create() in let _ = Stack.push 0 base in
 
-    let rec read current stack =
+    let rec read current stack = (* logic of the interpreter *)
         let lexbuf = (Lexing.from_channel stdin) in
         let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
         let (curr, stack, formatted) = indent temp stack current in 
@@ -213,7 +198,7 @@ let rec loop map =
     in let formatted = ref (read 0 base) in
     let _ = if !debug = 1 then (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "") in (* print debug messages *)
 
-    let token lexbuf = (* hack i found online *)
+    let token lexbuf = (* hack I found online to convert lexbuf list to a map from lexbuf to Parser.token, needed for Ocamlyacc *)
     match !formatted with 
       | []     -> Parser.EOF 
       | h :: t -> formatted := t ; h in
@@ -227,6 +212,7 @@ let rec loop map =
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map
 ;;
 
+(* main loop of the interpreter *)
 let _ =
 	Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout;
   parse_cmdline specs print_endline;
