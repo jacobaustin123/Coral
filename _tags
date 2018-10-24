@@ -1,5 +1,5 @@
 # Include the llvm and llvm.analysis packages while compiling
-true: package(llvm), package(llvm.analysis)
+# true: package(llvm), package(llvm.analysis)
 
 # Enable almost all compiler warnings
 true : warn(+a-4)
