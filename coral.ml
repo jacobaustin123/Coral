@@ -1,4 +1,14 @@
 open Ast
+open Getopt
+
+let debug = ref 0
+;;
+
+let specs = 
+[
+  ( 'd', "debug", (incr debug), None);
+]
+;;
 
 module StringMap = Map.Make(String);; (* map from string -> expr *)
 
@@ -135,7 +145,7 @@ let print = function
   | Parser.INDENT -> "INDENT"
   | Parser.DEDENT -> "DEDENT"
   | Parser.VARIABLE(x) -> "VARIABLE" (*Printf.sprintf "Var(%s)" x *)
-  | Parser.STRING_LITERAL(x) -> "STRING_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
+  | Parser.STRING_LITERAL(x) -> Printf.sprintf "STRING_LITERAL(%s)" x
   | Parser.FLOAT_LITERAL(x) -> "FLOAT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
   | Parser.BOOL_LITERAL(x) -> "BOOL_ITERAL" (*Printf.sprintf "Lit(%f)" x *)
   | Parser.INT_LITERAL(x) -> "INT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
@@ -201,7 +211,7 @@ let rec loop map =
         formatted @ (read curr stack))
 
     in let formatted = ref (read 0 base) in
-    (* let _ = List.iter (Printf.printf "%s ") (List.map print !formatted) in *)
+    let _ = if !debug = 1 then List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "" in (* print debug messages *)
 
     let token lexbuf = (* hack i found online *)
     match !formatted with 
@@ -219,6 +229,7 @@ let rec loop map =
 
 let _ =
 	Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout;
+  parse_cmdline specs print_endline;
   try
     let emptymap = StringMap.empty in loop emptymap
   with 
