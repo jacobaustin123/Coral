@@ -45,9 +45,7 @@ to see if it accepts that sequence of parser tokens. Here, the program tab indic
 
 ## Status
 
-The lexer and parser are both partially complete. The lexer should be totally complete, baring changes which need to be made due to parser changes. The parser works in its current state, and it no longer throws shift/reduce errors. However, I got rid of them by adding arbitrary precedence statements to every token, which could potentially have adverse effects in the future.
-
-Furthermore, there is currently no support for non-float literals. That needs to be implemented along with the var : type tags. I have already added INT, FLOAT, STRING, and BOOL to the lexer, and these will simply need to be added to the parser in the expr method. I'm going to wait a few days before adding them, but it should be a simple matter of creating a Var type which can take one of those 4 types, or creating a general type which has a field to specify its type. We can talk about the best way to approach this. 
+The lexer and parser are both complete, except for the static typing syntax/parsing. However, the interpreter currently does not support non-float literals. That needs to be implemented along with the var : type tags. I have already added INT, FLOAT, STRING, and BOOL to the lexer, and these will simply need to be added to the parser in the expr method. I'm going to wait a few days before adding them, but it should be a simple matter of creating a Var type which can take one of those 4 types, or creating a general type which has a field to specify its type. We can talk about the best way to approach this. 
 
 I have also not exhaustively tested the parser for validity. The indentation system in particular may have issues I have not discovered so far. The tester should try and come up with a systematic way of testig these things. Otherwise, everything looks good.
 
@@ -68,6 +66,20 @@ You may need to install gawk first using brew. This isn't the whole list, so mak
 ```awk
 cat /.../.../Coral/scanner.mll | gawk '{ match($0, /{\s+([A-Z]+)\s+}/, arr); if(arr[1] != "" && arr[1] != "EOL") printf "  | Parser.%s -> \”%s\”\n", arr[1], arr[1] }'
 ```
+
+## Installing LLVM
+
+On MacOS, you can simply run
+
+```
+brew install llvm
+opam depext conf-llvm.6.0.0
+opam install llvm
+```
+
+and then add ```/usr/local/opt/llvm@6/bin``` to your ```~/.bash_profile```, i.e. with ```export PATH=/usr/local/opt/llvm@6/bin:$PATH```.
+
+You should now be able to run MicroC as well as the LLVM functions like llc and lli.
 
 ## Structure
 
