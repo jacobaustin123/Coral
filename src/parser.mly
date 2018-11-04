@@ -2,7 +2,7 @@
 	open Ast
 %}
 
-%token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE EXP NOT NEG SEP AND OR
+%token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE EXP NOT NEG SEP AND OR ARROW
 %token TAB COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE DOT
 %token BOOL INT FLOAT STRING BOOLARR INTARR FLOATARR STRINGARR
 %token CLASS 
@@ -33,6 +33,10 @@ none of these tokens need precedence declarations. be careful about this if rule
 %right EXP
 %right NOT NEG
 %left SEP
+
+%nonassoc SINGLE
+%nonassoc MULT
+
 %nonassoc RECURSE 
 
 %start tokenize
@@ -50,6 +54,7 @@ tokenize: /* used by the parser to read the input into the indentation function 
 token: /* used by the parser to read the input into the indentation function. generated from scanner.mll with an awk script */
   | COLON { [COLON] }
   | TAB { [TAB] }
+  | ARROW { [ARROW] }
   | RETURN { [RETURN] }
   | NOT { [NOT] }
   | IF { [IF] }
@@ -114,32 +119,34 @@ stmt:
   | expr SEP { Expr $1 }
   | stmt SEP { $1 }
   | CLASS VARIABLE COLON stmt_block { Class($2, $4) }
-  | DEF VARIABLE LPAREN formals_opt RPAREN COLON stmt_block { Func($2, $4, $7) }
+  | DEF VARIABLE LPAREN formals_opt RPAREN COLON stmt_block { Func(Bind($2, Dyn), $4, $7) }
+  | DEF VARIABLE LPAREN formals_opt RPAREN ARROW typ COLON stmt_block { Func(Bind($2, $7), $4, $9) }
   | RETURN expr SEP { Return $2 }
   | IF expr COLON stmt_block %prec NOELSE { If($2, $4, []) }
   | IF expr COLON stmt_block ELSE COLON stmt_block { If($2, $4, $7) } /* to do figure out (Block) */
-  | FOR VARIABLE IN expr COLON stmt_block { For($2, $4, $6) }
-  | FOR VARIABLE COLON typ IN expr COLON stmt_block { For($2, $6, $8) } /* to do make type matter */
+  | FOR bind_opt IN expr COLON stmt_block { For($2, $4, $6) }
   | WHILE expr COLON stmt_block { While($2, $4) }
-  | VARIABLE COLON typ ASN expr { Asn($1, $3, $5) }
-  | formal_asn_list ASN expr { MultAsn(List.rev $1, Dyn, $3) }
+  | formal_asn_list ASN expr %prec MULT { MultAsn(List.rev $1, $3) }
+  | bind_opt ASN expr %prec SINGLE { Asn($1, $3) }
+
+formal_asn_list:
+  | bind_opt { [$1] } %prec MULT
+  | formal_asn_list ASN bind_opt { $3 :: $1 }
+
+bind_opt:
+  | VARIABLE { Bind($1, Dyn) }
+  | VARIABLE COLON typ { Bind($1, $3) }
 
 stmt_block: 
   | INDENT SEP stmt_list DEDENT { List.rev $3 }
-
-formal_asn_list:
-  | VARIABLE { [$1] }
-  | formal_asn_list ASN VARIABLE { $3 :: $1 }
 
 formals_opt: /* used for parsing argument lists in function declarations */
   | { [] }
   | formal_list { List.rev $1 }
 
 formal_list: 
-  | VARIABLE { [($1, Dyn)] }
-  | VARIABLE COLON typ { [($1, $3)] }
-  | formal_list COMMA VARIABLE { ($3, Dyn) :: $1 }
-  | formal_list COMMA VARIABLE COLON typ { ($3, $5) :: $1 }
+  | bind_opt { [$1] }
+  | formal_list COMMA bind_opt { $3 :: $1 }
 
 actuals_opt: /* used for parsing argument lists in function calls and normal [1, 2, 3, 4] lists */
   | { [] }
@@ -160,7 +167,7 @@ typ:
   | STRINGARR { StringArr }
 
 expr:
-| VARIABLE { Var($1) }
+| VARIABLE { Var(Bind($1, Dyn)) }
 | VARIABLE LPAREN actuals_opt RPAREN { Call($1, $3) }
 | expr DOT VARIABLE LPAREN actuals_opt RPAREN { Method($1, $3, $5) }
 | expr DOT VARIABLE { Field($1, $3) }

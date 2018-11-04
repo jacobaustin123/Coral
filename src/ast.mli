@@ -10,12 +10,12 @@ type literal =
 
 type typ = | Int | Float | Bool | String | Dyn | IntArr | FloatArr | BoolArr | StringArr
 
-(* type bind = Bind of string * typ *)
+type bind = Bind of string * typ
 
 type expr =
   | Binop of expr * operator * expr
   | Lit of literal
-  | Var of string
+  | Var of bind
   | Unop of uop * expr
   | Call of string * expr list
   | Method of expr * string * expr list
@@ -23,13 +23,13 @@ type expr =
   | List of expr list
 
 type stmt = (* this can be refactored using Blocks, but I haven't quite figured it out yet *)
-  | Func of string * (string * typ) list * stmt list
+  | Func of bind * bind list * stmt list
   | Block of stmt list 
   | Expr of expr
   | If of expr * stmt list * stmt list
-  | For of string * expr * stmt list
+  | For of bind * expr * stmt list
   | While of expr * stmt list
   | Return of expr
   | Class of string * stmt list
-  | Asn of string * typ * expr
-  | MultAsn of string list * typ * expr
+  | Asn of bind * expr
+  | MultAsn of bind list * expr

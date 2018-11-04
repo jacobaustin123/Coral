@@ -35,7 +35,7 @@ let rec eval_expr map = function
      | String(y) -> raise (Failure "NotImplementedError: Strings have not yet been implemented!");
    )
   | List(x) -> raise (Failure "NotImplementedError: Lists have not yet been implemented!"); 
-  | Var(x) -> (try let Expr(v) = (StringMap.find x map) in eval_expr map v with Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" x; flush stdout; raise Not_found)
+  | Var(Bind(x, t)) -> (try let Expr(v) = (StringMap.find x map) in eval_expr map v with Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" x; flush stdout; raise Not_found)
   | Unop(op, v) -> let (v1, m1) = eval_expr map v in
       (match op with
         | Neg -> (-.v1, m1)
@@ -67,20 +67,20 @@ match op with
 
 (* helper function used to add a list of function arguments to the map of local variables *)
 and add_to_map map = function 
-  | ((a, t), b) -> let (v1, m1) = eval_expr map b in let m2 = (StringMap.add a (Expr (Lit (Float(v1)))) m1) in m2
+  | (Bind(a, t), b) -> let (v1, m1) = eval_expr map b in let m2 = (StringMap.add a (Expr (Lit (Float(v1)))) m1) in m2
 
 (* takes a statement and evaluates it, returning a float and a map, used to evaluate all expressions *)
 and eval_stmt map = function 
   | Block(a) -> main map 0.0 a                                     
-  | Func(a, b, c) -> let m1 = (StringMap.add a (Func(a, b, c)) map) in (0.0, m1) (* raise (Failure "NotImplementedError: Functions have not yet been implemented");        *)(*string * string list * stmt list*)                                         (* stmt list *)
+  | Func(Bind(a, t), b, c) -> let m1 = (StringMap.add a (Func(Bind(a, t), b, c)) map) in (0.0, m1) (* raise (Failure "NotImplementedError: Functions have not yet been implemented");        *)(*string * string list * stmt list*)                                         (* stmt list *)
   | Class(a, b) -> raise (Failure "NotImplementedError: Classes have not yet been implemented!"); 
   | Expr(a) -> let (x, m1) = eval_expr map a in (x, m1)                                                                              (* expr *)          
   | If(a, b, c) -> let (x, m1) = eval_expr map a in if x = 1.0 then eval_stmt m1 (Block b) else eval_stmt m1 (Block c) (* raise (Failure "NotImplementedError: If statements have not yet been implemented"); *)     (* expr * stmt * stmt *)
-  | For(a, b, c) -> raise (Failure "NotImplementedError: For loops have not yet been implemented!");        (* string * expr * expr *)
+  | For(Bind(a, t), b, c) -> raise (Failure "NotImplementedError: For loops have not yet been implemented!");        (* string * expr * expr *)
   | While(a, b) -> let rec recurse map = let (x, m1) = eval_expr map a in if x = 1.0 then let (x1, m2) = eval_stmt m1 (Block b) in recurse m2 else (0.0, map) in recurse map                                          (*raise (Failure "NotImplementedError: While loops have not yet been implemented"); *)      (* expr * stmt *)
   | Return(a) ->  eval_expr map a;       (* expr *)
-  | Asn(n, t, v) -> let (v1, m1) = eval_expr map v in let m2 = (StringMap.add n (Expr (Lit(Float(v1)))) m1) in (v1, m2)
-  | MultAsn(names, t, v) -> let (v1, m1) = eval_expr map v in let m2 = List.fold_left (fun m name -> StringMap.add name (Expr (Lit(Float(v1)))) m) m1 names in (v1, m2)
+  | Asn(Bind(n, t), v) -> let (v1, m1) = eval_expr map v in let m2 = (StringMap.add n (Expr (Lit(Float(v1)))) m1) in (v1, m2)
+  | MultAsn(names, v) -> let (v1, m1) = eval_expr map v in let m2 = List.fold_left (fun m (Bind(name, _)) -> StringMap.add name (Expr(Lit(Float(v1)))) m) m1 names in (v1, m2)
 
 (* takes a stmt list, iterates through the list and evaluates it in order *)
 and main map value = function 
