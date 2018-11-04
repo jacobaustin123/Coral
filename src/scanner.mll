@@ -32,6 +32,14 @@ rule token = parse
   | "for" { FOR }
   | "while" { WHILE }
   | "def" { DEF }
+  | "int" { INT }
+  | "float" { FLOAT }
+  | "str" { STRING }
+  | "bool" { BOOL }
+  | "int[]" { INTARR }
+  | "float[]" { FLOATARR }
+  | "str[]" { STRINGARR }
+  | "bool[]" { BOOLARR }
   | ',' { COMMA }
   | '.' { DOT }
   | "!=" { NEQ }
@@ -61,10 +69,6 @@ rule token = parse
   | "==" { EQ }
   | '=' { ASN }  
   | ';' { SEP }
-  | "int" { INT }
-  | "float" { FLOAT }
-  | "string" { STRING }
-  | "bool" { BOOL }
   | ("global"|"await"|"import"|"from"|"as"|"nonlocal"|"async"|"yield"|"raise"|"except"|"finally"|"is"|"lambda"|"try"|"with") { raise (Failure("NotImplementedError: these Python 3.7 features are not currently being implemented in the Coral language." )) }
 
 (* to do capture groups for string literal to extract everything but the quotes *)

@@ -36,7 +36,6 @@ let rec eval_expr map = function
    )
   | List(x) -> raise (Failure "NotImplementedError: Lists have not yet been implemented!"); 
   | Var(x) -> (try let Expr(v) = (StringMap.find x map) in eval_expr map v with Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" x; flush stdout; raise Not_found)
-  | Asn(n, v) -> let (v1, m1) = eval_expr map v in let m2 = (StringMap.add n (Expr (Lit(Float(v1)))) m1) in (v1, m2)
   | Unop(op, v) -> let (v1, m1) = eval_expr map v in
       (match op with
         | Neg -> (-.v1, m1)
@@ -68,7 +67,7 @@ match op with
 
 (* helper function used to add a list of function arguments to the map of local variables *)
 and add_to_map map = function 
-  | (a, b) -> let (v1, m1) = eval_expr map b in let m2 = (StringMap.add a (Expr (Lit (Float(v1)))) m1) in m2
+  | ((a, t), b) -> let (v1, m1) = eval_expr map b in let m2 = (StringMap.add a (Expr (Lit (Float(v1)))) m1) in m2
 
 (* takes a statement and evaluates it, returning a float and a map, used to evaluate all expressions *)
 and eval_stmt map = function 
@@ -80,6 +79,8 @@ and eval_stmt map = function
   | For(a, b, c) -> raise (Failure "NotImplementedError: For loops have not yet been implemented!");        (* string * expr * expr *)
   | While(a, b) -> let rec recurse map = let (x, m1) = eval_expr map a in if x = 1.0 then let (x1, m2) = eval_stmt m1 (Block b) in recurse m2 else (0.0, map) in recurse map                                          (*raise (Failure "NotImplementedError: While loops have not yet been implemented"); *)      (* expr * stmt *)
   | Return(a) ->  eval_expr map a;       (* expr *)
+  | Asn(n, t, v) -> let (v1, m1) = eval_expr map v in let m2 = (StringMap.add n (Expr (Lit(Float(v1)))) m1) in (v1, m2)
+  | MultAsn(names, t, v) -> let (v1, m1) = eval_expr map v in let m2 = List.fold_left (fun m name -> StringMap.add name (Expr (Lit(Float(v1)))) m) m1 names in (v1, m2)
 
 (* takes a stmt list, iterates through the list and evaluates it in order *)
 and main map value = function 
@@ -143,6 +144,14 @@ let print = function
   | Parser.FLOAT_LITERAL(x) -> "FLOAT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
   | Parser.BOOL_LITERAL(x) -> "BOOL_ITERAL" (*Printf.sprintf "Lit(%f)" x *)
   | Parser.INT_LITERAL(x) -> "INT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
+  | Parser.INT -> "INT"
+  | Parser.BOOL -> "BOOL"
+  | Parser.FLOAT -> "FLOAT"
+  | Parser.STRING -> "STRING"
+  | Parser.INTARR -> "INTARR"
+  | Parser.FLOATARR -> "FLOATARR"
+  | Parser.STRINGARR -> "STRINGARR"
+  | Parser.BOOLARR -> "BOOLARR"
   | _ -> "I'm too lazy"
 ;;
 
@@ -167,7 +176,7 @@ let indent tokens base current =
     let rec aux curr s out stack = match s with
     | [] -> (curr, stack, List.rev out)
     | Parser.TAB :: t -> aux (curr + 1) t out stack;
-    | Parser.COLON :: t -> (Stack.push (curr + 1) stack; aux curr t (Parser.INDENT :: (Parser.COLON :: out)) stack)
+    | Parser.COLON :: (Parser.EOL :: t) -> (Stack.push (curr + 1) stack; aux curr (Parser.EOL :: t) (Parser.INDENT :: (Parser.COLON :: out)) stack)
     | Parser.EOL :: t -> aux 0 t (Parser.SEP :: out) stack 
     | a :: t -> (* Printf.printf "indent level: %d (%s)\n" curr (print a); *) if Stack.top stack = curr then aux curr t (a::out) stack (* do nothing, continue with next character *)
       else if Stack.top stack > curr then let _ = Stack.pop stack in aux curr (a :: t) (Parser.DEDENT :: out) stack (* if dedented, pop off the stack and add a DEDENT token *)
@@ -208,7 +217,7 @@ let rec loop map =
     in print_endline (string_of_float result); flush stdout; loop mymap
   with
     | Not_found -> loop map
-    | Stdlib.Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout; loop map
+    | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout; loop map
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map
 ;;
 
