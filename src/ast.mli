@@ -8,7 +8,7 @@ type literal =
   | Float of float
   | String of string
 
-type typ = | Int | Float | Bool | String | Dyn | IntArr | FloatArr | BoolArr | StringArr
+type typ = | Int | Float | Bool | String | Dyn | IntArr | FloatArr | BoolArr | StringArr (* should be renamed to avoid name conflict with literal *)
 
 type bind = Bind of string * typ
 
@@ -23,13 +23,13 @@ type expr =
   | List of expr list
 
 type stmt = (* this can be refactored using Blocks, but I haven't quite figured it out yet *)
-  | Func of bind * bind list * stmt list
-  | Block of stmt list 
+  | Func of bind * bind list * stmt
+  | Block of stmt list
   | Expr of expr
-  | If of expr * stmt list * stmt list
-  | For of bind * expr * stmt list
-  | While of expr * stmt list
+  | If of expr * stmt * stmt
+  | For of bind * expr * stmt
+  | While of expr * stmt
   | Return of expr
-  | Class of string * stmt list
+  | Class of string * stmt
   | Asn of bind * expr
   | MultAsn of bind list * expr

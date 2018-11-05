@@ -22,11 +22,11 @@ type sstmt = (* this can be refactored using Blocks, but I haven't quite figured
   | SFunc of sfunc_decl
   | SBlock of stmt list 
   | SExpr of expr
-  | SIf of expr * stmt list * stmt list
-  | SFor of bind * expr * stmt list
-  | SWhile of expr * stmt list
+  | SIf of expr * stmt * stmt
+  | SFor of bind * expr * stmt
+  | SWhile of expr * stmt
   | SReturn of expr
-  | SClass of string * stmt list
+  | SClass of string * stmt
   | SAsn of bind * expr
   | SMultAsn of bind list * expr
 

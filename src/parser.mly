@@ -122,7 +122,7 @@ stmt:
   | DEF VARIABLE LPAREN formals_opt RPAREN COLON stmt_block { Func(Bind($2, Dyn), $4, $7) }
   | DEF VARIABLE LPAREN formals_opt RPAREN ARROW typ COLON stmt_block { Func(Bind($2, $7), $4, $9) }
   | RETURN expr SEP { Return $2 }
-  | IF expr COLON stmt_block %prec NOELSE { If($2, $4, []) }
+  | IF expr COLON stmt_block %prec NOELSE { If($2, $4, Block([])) }
   | IF expr COLON stmt_block ELSE COLON stmt_block { If($2, $4, $7) } /* to do figure out (Block) */
   | FOR bind_opt IN expr COLON stmt_block { For($2, $4, $6) }
   | WHILE expr COLON stmt_block { While($2, $4) }
@@ -138,7 +138,7 @@ bind_opt:
   | VARIABLE COLON typ { Bind($1, $3) }
 
 stmt_block: 
-  | INDENT SEP stmt_list DEDENT { List.rev $3 }
+  | INDENT SEP stmt_list DEDENT { Block(List.rev $3) }
 
 formals_opt: /* used for parsing argument lists in function declarations */
   | { [] }
