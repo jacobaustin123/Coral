@@ -1,42 +1,27 @@
-type literal = 
-  | Int of int
-  | Bool of bool
-  | Float of float
-  | String of string
-
-type typ = | Int | Float | Bool | String | Dyn | IntArr | FloatArr | BoolArr | StringArr
-
-type bind = Bind of string * typ
+open Ast
 
 type sexpr =
-  | SBinop of expr * operator * expr
+  | SBinop of sexpr * operator * sexpr
   | SLit of literal
   | SVar of bind
-  | SUnop of uop * expr
-  | SCall of string * expr list
-  | SMethod of expr * string * expr list
-  | SField of expr * string
-  | SList of expr list
+  | SUnop of uop * sexpr
+  | SCall of string * sexpr list
+  | SMethod of sexpr * string * sexpr list
+  | SField of sexpr * string
+  | SList of sexpr list * typ
+  | SNoexpr 
 
 type sstmt = (* this can be refactored using Blocks, but I haven't quite figured it out yet *)
-  | SFunc of sfunc_decl
-  | SBlock of stmt list 
-  | SExpr of expr
-  | SIf of expr * stmt * stmt
-  | SFor of bind * expr * stmt
-  | SWhile of expr * stmt
-  | SReturn of expr
-  | SClass of string * stmt
-  | SAsn of bind * expr
-  | SMultAsn of bind list * expr
-
-type sfunc_decl = {
-    styp : typ;
-    sfname : string;
-    sformals : bind list;
-    slocals : bind list;
-    sbody : sstmt list;
-  }
+  | SFunc of bind * bind list * sstmt
+  | SBlock of sstmt list 
+  | SExpr of sexpr
+  | SIf of sexpr * sstmt * sstmt
+  | SFor of bind * sexpr * sstmt
+  | SWhile of sexpr * sstmt
+  | SReturn of sexpr
+  | SClass of string * sstmt
+  | SAsn of bind list * sexpr
+  | SNop
 
   (*
 

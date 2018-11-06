@@ -1,4 +1,5 @@
 open Ast
+open Sast
 open Getopt (* package used to handle command line arguments *)
 
 module StringMap = Map.Make(String);; (* map from string -> expr *)
@@ -29,23 +30,23 @@ let rec zip lst1 lst2 = match lst1,lst2 with
 (* expr -> (float, map), used to evaluate expressions *)
 let rec eval_expr map = function 
   | Lit(x) -> (match x with 
-     | Float(y) -> (y, map)
-     | Int(y) -> (float_of_int y, map)
-     | Bool(y) -> (float_of_bool y, map)
-     | String(y) -> raise (Failure "NotImplementedError: Strings have not yet been implemented!");
+     | FloatLit(y) -> (y, map)
+     | IntLit(y) -> (float_of_int y, map)
+     | BoolLit(y) -> (float_of_bool y, map)
+     | StringLit(_) -> raise (Failure "NotImplementedError: Strings have not yet been implemented!");
    )
-  | List(x) -> raise (Failure "NotImplementedError: Lists have not yet been implemented!"); 
-  | Var(Bind(x, t)) -> (try let Expr(v) = (StringMap.find x map) in eval_expr map v with Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" x; flush stdout; raise Not_found)
+  | List(_) -> raise (Failure "NotImplementedError: Lists have not yet been implemented!"); 
+  | Var(Bind(x, _)) -> (try let Expr(v) = (StringMap.find x map) in eval_expr map v with Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" x; flush stdout; raise Not_found)
   | Unop(op, v) -> let (v1, m1) = eval_expr map v in
       (match op with
         | Neg -> (-.v1, m1)
         | Not -> if v1 = 0.0 then (1.0, m1) else (0.0, m1))
   | Call(name, args) -> (try let Func(_, a, ex) = StringMap.find name map in 
                             let zipped = zip a args in let m1 = List.fold_left add_to_map map zipped in 
-                            let (v2, m2) = eval_stmt m1 ex in (v2, map) with 
+                            let (v2, _) = eval_stmt m1 ex in (v2, map) with 
                             Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" name; flush stdout; raise Not_found) (* raise (Failure "NotImplementedError: Functions have not yet been implemented"); *)
-  | Method(a, b, c) -> raise (Failure "NotImplementedError: Methods have not yet been implemented!");
-  | Field(a, b) -> raise (Failure "NotImplementedError: Fields have not yet been implemented!");
+  | Method(_, _, _) -> raise (Failure "NotImplementedError: Methods have not yet been implemented!");
+  | Field(_, _) -> raise (Failure "NotImplementedError: Fields have not yet been implemented!");
   | Binop(e1, op, e2) ->
 
 let (v1, m1) = eval_expr map e1 in let (v2, m2) = eval_expr m1 e2 in
@@ -67,7 +68,7 @@ match op with
 
 (* helper function used to add a list of function arguments to the map of local variables *)
 and add_to_map map = function 
-  | (Bind(a, t), b) -> let (v1, m1) = eval_expr map b in let m2 = (StringMap.add a (Expr (Lit (Float(v1)))) m1) in m2
+  | (Bind(a, t), b) -> let (v1, m1) = eval_expr map b in let m2 = (StringMap.add a (Expr (Lit (FloatLit(v1)))) m1) in m2
 
 (* takes a statement and evaluates it, returning a float and a map, used to evaluate all expressions *)
 and eval_stmt map = function 
@@ -79,9 +80,8 @@ and eval_stmt map = function
   | For(Bind(a, t), b, c) -> raise (Failure "NotImplementedError: For loops have not yet been implemented!");        (* string * expr * expr *)
   | While(a, b) -> let rec recurse map = let (x, m1) = eval_expr map a in if x = 1.0 then let (x1, m2) = eval_stmt m1  b in recurse m2 else (0.0, map) in recurse map                                          (*raise (Failure "NotImplementedError: While loops have not yet been implemented"); *)      (* expr * stmt *)
   | Return(a) ->  eval_expr map a;       (* expr *)
-  | Asn(Bind(n, t), v) -> let (v1, m1) = eval_expr map v in let m2 = (StringMap.add n (Expr (Lit(Float(v1)))) m1) in (v1, m2)
-  | MultAsn(names, v) -> let (v1, m1) = eval_expr map v in let m2 = List.fold_left (fun m (Bind(name, _)) -> StringMap.add name (Expr(Lit(Float(v1)))) m) m1 names in (v1, m2)
-
+  | Asn(names, v) -> let (v1, m1) = eval_expr map v in let m2 = List.fold_left (fun m (Bind(name, _)) -> StringMap.add name (Expr(Lit(FloatLit(v1)))) m) m1 names in (v1, m2)
+  | Nop -> (0.0, map)
 (* takes a stmt list, iterates through the list and evaluates it in order *)
 and main map value = function 
   | [] -> (value, map)
@@ -139,11 +139,11 @@ let print = function
   | Parser.DOT -> "DOT"
   | Parser.INDENT -> "INDENT"
   | Parser.DEDENT -> "DEDENT"
-  | Parser.VARIABLE(x) -> "VARIABLE" (*Printf.sprintf "Var(%s)" x *)
+  | Parser.VARIABLE(_) -> "VARIABLE" (*Printf.sprintf "Var(%s)" x *)
   | Parser.STRING_LITERAL(x) -> Printf.sprintf "STRING_LITERAL(%s)" x
-  | Parser.FLOAT_LITERAL(x) -> "FLOAT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
-  | Parser.BOOL_LITERAL(x) -> "BOOL_ITERAL" (*Printf.sprintf "Lit(%f)" x *)
-  | Parser.INT_LITERAL(x) -> "INT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
+  | Parser.FLOAT_LITERAL(_) -> "FLOAT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
+  | Parser.BOOL_LITERAL(_) -> "BOOL_ITERAL" (*Printf.sprintf "Lit(%f)" x *)
+  | Parser.INT_LITERAL(_) -> "INT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
   | Parser.INT -> "INT"
   | Parser.BOOL -> "BOOL"
   | Parser.FLOAT -> "FLOAT"
@@ -152,11 +152,12 @@ let print = function
   | Parser.FLOATARR -> "FLOATARR"
   | Parser.STRINGARR -> "STRINGARR"
   | Parser.BOOLARR -> "BOOLARR"
+  | Parser.NOP -> "NOP"
   | _ -> "I'm too lazy"
 ;;
 
 (* used to hackily fix a big where multiple semicolons cause issues. there may be a more elegant way *)
-let rec remove_double_semicolons = function 
+(* let rec remove_double_semicolons = function 
   | [] -> []
   | Parser.SEP :: t -> (remove_double_semicolons t)
   | x :: t -> 
@@ -165,7 +166,7 @@ let rec remove_double_semicolons = function
         | a :: t -> if a = List.nth nums 0 && a = Parser.SEP then aux nums t
        else aux (a :: nums) t in
       List.rev (aux [x] t)
-;;
+;; *)
 
 
 (* this is a complicated function. it takes the lexed buffer, runs it through the tokenize parser in order to 
@@ -182,15 +183,14 @@ let indent tokens base current =
       else if Stack.top stack > curr then let _ = Stack.pop stack in aux curr (a :: t) (Parser.DEDENT :: out) stack (* if dedented, pop off the stack and add a DEDENT token *)
       else if curr = (Stack.top stack) + 1 then let _ = Stack.push curr stack in aux curr (a :: t) (Parser.INDENT :: out) stack (* if indented by one, push onto the stack and add an indent token *)
       else raise (Failure "SyntaxError: invalid indentation detected!"); (* else raise an error *)
-  in let (a, b, c) = aux current tokens [] base in
-  (a, b, remove_double_semicolons c)
+  in aux current tokens [] base
 ;;
 
 (* this is the main function loop for the interpreter. We lex the input from stdin,
 convert it to a list of Parser.token, apply the appropriate indentation corrections,
 check to make sure we are at 0 indentation level, print more dots otherwise, and then
 compute the correct value and repeat *)
-let rec loop map = 
+let rec loop map smap = 
   try 
     Printf.printf ">>> "; flush stdout;
     let base = Stack.create() in let _ = Stack.push 0 base in
@@ -213,12 +213,13 @@ let rec loop map =
       | h :: t -> formatted := t ; h in
 
     let program = Parser.program token (Lexing.from_string "") in
+    let (sast, smap') = (Semant.check smap [] program) in (* temporarily here to check validity of SAST *)
     let (result, mymap) = main map 0.0 program
-    in print_endline (string_of_float result); flush stdout; loop mymap
+    in print_endline (string_of_float result); flush stdout; loop mymap smap'
   with
-    | Not_found -> loop map
-    | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout; loop map
-    | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map
+    | Not_found -> loop map smap
+    | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout; loop map smap
+    | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map smap
 ;;
 
 (* main loop of the interpreter *)
@@ -226,7 +227,7 @@ let _ =
 	Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout;
   parse_cmdline specs print_endline;
   try
-    let emptymap = StringMap.empty in loop emptymap
+    let emptymap = StringMap.empty in let semptymap = StringMap.empty in loop emptymap semptymap 
   with 
     | Scanner.Eof -> exit 0
 ;;

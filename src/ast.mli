@@ -3,10 +3,10 @@ type operator = Add | Sub | Mul | Div | Exp | If | Eq | Neq | Less | Leq | Great
 type uop = Neg | Not
 
 type literal = 
-  | Int of int
-  | Bool of bool
-  | Float of float
-  | String of string
+  | IntLit of int
+  | BoolLit of bool
+  | FloatLit of float
+  | StringLit of string
 
 type typ = | Int | Float | Bool | String | Dyn | IntArr | FloatArr | BoolArr | StringArr (* should be renamed to avoid name conflict with literal *)
 
@@ -31,5 +31,5 @@ type stmt = (* this can be refactored using Blocks, but I haven't quite figured 
   | While of expr * stmt
   | Return of expr
   | Class of string * stmt
-  | Asn of bind * expr
-  | MultAsn of bind list * expr
+  | Asn of bind list * expr
+  | Nop
