@@ -89,8 +89,10 @@ let rec expr map = function
       | Add | Sub | Mul | Div when t1 = Int || t1 = Float || t1 = Bool && t2 = Int || t2 = Float || t2 = Bool -> (Float, SBinop(e1, op, e2))
 
       | Eq | Neq | Less | Leq | Greater | Geq -> (Bool, SBinop(e1, op, e2)) (* will have to fix later for strings *)
-      | And | Or when same && t1 = Bool -> (Bool, SBinop(e1, op, e2)))) (* will have to fix this later *)
-  
+      | And | Or when same && t1 = Bool -> (Bool, SBinop(e1, op, e2))
+  	  | _ -> raise (Failure ("TypeError: unsupported operand type(s)"))
+  	)) (* will have to fix this later *)
+  	
   | _ as temp -> print_endline (expr_to_string temp); (Dyn, SNoexpr)
 
 let check_assign map typ = function (* t is float, t' is int, typ is int *)

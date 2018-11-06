@@ -1,5 +1,7 @@
 open Ast
 
+(* type sbind = SBind of string * typ * typ (* name, declared type, inferred type *) *)
+
 type sexpr =
   | SBinop of sexpr * operator * sexpr
   | SLit of literal
