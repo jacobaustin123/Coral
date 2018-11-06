@@ -35,7 +35,7 @@ let rec eval_expr map = function
      | BoolLit(y) -> (float_of_bool y, map)
      | StringLit(_) -> raise (Failure "NotImplementedError: Strings have not yet been implemented!");
    )
-  | List(_) -> raise (Failure "NotImplementedError: Lists have not yet been implemented!"); 
+  | List(x) -> (raise (Failure "NotImplementedError: Lists have not yet been implemented!"); )
   | Var(Bind(x, _)) -> (try let Expr(v) = (StringMap.find x map) in eval_expr map v with Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" x; flush stdout; raise Not_found)
   | Unop(op, v) -> let (v1, m1) = eval_expr map v in
       (match op with

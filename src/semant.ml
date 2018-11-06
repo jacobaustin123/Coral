@@ -19,8 +19,7 @@ sstmt:
   | SWhile of expr * stmt
   | SReturn of expr
   | SClass of string * stmt
-  | SAsn of bind * expr
-  | SMultAsn of bind list * expr
+  | SAsn of bind list * expr
 
 *)
 
@@ -78,6 +77,20 @@ let rec expr map = function
   	        | a :: rest -> let (t, e) = expr map a in aux t [e] rest
   	        | [] -> (Dyn, SList([], Dyn)) (* todo maybe do something with this special case *))
   | Var(Bind(x, t)) -> if StringMap.mem x map then let typ = StringMap.find x map in (typ, SVar(Bind(x, typ))) else raise (Failure ("NameError: name '" ^ x ^ "' is not defined"))
+  | Binop(a, op, b) -> let (t1, e1) = expr map a in let (t2, e2) = expr map b in (match (t1, t2) with
+    | (Dyn, Dyn) | (Dyn, _) | (_, Dyn) -> (Dyn, SBinop(e1, op, e2))
+    | _ -> let same = t1 = t2 in (match op with
+      | Add | Sub | Mul | Div when same && t1 = Int   -> (Int, SBinop(e1, op, e2))
+      | Add | Sub | Mul | Div when same && t1 = Float -> (Float, SBinop(e1, op, e2))
+      | Add | Sub | Mul | Div when same && t1 = Bool -> (Bool, SBinop(e1, op, e2))
+      | Add when same && t1 = String -> (String, SBinop(e1, op, e2))
+      | Sub | Mul | Div when t1 = String or t2 = String -> raise (Failure ("TypeError: unsupported operand type(s)"))
+
+      | Add | Sub | Mul | Div when t1 = Int || t1 = Float || t1 = Bool && t2 = Int || t2 = Float || t2 = Bool -> (Float, SBinop(e1, op, e2))
+
+      | Eq | Neq | Less | Leq | Greater | Geq -> (Bool, SBinop(e1, op, e2)) (* will have to fix later for strings *)
+      | And | Or when same && t1 = Bool -> (Bool, SBinop(e1, op, e2)))) (* will have to fix this later *)
+  
   | _ as temp -> print_endline (expr_to_string temp); (Dyn, SNoexpr)
 
 let check_assign map typ = function (* t is float, t' is int, typ is int *)
@@ -101,10 +114,10 @@ let check_assign map typ = function (* t is float, t' is int, typ is int *)
   | _ -> raise (Failure ("TypeError: invalid types for assignment."))
 
 let check_array map e b = let (typ, e') = expr map e in match typ with
-  | IntArr -> check_assign map Int b 
-  | FloatArr -> check_assign map Float b 
-  | BoolArr -> check_assign map Bool b 
-  | StringArr -> check_assign map String b 
+  | IntArr -> check_assign map Int b
+  | FloatArr -> check_assign map Float b
+  | BoolArr -> check_assign map Bool b
+  | StringArr -> check_assign map String b
   | Dyn -> (map, b)
   | _ -> raise (Failure ("TypeError: invalid types for assignment."))
 
@@ -117,6 +130,7 @@ let rec stmt map = function
   | Block(s) -> let (value, map') = check map [] s in (map', SBlock(value))
   | If(a, b, c) ->  let (typ, e') = expr map a in let (map', value) = stmt map b in let (map'', value') = stmt map' c in (map'', SIf(e', value, value'))
   | For(a, b, c) -> let (m, x) = check_array map b a in let (m', x') = stmt m c in let (typ, e') = expr m' b in (m', SFor(x, e', x'))
+  | While(a, b) -> let (_, e) = expr map a in let (m', x') = stmt map b in (m', SWhile(e, x'))
   | Nop -> (map, SNop)
   | _ as temp -> print_endline (stmt_to_string temp); (map, SNop)
 
