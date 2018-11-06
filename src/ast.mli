@@ -32,4 +32,5 @@ type stmt = (* this can be refactored using Blocks, but I haven't quite figured 
   | Return of expr
   | Class of string * stmt
   | Asn of bind list * expr
+  | TypeInfo of expr
   | Nop

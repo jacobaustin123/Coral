@@ -47,6 +47,7 @@ let stmt_to_string = function
   | Return(_) -> "RETURN"
   | Class(_, _) -> "CLASS"
   | Asn(_, _) -> "ASN"
+  | TypeInfo(_) -> "TYPEINFO"
   | Nop -> "NOP"
 
 let expr_to_string = function
@@ -58,6 +59,17 @@ let expr_to_string = function
   | Method(_, _, _) -> "METHOD"
   | Field(_, _) -> "FIELD"
   | List(_) -> "LIST"
+
+let type_to_string = function
+  | Int -> "<class 'int'>"
+  | Float -> "<class 'float'>"
+  | Bool -> "<class 'bool'>"
+  | String -> "<class 'string'>"
+  | IntArr -> "<class 'intarr'>"
+  | FloatArr -> "<class 'floatarr'>"
+  | BoolArr -> "<class 'boolarr'>"
+  | StringArr -> "<class 'stringarr'>"
+
 
 let type_to_array = function
   | Int -> IntArr
@@ -136,6 +148,7 @@ let rec stmt map = function
   | For(a, b, c) -> let (m, x) = check_array map b a in let (m', x') = stmt m c in let (typ, e') = expr m' b in (m', SFor(x, e', x'))
   | While(a, b) -> let (_, e) = expr map a in let (m', x') = stmt map b in (m', SWhile(e, x'))
   | Nop -> (map, SNop)
+  | TypeInfo(a) -> let (t, e) = expr map a in print_endline (type_to_string t); (map, SNop)
   | _ as temp -> print_endline (stmt_to_string temp); (map, SNop)
 
 and check map out = function 
