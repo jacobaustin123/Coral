@@ -1,11 +1,15 @@
 open Ast
 
-(* type sbind = SBind of string * typ * typ (* name, declared type, inferred type *) *)
+(* for each variable, StringMap should store typ, inferred typ, bool *)
+
+type sbind = 
+  | WeakBind of string * typ (* Not known to be declared, typ can be dynamic *) 
+  | StrongBind of string * typ (* Known to be declared, typ can be dynamic *)
 
 type sexpr =
   | SBinop of sexpr * operator * sexpr
   | SLit of literal
-  | SVar of bind
+  | SVar of sbind
   | SUnop of uop * sexpr
   | SCall of string * sexpr list
   | SMethod of sexpr * string * sexpr list
@@ -14,15 +18,15 @@ type sexpr =
   | SNoexpr 
 
 type sstmt = (* this can be refactored using Blocks, but I haven't quite figured it out yet *)
-  | SFunc of bind * bind list * sstmt
+  | SFunc of sbind * sbind list * sstmt
   | SBlock of sstmt list 
   | SExpr of sexpr
   | SIf of sexpr * sstmt * sstmt
-  | SFor of bind * sexpr * sstmt
+  | SFor of sbind * sexpr * sstmt
   | SWhile of sexpr * sstmt
   | SReturn of sexpr
   | SClass of string * sstmt
-  | SAsn of bind list * sexpr
+  | SAsn of sbind list * sexpr
   | SNop
 
   (*

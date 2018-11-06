@@ -64,7 +64,6 @@ match op with
   | And -> (float_of_bool (v1 <> 0.0 && v2 <> 0.0), m2)
   | Or -> (float_of_bool (v1 <> 0.0|| v2 <> 0.0), m2)
   | Eq -> (float_of_bool (v1 = v2), m2)
-  | If -> if v1 = 1.0 then (v2, m2) else (0.0, m2) (* this doesn't work *)
 
 (* helper function used to add a list of function arguments to the map of local variables *)
 and add_to_map map = function 
