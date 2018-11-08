@@ -107,7 +107,7 @@ token: /* used by the parser to read the input into the indentation function. ge
   | TYPE { [TYPE] }
   | token token %prec RECURSE { $1 @ $2 }
 
-program: stmt_list EOF { $1 } /* the main program function */
+program: stmt_list EOF { List.rev $1 } /* the main program function */
 
 stmt_list: /* lists of statements in a function body. modified from Micro C */
   | { [] }
