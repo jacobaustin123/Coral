@@ -12,14 +12,14 @@ let debug = ref 0
 let fpath = ref ""
 ;;
 
-let fexists = ref 0
-;;
+let run = ref 0
 
 (* function used to handle command line arguments *)
 let specs =
 [
   ( 'd', "debug", (incr debug), None);
-  ( 'f', "file", None, (atmost_once fpath (Error "ArgumentError: can only compile one file with -f flag.")));
+  ( 'c', "check", None, ((atmost_once fpath (Error "ArgumentError: can only checked one file with -c flag."))));
+  ( 'r', "run", (incr run), None);
 ]
 ;;
 
@@ -229,7 +229,7 @@ let rec loop map smap =
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map smap
 ;;
 
-let rec file map smap fname = 
+let rec file map smap fname run = 
   try
     let chan = open_in fname in
     let base = Stack.create() in let _ = Stack.push 0 base in
@@ -251,8 +251,7 @@ let rec file map smap fname =
 
     let program = Parser.program token (Lexing.from_string "") in
     let (sast, smap') = (Semant.check smap [] program) in (* temporarily here to check validity of SAST *)
-    let (result, mymap) = main map 0.0 program
-    in print_endline (string_of_float result); flush stdout;
+    if run then let (result, mymap) = main map 0.0 program in print_endline (string_of_float result); flush stdout;
   with
     | Not_found -> loop map smap
     | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout
@@ -266,6 +265,6 @@ let _ =
   if String.length !fpath = 0 then 
       (Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
       try loop emptymap semptymap with Scanner.Eof -> exit 0)
-  else if (Sys.file_exists !fpath) then file emptymap semptymap !fpath
+  else if (Sys.file_exists !fpath) then if !run = 1 then file emptymap semptymap !fpath true else file emptymap semptymap !fpath false
   else raise (Failure "CompilerError: invalid file passed to Coral compiler.")
 ;;

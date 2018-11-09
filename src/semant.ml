@@ -176,7 +176,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
       else let rec aux (map, bindout, exprout) v1 v2 = match v1, v2 with
         | b, e -> let (t', e') = expr map e in let (map1, bind2) = check_assign map t' b in (map1, (bind2 :: bindout), (e' :: exprout))
 
-      in let (map1, bindout, exprout) = (List.fold_left2 aux (map, [], []) args exprs) in 
+      in let (map1, bindout, exprout) = (List.fold_left2 aux (map, [], []) args exprs) in
       let (map2, block, typ2) = (func_stmt map1 c) in (* p, q, r is sstmt list, typ, map *)
       let Bind(name, btype) = n in if btype <> Dyn && btype <> typ2 then raise (Failure ("STypeError: invalid return type")) else 
       let func = (SFunc(StrongBind(name, typ2), (List.rev bindout), block)) in (typ2, (SCall(StrongBind(name, typ2), (List.rev exprout), func))) (* TODO fix this somehow *)
