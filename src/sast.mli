@@ -24,13 +24,13 @@ type sexpr =
   | SLit of literal
   | SVar of sbind
   | SUnop of uop * sexpr
-  | SCall of sbind * sexpr list
+  | SCall of sbind * sexpr list * sstmt (* sstmt is type-checked version of function *)
   | SMethod of sexpr * string * sexpr list
   | SField of sexpr * string
   | SList of sexpr list * typ
   | SNoexpr 
 
-type sstmt = (* this can be refactored using Blocks, but I haven't quite figured it out yet *)
+and sstmt = (* this can be refactored using Blocks, but I haven't quite figured it out yet *)
   | SFunc of sbind * sbind list * sstmt
   | SFuncDecl of bind * bind list * stmt
   | SBlock of sstmt list 

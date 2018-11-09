@@ -9,10 +9,17 @@ module StringMap = Map.Make(String);; (* map from string -> expr *)
 let debug = ref 0
 ;;
 
+let fpath = ref ""
+;;
+
+let fexists = ref 0
+;;
+
 (* function used to handle command line arguments *)
 let specs =
 [
   ( 'd', "debug", (incr debug), None);
+  ( 'f', "file", None, (atmost_once fpath (Error "ArgumentError: can only compile one file with -f flag.")));
 ]
 ;;
 
@@ -222,12 +229,43 @@ let rec loop map smap =
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map smap
 ;;
 
-(* main loop of the interpreter *)
-let _ =
-	Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout;
-  parse_cmdline specs print_endline;
+let rec file map smap fname = 
   try
-    let emptymap = StringMap.empty in let semptymap = StringMap.empty in loop emptymap semptymap 
-  with 
-    | Scanner.Eof -> exit 0
+    let chan = open_in fname in
+    let base = Stack.create() in let _ = Stack.push 0 base in
+
+    let rec read current stack = (* logic of the interpreter *)
+      try let line = (input_line chan) ^ "\n" in 
+       let lexbuf = (Lexing.from_string line) in
+       let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
+       let (curr, stack, formatted) = indent temp stack current in
+       formatted @ (read curr stack)
+     with End_of_file -> close_in chan; []
+    in let formatted = ref (read 0 base) in
+    let _ = if !debug = 1 then (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "") in (* print debug messages *)
+
+    let token lexbuf = (* hack I found online to convert lexbuf list to a map from lexbuf to Parser.token, needed for Ocamlyacc *)
+    match !formatted with 
+      | []     -> Parser.EOF 
+      | h :: t -> formatted := t ; h in
+
+    let program = Parser.program token (Lexing.from_string "") in
+    let (sast, smap') = (Semant.check smap [] program) in (* temporarily here to check validity of SAST *)
+    let (result, mymap) = main map 0.0 program
+    in print_endline (string_of_float result); flush stdout;
+  with
+    | Not_found -> loop map smap
+    | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout
+    | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout
+;;
+
+(* main loop of the interpreter *)
+let _ = 
+  parse_cmdline specs print_endline; (* parse command line arguments *)
+  let emptymap = StringMap.empty in let semptymap = StringMap.empty in
+  if String.length !fpath = 0 then 
+      (Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
+      try loop emptymap semptymap with Scanner.Eof -> exit 0)
+  else if (Sys.file_exists !fpath) then file emptymap semptymap !fpath
+  else raise (Failure "CompilerError: invalid file passed to Coral compiler.")
 ;;

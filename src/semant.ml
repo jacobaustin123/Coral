@@ -74,6 +74,8 @@ let type_to_string = function
   | FloatArr -> "float list"
   | BoolArr -> "bool list"
   | StringArr -> "string list"
+  | FuncType -> "func"
+  | Null -> "null"
 
 let unop_to_string = function
   | Neg -> "-"
@@ -100,6 +102,7 @@ let type_to_array = function
   | String -> StringArr
   | Float -> FloatArr
   | Dyn -> Dyn
+  | _ as x -> x
 
 let comp x y =  match List.length x, List.length y with
   | a, b when a < b -> -1
@@ -149,7 +152,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
   | Binop(a, op, b) -> let (t1, e1) = expr map a in let (t2, e2) = expr map b in (match (t1, t2) with
     | (Dyn, Dyn) | (Dyn, _) | (_, Dyn) -> (Dyn, SBinop(e1, op, e2))
     | _ -> let same = t1 = t2 in (match op with
-      | Add | Sub | Mul | Div | Exp when same && t1 = Int   -> (Int, SBinop(e1, op, e2))
+      | Add | Sub | Mul | Exp when same && t1 = Int   -> (Int, SBinop(e1, op, e2))
       | Add | Sub | Mul | Div | Exp when same && t1 = Float -> (Float, SBinop(e1, op, e2))
       | Add | Sub | Mul | Div | Exp when same && t1 = Bool -> (Bool, SBinop(e1, op, e2))
       | Add when same && t1 = String -> (String, SBinop(e1, op, e2))
@@ -176,7 +179,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
       in let (map1, bindout, exprout) = (List.fold_left2 aux (map, [], []) args exprs) in 
       let (map2, block, typ2) = (func_stmt map1 c) in (* p, q, r is sstmt list, typ, map *)
       let Bind(name, btype) = n in if btype <> Dyn && btype <> typ2 then raise (Failure ("STypeError: invalid return type")) else 
-      let _ = (SFunc(StrongBind(name, typ2), (List.rev bindout), block)) in (typ2, (SCall(StrongBind(name, typ2), (List.rev exprout)))) (* TODO fix this somehow *)
+      let func = (SFunc(StrongBind(name, typ2), (List.rev bindout), block)) in (typ2, (SCall(StrongBind(name, typ2), (List.rev exprout), func))) (* TODO fix this somehow *)
 
   | _ as temp -> print_endline ("NotImplementedError: '" ^ (expr_to_string temp) ^ "' semantic checking not implemented"); (Dyn, SNoexpr)
 
