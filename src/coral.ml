@@ -9,9 +9,11 @@ module StringMap = Map.Make(String);; (* map from string -> expr *)
 let debug = ref 0
 ;;
 
+(* string containing path to input file *)
 let fpath = ref ""
 ;;
 
+(* boolean flag used to check if program should be run by interpreter *)
 let run = ref 0
 
 (* function used to handle command line arguments *)
@@ -180,6 +182,7 @@ let print = function
 extract a list of tokens. once this list has been extracted, we iterate over it to check if the indentations 
 are correct, and to insert Parser.INDENT and Parser.DEDENT tokens as desired. We also sanitize it using the 
 above methods *)
+
 let indent tokens base current =
     let rec aux curr s out stack = match s with
     | [] -> (curr, stack, List.rev out)
@@ -229,13 +232,13 @@ let rec loop map smap =
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map smap
 ;;
 
-let rec file map smap fname run = 
+let rec file map smap fname run = (* todo combine with loop *)
   try
     let chan = open_in fname in
     let base = Stack.create() in let _ = Stack.push 0 base in
 
     let rec read current stack = (* logic of the interpreter *)
-      try let line = (input_line chan) ^ "\n" in 
+      try let line = (input_line chan) ^ "\n" in (* add newline for parser, gets stripped by input_line *)
        let lexbuf = (Lexing.from_string line) in
        let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
        let (curr, stack, formatted) = indent temp stack current in

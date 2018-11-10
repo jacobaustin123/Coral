@@ -41,6 +41,7 @@ closure.
 *)
 
 
+(* converts stmt to string for error handling *)
 let stmt_to_string = function
   | Func(_, _, _) -> "func"
   | Block(_) -> "block"
@@ -54,6 +55,7 @@ let stmt_to_string = function
   | TypeInfo(_) -> "typeinfo"
   | Nop -> "nop"
 
+(* converts expr to string for error handling *)
 let expr_to_string = function
   | Binop(_, _, _) -> "binop"
   | Lit(_) -> "lit"
@@ -64,6 +66,7 @@ let expr_to_string = function
   | Field(_, _) -> "field"
   | List(_) -> "list"
 
+(* converts type to string for error handling *)
 let type_to_string = function
   | Dyn -> "dyn"
   | Int -> "int"
@@ -77,10 +80,12 @@ let type_to_string = function
   | FuncType -> "func"
   | Null -> "null"
 
+(* converts unop to string for error handling *)
 let unop_to_string = function
   | Neg -> "-"
   | Not -> "not"
 
+(* converts binop to string for error handling *)
 let binop_to_string = function
   | Add -> "+"
   | Sub -> "-"
@@ -96,6 +101,7 @@ let binop_to_string = function
   | And -> "and"
   | Or -> "or"
 
+(* converts type to corresponding array type for array handling *)
 let type_to_array = function
   | Int -> IntArr
   | Bool -> BoolArr
@@ -104,6 +110,7 @@ let type_to_array = function
   | Dyn -> Dyn
   | _ as x -> x
 
+(* compare two lists for use in maps with list keys *)
 let comp x y =  match List.length x, List.length y with
   | a, b when a < b -> -1
   | a, b when a > b -> 1
@@ -116,9 +123,14 @@ let comp x y =  match List.length x, List.length y with
   | _ -> raise (Failure "unknown failure in argument matching")
 ;;
 
+(* map with list keys, used for recursive functions *)
 module TypeMap = Map.Make(struct type t = typ list let compare = comp end);;
 
+(* map with string keys, used for variable lookup *)
+
 module StringMap = Map.Make(String)
+
+(* merge function used to compare and combine two maps for type inference *)
 
 let compare_types a b = if a = b then a else Dyn
 let compare_decl a b = if a = b then a else false
@@ -130,7 +142,11 @@ let merge m1 m2 = StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge t
     | None, None -> None
   ) m1 m2
 
+(* check if two maps are equal *)
+
 let equals m1 m2 = (StringMap.equal (fun x y -> (compare x y) = 0) m1 m2) (* check if two maps are equal *)
+
+(* evaluates expressions and returns a type and semantically checked sexpr object *)
 
 let rec expr map = function (* evaluate expressions, return types and add to map *)
   | Lit(x) -> let typ = match x with | IntLit(x) -> Int | BoolLit(x) -> Bool | StringLit(x) -> String | FloatLit(x) -> Float in (typ, SLit(x)) (* convert lit to type, return (type, SLit(x)), check if defined in map *)
@@ -149,7 +165,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
         | _ -> raise (Failure ("STypeError: bad operand type for unary " ^ unop_to_string op ^ ": '" ^ type_to_string typ ^ "'"))
       ))
 
-  | Binop(a, op, b) -> let (t1, e1) = expr map a in let (t2, e2) = expr map b in (match (t1, t2) with
+  | Binop(a, op, b) -> let (t1, e1) = expr map a in let (t2, e2) = expr map b in (match (t1, t2) with (* will have to fix this later depending on behavior *)
     | (Dyn, Dyn) | (Dyn, _) | (_, Dyn) -> (Dyn, SBinop(e1, op, e2))
     | _ -> let same = t1 = t2 in (match op with
       | Add | Sub | Mul | Exp when same && t1 = Int   -> (Int, SBinop(e1, op, e2))
@@ -163,8 +179,8 @@ let rec expr map = function (* evaluate expressions, return types and add to map
       | Eq | Neq | Less | Leq | Greater | Geq -> (Bool, SBinop(e1, op, e2)) (* will have to fix later for strings *)
       | And | Or when same && t1 = Bool -> (Bool, SBinop(e1, op, e2))
   	  | _ -> raise (Failure ("STypeError: unsupported operand type(s)"))
-  	)) (* will have to fix this later *)
-  | Call(name, exprs) -> if not (StringMap.mem name map) then raise (Failure ("SNameError: function not found.")) else
+  	)) 
+  | Call(name, exprs) -> if not (StringMap.mem name map) then raise (Failure ("SNameError: function not found.")) else (* complex function to do semantic checking for calls. makes sure arguments match types, and then recursively checks given function with the given types *)
       let (typ, t', decl, func) = StringMap.find name map in if func = None then raise (Failure ("SNameError: function not found."))
       else let Some(Func(n, args, c)) = func in
       if t' != FuncType && typ != Dyn then (raise (Failure ("STypeError: cannot call variable"))) else
@@ -183,6 +199,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
 
   | _ as temp -> print_endline ("NotImplementedError: '" ^ (expr_to_string temp) ^ "' semantic checking not implemented"); (Dyn, SNoexpr)
 
+(* function to check if a certain assignment can be performed with inferred/given types, does assignment if possible, returns appropriate bind *)
 and check_assign map typ = function (* check if a value can be assigned, and assign if true *)
   | Bind(n, t) when StringMap.mem n map -> let (t', _, decl, _) = StringMap.find n map in 
   			(match typ with
@@ -204,6 +221,7 @@ and check_assign map typ = function (* check if a value can be assigned, and ass
 	  		else raise (Failure ("STypeError: invalid type assigned to " ^ n))
   | _ -> raise (Failure ("STypeError: invalid types for assignment."))
 
+(* function to check if an array type has a given type, values are appropriate. maybe not work *)
 and check_array map e b = let (typ, e') = expr map e in match typ with (* make sure an array type can be assigned to a given variable *)
   | IntArr -> check_assign map Int b
   | FloatArr -> check_assign map Float b
