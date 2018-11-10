@@ -148,6 +148,7 @@ let equals m1 m2 = (StringMap.equal (fun x y -> (compare x y) = 0) m1 m2) (* che
 
 (* evaluates expressions and returns a type and semantically checked sexpr object *)
 
+(* to do, return the entire dictionary entry, so it can be assigned appropriately *)
 let rec expr map = function (* evaluate expressions, return types and add to map *)
   | Lit(x) -> let typ = match x with | IntLit(x) -> Int | BoolLit(x) -> Bool | StringLit(x) -> String | FloatLit(x) -> Float in (typ, SLit(x)) (* convert lit to type, return (type, SLit(x)), check if defined in map *)
   | List(x) -> let rec aux typ out = function
@@ -193,9 +194,9 @@ let rec expr map = function (* evaluate expressions, return types and add to map
         | b, e -> let (t', e') = expr map e in let (map1, bind2) = check_assign map t' b in (map1, (bind2 :: bindout), (e' :: exprout))
 
       in let (map1, bindout, exprout) = (List.fold_left2 aux (map, [], []) args exprs) in
-      let (map2, block, typ2) = (func_stmt map1 c) in (* p, q, r is sstmt list, typ, map *)
+      let (map2, block, typ2, locals) = (func_stmt map1 c) in (* p, q, r is sstmt list, typ, map *)
       let Bind(name, btype) = n in if btype <> Dyn && btype <> typ2 then raise (Failure ("STypeError: invalid return type")) else 
-      let func = (SFunc(StrongBind(name, typ2), (List.rev bindout), block)) in (typ2, (SCall(StrongBind(name, typ2), (List.rev exprout), func))) (* TODO fix this somehow *)
+      let func = (SFunc(StrongBind(name, typ2), (List.rev bindout), locals, block)) in (typ2, (SCall(StrongBind(name, typ2), (List.rev exprout), func))) (* TODO fix this somehow *)
 
   | _ as temp -> print_endline ("NotImplementedError: '" ^ (expr_to_string temp) ^ "' semantic checking not implemented"); (Dyn, SNoexpr)
 
@@ -230,68 +231,75 @@ and check_array map e b = let (typ, e') = expr map e in match typ with (* make s
   | Dyn -> let Bind(n, t) = b in let map' = StringMap.add n (t, t, false, None) map in (map, WeakBind(n, t))
   | _ -> raise (Failure ("STypeError: invalid types for assignment."))
 
-and check_func map out typ = (function  (* check the entire program *)
-  | [] -> ((List.rev out), typ, map)
-  | a :: t when typ <> Null -> ((List.rev out), typ, map)
-  | a :: t -> let (m', value, typ) = func_stmt map a in check_func m' (value :: out) typ t)
+and check_func map out typ locals = (function  (* check the entire program *)
+  | [] -> ((List.rev out), typ, map, List.sort_uniq compare (List.rev locals))
+  | a :: t when typ <> Null -> (out, typ, map, locals)
+  | a :: t -> let (m', value, typ, loc) = func_stmt map a in check_func m' (value :: out) typ (loc @ locals) t)
 
-and func_stmt map = function (* used to evaluate functions and handle return types. will be used to handle closures too *)
-  | Return(e) -> let (t, e') = expr map e in (map, SReturn(e'), t) (* for closures, match t with FuncType, attach local scope *)
-  | Block(s) -> let (value, typ, map') = check_func map [] Null s in (map', SBlock(value), typ)
-  | Asn(binds, e) -> let (typ, e') = expr map e in let rec aux (m, out) = function
-      | [] -> (m, List.rev out)
-      | a :: t -> let (m, x) = check_assign map typ a in aux (m, x :: out) t in
-    let (m, out) = aux (map, []) binds in (m, SAsn(out, e'), Null)
-  | Expr(e) -> let (t, e') = expr map e in (map, SExpr(e'), Null)
+and func_stmt map = function (* used to evaluate functions and handle return types. will be used to handle closures too. duplicate stmt as much as possible *)
+  | Return(e) -> let (t, e') = expr map e in (map, SReturn(e'), t, []) (* for closures, match t with FuncType, attach local scope *)
+  | Block(s) -> let (value, typ, map', out) = check_func map [] Null [] s in (map', SBlock(value), typ, out)
+  | Asn(binds, e) -> let (a, b, out) = stmt map (Asn (binds, e)) in (a, b, Null, out)
+  | Expr(e) -> let (a, b, out) = stmt map (Expr e) in (a, b, Null, out)
   | Func(a, b, c) -> let rec dups = function (* check duplicate argument names *)
       | [] -> ()
       | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
       | _ :: t -> dups t
-    in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) map in (map', SFuncDecl(a, b, c), Null)
+    in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) map in (map', SFuncDecl(a, b, c), Null, [StrongBind(x, t)])
 
-  | If(a, b, c) -> let (typ, e') = expr map a in let (map', value, t1) = func_stmt map b in let (map'', value', t2) = func_stmt map c in if equals map' map'' then if t1 = t2 then (map', SIf(e', value, value'), t1) else (map', SIf(e', value, value'), Dyn) else 
-         let merged = merge map' map'' in if t1 = t2 then (merged, SIf(e', value, value'), t1) else (merged, SIf(e', value, value'), Dyn)
+  | If(a, b, c) -> let (typ, e') = expr map a in let (map', value, t1, out) = func_stmt map b in let (map'', value', t2, out') = func_stmt map c in if equals map' map'' then if t1 = t2 then (map', SIf(e', value, value'), t1, out) else (map', SIf(e', value, value'), Dyn, out) else 
+         let merged = merge map' map'' in if t1 = t2 then (merged, SIf(e', value, value'), t1, out @ out') else (merged, SIf(e', value, value'), Dyn, out @ out')
 
-  | For(a, b, c) -> let (m, x) = check_array map b a in let (m', x', t1) = func_stmt m c in let (typ, e') = expr m' b in if equals map m' then (m', SFor(x, e', x'), t1) else 
-        let merged = merge m m' in (merged, SFor(x, e', x'), Dyn)
+  | For(a, b, c) -> let (m, x) = check_array map b a in let (m', x', t1, out) = func_stmt m c in let (typ, e') = expr m' b in if equals map m' then (m', SFor(x, e', x'), t1, out) else 
+        let merged = merge m m' in (merged, SFor(x, e', x'), Dyn, out)
 
-  | While(a, b) -> let (_, e) = expr map a in let (m', x', t1) = func_stmt map b in if equals map m' then (m', SWhile(e, x'), Dyn) else
-    let merged = merge map m' in (merged, SWhile(e, x'), Dyn)
+  | While(a, b) -> let (_, e) = expr map a in let (m', x', t1, out) = func_stmt map b in if equals map m' then (m', SWhile(e, x'), Dyn, out) else
+    let merged = merge map m' in (merged, SWhile(e, x'), Dyn, out)
   
-  | Nop -> (map, SNop, Null)
-  | TypeInfo(a) -> let (t, e) = expr map a in print_endline (type_to_string t); (map, SNop, Null)
-  | _ as s -> let (map', value) = stmt map s in (map', value, Null)
+  | Nop -> let (a, b, out) = stmt map (Nop) in (a, b, Null, out)
+  | TypeInfo(a) -> let (a, b, out) = stmt map (TypeInfo a) in (a, b, Null, out)
+  | _ as s -> let (map', value, out) = stmt map s in (map', value, Null, [])
 
 and stmt map = function (* evaluates statements, can pass it a func *)
-  | Asn(binds, e) -> let (typ, e') = expr map e in let rec aux (m, out) = function
-      | [] -> (m, List.rev out)
-      | a :: t -> let (m, x) = check_assign map typ a in aux (m, x :: out) t in
-    let (m, out) = aux (map, []) binds in (m, SAsn(out, e'))
-  | Expr(e) -> let (t, e') = expr map e in (map, SExpr(e'))
-  | Block(s) -> let (value, map') = check map [] s in (map', SBlock(value))
+| Asn(binds, e) ->  let (typ, e') = expr map e in 
+  (match e with 
+    | Var(Bind(x, t)) when StringMap.mem x map -> 
+        let info = StringMap.find x map in
+        let rec aux (m, out) = (function
+          | [] -> (m, List.rev out)
+          | a :: t -> let (m, x) = check_assign map typ a in let Bind(name, _) = a in 
+            let map' = StringMap.add name info m in aux (map', x :: out) t)
+        in let (m, out) = aux (map, []) binds in (m, SAsn(out, e'), out)
+    | _ ->
+        let rec aux (m, out) = function
+          | [] -> (m, List.rev out)
+          | a :: t -> let (m, x) = check_assign map typ a in let Bind(name, _) = a in (aux (m, x :: out) t)
+        in let (m, out) = aux (map, []) binds in (m, SAsn(out, e'), out))
+  | Expr(e) -> let (t, e') = expr map e in (map, SExpr(e'), [])
+  | Block(s) -> let (value, map', globals) = check map [] [] s in (map', SBlock(value), globals)
   | Return(e) -> raise (Failure ("SyntaxError: return statement outside of function"))
   | Func(a, b, c) -> let rec dups = function (* check duplicate argument names *)
       | [] -> ()
       | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
       | _ :: t -> dups t
-    in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) map in (map', SFuncDecl(a, b, c))
+    in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) map in (map', SFuncDecl(a, b, c), [StrongBind(x, t)])
 
-  | If(a, b, c) -> let (typ, e') = expr map a in let (map', value) = stmt map b in let (map'', value') = stmt map c in if equals map' map'' then (map', SIf(e', value, value')) else 
-         let merged = merge map' map'' in (merged, SIf(e', value, value'))
+  | If(a, b, c) -> let (typ, e') = expr map a in let (map', value, out) = stmt map b in let (map'', value', out') = stmt map c in if equals map' map'' then (map', SIf(e', value, value'), out') else 
+         let merged = merge map' map'' in (merged, SIf(e', value, value'), out @ out')
 
-  | For(a, b, c) -> let (m, x) = check_array map b a in let (m', x') = stmt m c in let (typ, e') = expr m' b in if equals map m' then (m', SFor(x, e', x')) else 
-        let merged = merge m m' in (merged, SFor(x, e', x'))
+  | For(a, b, c) -> let (m, x) = check_array map b a in let (m', x', out) = stmt m c in let (typ, e') = expr m' b in if equals map m' then (m', SFor(x, e', x'), out) else 
+        let merged = merge m m' in (merged, SFor(x, e', x'), out)
 
-  | While(a, b) -> let (_, e) = expr map a in let (m', x') = stmt map b in if equals map m' then (m', SWhile(e, x')) else
-    let merged = merge map m' in (merged, SWhile(e, x'))
+  | While(a, b) -> let (_, e) = expr map a in let (m', x', out) = stmt map b in if equals map m' then (m', SWhile(e, x'), out) else
+    let merged = merge map m' in (merged, SWhile(e, x'), out)
   
-  | Nop -> (map, SNop)
-  | TypeInfo(a) -> let (t, e) = expr map a in print_endline (type_to_string t); (map, SNop)
-  | _ as temp -> print_endline ("NotImplementedError: '" ^ (stmt_to_string temp) ^ "' semantic checking not implemented"); (map, SNop)
+  | Nop -> (map, SNop, [])
+  | TypeInfo(a) -> let (t, e) = expr map a in print_endline (type_to_string t); (map, SNop, [])
+  | _ as temp -> print_endline ("NotImplementedError: '" ^ (stmt_to_string temp) ^ "' semantic checking not implemented"); (map, SNop, [])
 
-and check map out = function  (* check the entire program *)
-  | [] -> (List.rev out, map)
-  | a :: t -> let (m', value) = stmt map a in check m' (value :: out) t
+and check map out globals = function  (* check the entire program *)
+  | [] -> (List.rev out, map, List.sort_uniq compare (List.rev globals))
+  | a :: t -> let (m', value, g) = stmt map a in check m' (value :: out) (g @ globals) t
 
 ;;
 

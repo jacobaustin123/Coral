@@ -8,7 +8,7 @@ type literal =
   | FloatLit of float
   | StringLit of string
 
-type typ = | Int | Float | Bool | String | Dyn | IntArr | FloatArr | BoolArr | StringArr | FuncType | Null (* should be renamed to avoid name conflict with literal *)
+type typ = | Int | Float | Bool | String | Dyn | IntArr | FloatArr | BoolArr | StringArr | FuncType | Null
 
 type bind = Bind of string * typ
 
@@ -22,7 +22,7 @@ type expr =
   | Field of expr * string
   | List of expr list
 
-type stmt = (* this can be refactored using Blocks, but I haven't quite figured it out yet *)
+type stmt =
   | Func of bind * bind list * stmt
   | Block of stmt list
   | Expr of expr
