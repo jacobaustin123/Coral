@@ -53,6 +53,7 @@ let stmt_to_string = function
   | Class(_, _) -> "class"
   | Asn(_, _) -> "asn"
   | TypeInfo(_) -> "typeinfo"
+  | Print(_) -> "print"
   | Nop -> "nop"
 
 (* converts expr to string for error handling *)
@@ -258,6 +259,7 @@ and func_stmt map = function (* used to evaluate functions and handle return typ
   
   | Nop -> let (a, b, out) = stmt map (Nop) in (a, b, Null, out)
   | TypeInfo(a) -> let (a, b, out) = stmt map (TypeInfo a) in (a, b, Null, out)
+  | Print(e) -> let (a, b, out) = stmt map (Expr e) in (a, b, Null, out)
   | _ as s -> let (map', value, out) = stmt map s in (map', value, Null, [])
 
 and stmt map = function (* evaluates statements, can pass it a func *)
@@ -295,6 +297,7 @@ and stmt map = function (* evaluates statements, can pass it a func *)
   
   | Nop -> (map, SNop, [])
   | TypeInfo(a) -> let (t, e) = expr map a in print_endline (type_to_string t); (map, SNop, [])
+  | Print(e) -> let (t, e') = expr map e in (map, SPrint(e'), [])
   | _ as temp -> print_endline ("NotImplementedError: '" ^ (stmt_to_string temp) ^ "' semantic checking not implemented"); (map, SNop, [])
 
 and check map out globals = function  (* check the entire program *)

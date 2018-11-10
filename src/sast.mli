@@ -39,5 +39,6 @@ and sstmt = (* this can be refactored using Blocks, but I haven't quite figured 
   | SReturn of sexpr
   | SClass of sbind * sstmt
   | SAsn of sbind list * sexpr
+  | SPrint of sexpr
   | SNop
 

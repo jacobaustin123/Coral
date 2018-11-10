@@ -90,6 +90,7 @@ and eval_stmt map = function
   | Return(a) ->  eval_expr map a;       (* expr *)
   | Asn(names, v) -> let (v1, m1) = eval_expr map v in let m2 = List.fold_left (fun m (Bind(name, _)) -> StringMap.add name (Expr(Lit(FloatLit(v1)))) m) m1 names in (v1, m2)
   | TypeInfo(_) -> (0.0, map)
+  | Print(_) -> (0.0, map)
   | Nop -> (0.0, map)
 (* takes a stmt list, iterates through the list and evaluates it in order *)
 and main map value = function 
@@ -110,6 +111,7 @@ let impode s = String.concat "" (List.map (String.make 1) s)
 (* utility function used for printing parsed tokens. can be replaced by menhir mostly. not exhaustive *)
 let print = function 
   | Parser.COLON -> "COLON"
+  | Parser.PRINT -> "PRINT"
   | Parser.TAB -> "TAB"
   | Parser.NOT -> "NOT"
   | Parser.IF -> "IF"
@@ -224,8 +226,11 @@ let rec loop map smap =
 
     let program = Parser.program token (Lexing.from_string "") in
     let (sast, smap', globals) = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
-    let (result, mymap) = main map 0.0 program
-    in print_endline (string_of_float result); flush stdout; loop mymap smap'
+    let m = Codegen.translate (sast,globals) in
+    Llvm_analysis.assert_valid_module m;
+    print_string (Llvm.string_of_llmodule m)
+    (*let (result, mymap) = main map 0.0 program*)
+    (*in print_endline (string_of_float result); flush stdout; loop mymap smap'*)
   with
     | Not_found -> loop map smap
     | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; loop map smap
@@ -254,7 +259,10 @@ let rec file map smap fname run = (* todo combine with loop *)
 
     let program = Parser.program token (Lexing.from_string "") in
     let (sast, smap', globals) = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
-    if run then let (result, mymap) = main map 0.0 program in print_endline (string_of_float result); flush stdout;
+    let m = Codegen.translate (sast,globals) in
+    Llvm_analysis.assert_valid_module m;
+    print_string (Llvm.string_of_llmodule m)
+    (*if run then let (result, mymap) = main map 0.0 program in print_endline (string_of_float result); flush stdout;*)
   with
     | Not_found -> loop map smap
     | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout

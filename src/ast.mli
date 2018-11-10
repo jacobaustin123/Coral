@@ -33,4 +33,5 @@ type stmt =
   | Class of string * stmt
   | Asn of bind list * expr
   | TypeInfo of expr
+  | Print of expr
   | Nop
