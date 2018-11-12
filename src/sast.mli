@@ -1,7 +1,6 @@
 open Ast
 
 (*
-
 What semant does:
 
   1. undeclared identifiers (get a list of globals and locals for each function, check to make sure they are all declared at some poiont
@@ -11,9 +10,13 @@ What semant does:
   5. duplicate formal arguments
 *)
 
+(* module StringMap = Map.Make(String)
+
+and scope = StringMap.t *)
+
 type sprogram = sstmt list * sbind list
 
-and sbind = 
+and sbind =
   | WeakBind of string * typ (* Not known to be declared, typ can be dynamic *) 
   | StrongBind of string * typ (* Known to be declared, typ can be dynamic *)
 
@@ -26,9 +29,9 @@ and sexpr =
   | SMethod of sexpr * string * sexpr list
   | SField of sexpr * string
   | SList of sexpr list * typ
-  | SNoexpr 
+  | SNoexpr
 
-and sstmt = (* this can be refactored using Blocks, but I haven't quite figured it out yet *)
+and sstmt =
   | SFunc of sbind * sbind list * sbind list * sstmt (* string list is list of locals *)
   | SFuncDecl of bind * bind list * stmt
   | SBlock of sstmt list 
@@ -37,7 +40,7 @@ and sstmt = (* this can be refactored using Blocks, but I haven't quite figured 
   | SFor of sbind * sexpr * sstmt
   | SWhile of sexpr * sstmt
   | SReturn of sexpr
-  | SClass of sbind * sstmt
+  | SClass of bind * sstmt
   | SAsn of sbind list * sexpr
   | SNop
 
