@@ -2,8 +2,7 @@ open Ast
 open Sast
 
 
-(* 
-
+(*
 2. Check types of assignments (x : str[] = 5)
 3. Make sure all variables and functions have been declared (includes getting a list of locals in each scope, somehow handle closures)
 4. Duplicate names in function formals
@@ -21,10 +20,14 @@ sstmt:
   | SClass of string * stmt
   | SAsn of bind list * expr
 
+map:
+
+varname -> (type, inferred type, whether it has been declared for sure, if its a function then the function itself (None otherwise), 
+if it has a closure then the closure map (None otherwise), if its a class then the class itself, if its a class instance then
+the local symbol table for the class, if its a class then a pointer to the class itself)
 *)
 
-(* 
-
+(*
 could have a declared and maybedeclared list, as well as definitely typed and possibly typed. also need to have an explicitly typed list. expressions get translated into SAST versions if
 all arguments and 
 
