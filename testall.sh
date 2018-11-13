@@ -169,10 +169,10 @@ do
 	    Check $file 2>> $globallog
 	    ;;
 	*fail-*)
- 	#     echo "Fails not checked yet" 
-	#     ;;
-	    CheckFail $file 2>> $globallog
-	    ;;
+ 	     echo "Fails not checked yet" 
+	     ;;
+	#    CheckFail $file 2>> $globallog
+	#   ;;
 	*)
 	    echo "unknown file type $file"
 	    globalerror=1
