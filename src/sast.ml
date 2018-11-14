@@ -11,7 +11,9 @@ What semant does:
   5. duplicate formal arguments
 *)
 
-type sbind =
+type sprogram = sstmt list * sbind list
+
+and sbind =
   | WeakBind of string * typ (* Not known to be declared, typ can be dynamic *)
   | StrongBind of string * typ (* Known to be declared, typ can be dynamic *)
 
@@ -28,7 +30,7 @@ and sexpr =
 
 and sstmt = (* this can be refactored using Blocks, but I haven't quite figured it out yet *)
   | SFunc of sbind * sbind list * sbind list * sstmt (* string list is list of locals *)
-  | SFuncDecl of sbind * sbind list * sstmt
+  | SFuncDecl of bind * bind list * stmt
   | SBlock of sstmt list 
   | SExpr of sexpr
   | SIf of sexpr * sstmt * sstmt
@@ -38,8 +40,6 @@ and sstmt = (* this can be refactored using Blocks, but I haven't quite figured 
   | SClass of sbind * sstmt
   | SAsn of sbind list * sexpr
   | SNop
-
-and sprogram = sstmt list * sbind list
 
 let rec string_of_sbind = function
   | WeakBind(s, t) -> s ^ ": (weak) " ^ string_of_typ t
@@ -66,7 +66,7 @@ and string_of_sstmt = function
   | SReturn(e) -> "return " ^ string_of_sexpr e ^ "\n"
   | SClass(b, s) -> "class " ^ ((function | StrongBind(s, t) -> s | WeakBind(s, t) -> s) b ^ ":\n" ^ string_of_sstmt s)
   | SAsn(bl, e) -> String.concat ", " (List.map string_of_sbind bl) ^ " = "  ^ string_of_sexpr e
-  | SFuncDecl(b, bl, s) -> "def " ^ string_of_sbind b ^ "(" ^ String.concat ", " (List.map string_of_sbind bl) ^ ")\n" ^ string_of_sstmt s
+  | SFuncDecl(b, bl, s) -> "def " ^ string_of_bind b ^ "(" ^ String.concat ", " (List.map string_of_bind bl) ^ ")\n" ^ string_of_stmt s
   | SNop -> ""
 
 and string_of_sprogram (sl, bl) = String.concat "" (List.map string_of_sstmt sl) ^ "\n\n\n" ^ String.concat "" (List.map string_of_sbind bl)

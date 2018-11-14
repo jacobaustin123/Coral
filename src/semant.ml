@@ -248,7 +248,7 @@ and func_stmt map = function (* used to evaluate functions and handle return typ
       | [] -> ()
       | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
       | _ :: t -> dups t
-    in let _ = dups (List.sort (fun (Bind(a, _)) (SBind(b, _)) -> compare a b) b) in let Bind(x, t) = a in let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) map in (map', SFuncDecl(a, b, c), Null, [StrongBind(x, t)])
+    in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) map in (map', SFuncDecl(a, b, c), Null, [StrongBind(x, t)])
 
   | If(a, b, c) -> let (typ, e') = expr map a in let (map', value, t1, out) = func_stmt map b in let (map'', value', t2, out') = func_stmt map c in if equals map' map'' then if t1 = t2 then (map', SIf(e', value, value'), t1, out) else (map', SIf(e', value, value'), Dyn, out) else 
          let merged = merge map' map'' in if t1 = t2 then (merged, SIf(e', value, value'), t1, out @ out') else (merged, SIf(e', value, value'), Dyn, out @ out')

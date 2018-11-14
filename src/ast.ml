@@ -1,18 +1,18 @@
 type operator = Add | Sub | Mul | Div | Exp | Eq | Neq | Less | Leq | Greater | Geq | And | Or
 
-and uop = Neg | Not
+type uop = Neg | Not
 
-and literal =
+type literal =
   | IntLit of int
   | BoolLit of bool
   | FloatLit of float
   | StringLit of string
 
-and typ = Int | Float | Bool | String | Dyn | IntArr | FloatArr | BoolArr | StringArr | FuncType | Null
+type typ = Int | Float | Bool | String | Dyn | IntArr | FloatArr | BoolArr | StringArr | FuncType | Null
 
-and bind = Bind of string * typ
+type bind = Bind of string * typ
 
-and expr =
+type expr =
   | Binop of expr * operator * expr
   | Lit of literal
   | Var of bind
@@ -22,7 +22,7 @@ and expr =
   | Field of expr * string
   | List of expr list
 
-and stmt =
+type stmt =
   | Func of bind * bind list * stmt
   | Block of stmt list
   | Expr of expr
