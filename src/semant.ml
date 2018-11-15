@@ -143,7 +143,7 @@ let merge m1 m2 = StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge t
     | Some (a, b, c, d), None -> Some(a, b, false, d)
     | None, Some(a, b, c, d) -> Some(a, b, false, d)
     | None, None -> None
-  ) m1 m2
+) m1 m2
 
 (* check if two maps are equal *)
 
