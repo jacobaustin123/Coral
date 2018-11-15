@@ -223,7 +223,8 @@ let rec loop map smap =
       | h :: t -> formatted := t ; h in
 
     let program = Parser.program token (Lexing.from_string "") in
-    let (sast, smap', globals) = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
+    let (sast, smap') = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
+    let _ = if !debug = 1 then print_endline (string_of_sprogram sast) in (* print debug messages *)
     let (result, mymap) = main map 0.0 program
     in print_endline (string_of_float result); flush stdout; loop mymap smap'
   with
@@ -253,7 +254,7 @@ let rec file map smap fname run = (* todo combine with loop *)
       | h :: t -> formatted := t ; h in
 
     let program = Parser.program token (Lexing.from_string "") in
-    let (sast, smap', globals) = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
+    let (sast, smap') = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
     if run then let (result, mymap) = main map 0.0 program in print_endline (string_of_float result); flush stdout;
   with
     | Not_found -> loop map smap

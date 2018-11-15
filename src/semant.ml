@@ -220,8 +220,8 @@ and check_assign map typ = function (* check if a value can be assigned, and ass
   			  	  	  | _ when t = typ -> let m' = StringMap.add n (t, t, true, None) map in (m', StrongBind(n, t))
   			  	  	  | _ -> raise (Failure ("STypeError: invalid type assigned to " ^ n)))
   			  	  | _ -> raise (Failure ("STypeError: invalid type assigned to " ^ n))))
-  | Bind(n, t) when not (StringMap.mem n map) -> if t = typ then let m' = StringMap.add n (t, t, true, None) map in (m', StrongBind(n, t))
-	  		else if t = Dyn then let m' = StringMap.add n (Dyn, typ, true, None) map in (m', StrongBind(n, t))
+  | Bind(n, t) when not (StringMap.mem n map) -> if t = typ then let m' = StringMap.add n (t, t, true, None) map in (m', StrongBind(n, typ))
+	  		else if t = Dyn then let m' = StringMap.add n (Dyn, typ, true, None) map in (m', StrongBind(n, typ))
 	  		else raise (Failure ("STypeError: invalid type assigned to " ^ n))
   | _ -> raise (Failure ("STypeError: invalid types for assignment."))
 
@@ -279,7 +279,7 @@ and stmt map = function (* evaluates statements, can pass it a func *)
           | a :: t -> let (m, x) = check_assign map typ a in let Bind(name, _) = a in (aux (m, x :: out) t)
         in let (m, out) = aux (map, []) binds in (m, SAsn(out, e'), out))
   | Expr(e) -> let (t, e') = expr map e in (map, SExpr(e'), [])
-  | Block(s) -> let (value, map', globals) = check map [] [] s in (map', SBlock(value), globals)
+  | Block(s) -> let ((value, globals), map') = check map [] [] s in (map', SBlock(value), globals)
   | Return(e) -> raise (Failure ("SyntaxError: return statement outside of function"))
   | Func(a, b, c) -> let rec dups = function (* check duplicate argument names *)
       | [] -> ()
@@ -301,7 +301,7 @@ and stmt map = function (* evaluates statements, can pass it a func *)
   | _ as temp -> print_endline ("NotImplementedError: '" ^ (stmt_to_string temp) ^ "' semantic checking not implemented"); (map, SNop, [])
 
 and check map out globals = function  (* check the entire program *)
-  | [] -> (List.rev out, map, List.sort_uniq compare (List.rev globals))
+  | [] -> ((List.rev out, List.sort_uniq compare (List.rev globals)), map)
   | a :: t -> let (m', value, g) = stmt map a in check m' (value :: out) (g @ globals) t
 
 ;;

@@ -69,4 +69,4 @@ and string_of_sstmt = function
   | SFuncDecl(b, bl, s) -> "def " ^ string_of_bind b ^ "(" ^ String.concat ", " (List.map string_of_bind bl) ^ ")\n" ^ string_of_stmt s
   | SNop -> ""
 
-and string_of_sprogram (sl, bl) = String.concat "" (List.map string_of_sstmt sl) ^ "\n\n\n" ^ String.concat "" (List.map string_of_sbind bl)
+and string_of_sprogram (sl, bl) = String.concat "" (List.map string_of_sstmt sl) ^ "\n\n" ^ String.concat "" (List.map string_of_sbind bl)
