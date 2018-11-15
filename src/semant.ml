@@ -276,7 +276,7 @@ and stmt map = function (* evaluates statements, can pass it a func *)
     | _ ->
         let rec aux (m, out) = function
           | [] -> (m, List.rev out)
-          | a :: t -> let (m, x) = check_assign map typ a in let Bind(name, _) = a in (aux (m, x :: out) t)
+          | a :: t -> let (m', x) = check_assign m typ a in let Bind(name, _) = a in (aux (m', x :: out) t)
         in let (m, out) = aux (map, []) binds in (m, SAsn(out, e'), out))
   | Expr(e) -> let (t, e') = expr map e in (map, SExpr(e'), [])
   | Block(s) -> let ((value, globals), map') = check map [] [] s in (map', SBlock(value), globals)
