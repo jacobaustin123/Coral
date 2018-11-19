@@ -23,62 +23,100 @@ let pt some_lltype = Printf.printf ";%s%s\n" "---->" (L.string_of_lltype some_ll
 let pv some_llvalue = Printf.printf ";%s%s\n" "---->" (L.string_of_llvalue some_llvalue)
 
 (* translate : Sast.program -> Llvm.module *)
-let translate (prgm) =   (* note this whole thing only takes two things: globals= list of (typ,name) (bindings basically). And functions= list of sfunc_decl's (each has styp sfname sformals slocals sbody) *)
-  let context    = L.global_context () in  (* context keeps track of global vars and stuff i think *)
+let translate prgm =   (* note this whole thing only takes two things: globals= list of (typ,name) (bindings basically). And functions= list of sfunc_decl's (each has styp sfname sformals slocals sbody) *)
+  let context = L.global_context () in  (* context keeps track of global vars and stuff i think *)
   
   (* Create the LLVM compilation module into which
      we will generate code *)
   let the_module = L.create_module context "MicroC" in  (* the_module will hold all functs + global vars. its the highest level thing *)
 
-
   (* Get types from the context *)
-  let i32_t      = L.i32_type    context
-  and i8_t       = L.i8_type     context
-  and i1_t       = L.i1_type     context
+  let int_t      = L.i32_type    context
   and float_t    = L.double_type context
-  and void_t     = L.void_type   context in
+  and char_t     = L.i8_type     context
+  and bool_t     = L.i1_type     context in
+  
   (* ptr types *)
-  let i32_pt = L.pointer_type i32_t in
-  let i8_pt = L.pointer_type i8_t in
-  let i8_ppt = L.pointer_type i8_pt in
+  let int_pt = L.pointer_type int_t
+  and float_pt = L.pointer_type float_t
+  and char_pt = L.pointer_type char_t
+  and bool_pt = L.pointer_type bool_t in
 
   (* define cobj and ctype structs *)
   let cobj_t = L.named_struct_type context "CObj" in (*define a named struct*)
   let cobj_pt = L.pointer_type cobj_t in
-  let cobj_ppt = L.pointer_type cobj_pt in
-
 
   (* define some global values like idxs in ctype and cobj *)
   (* cobj idxs *)
-  let  cobj_data_idx = 0
-  and cobj_type_idx = 1
+  let cobj_data_idx = 0
+  and cobj_type_idx = 1 in
 
-  (* ctype idxs *)
-  and ctype_add_idx = 0
+  (* index at which the pointer to the function that handles the operation for the type is found *)
+  let ctype_add_idx = 0
   and ctype_sub_idx = 1
-  and ctype_neq_idx = 2
-  and ctype_greater_idx = 3
-
-  and num_ctype_idxs = 4 (**must update when adding idxs! (tho not used anywhere yet)**)
-  in
+  and ctype_mul_idx = 2
+  and ctype_div_idx = 3
+  and ctype_exp_idx = 4
+  and ctype_eq_idx = 5
+  and ctype_neq_idx = 6
+  and ctype_lesser_idx = 7
+  and ctype_leq_idx = 8
+  and ctype_greater_idx = 9
+  and ctype_geq_idx = 10
+  and ctype_and_idx = 11
+  and ctype_or_idx = 12
+  and num_ctype_idxs = 13 in (**must update when adding idxs! (tho not used anywhere yet)**)
 
   (* type sigs for fns in ctype *)
   let ctype_add_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
   and ctype_sub_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
+  and ctype_mul_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
+  and ctype_div_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
+  and ctype_exp_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
+  and ctype_eq_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
   and ctype_neq_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
-  and ctype_greater_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|] in
+  and ctype_lesser_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
+  and ctype_leq_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
+  and ctype_greater_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
+  and ctype_geq_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
+  and ctype_and_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
+  and ctype_or_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|] in
+
+  (* type sigs for ptrs to fns in ctype *)
   let ctype_add_pt = L.pointer_type ctype_add_t
   and ctype_sub_pt = L.pointer_type ctype_sub_t
+  and ctype_mul_pt = L.pointer_type ctype_mul_t
+  and ctype_div_pt = L.pointer_type ctype_div_t
+  and ctype_exp_pt = L.pointer_type ctype_exp_t
+  and ctype_eq_pt = L.pointer_type ctype_eq_t
   and ctype_neq_pt = L.pointer_type ctype_neq_t
-  and ctype_greater_pt = L.pointer_type ctype_greater_t in
+  and ctype_lesser_pt = L.pointer_type ctype_lesser_t
+  and ctype_leq_pt = L.pointer_type ctype_leq_t
+  and ctype_greater_pt = L.pointer_type ctype_greater_t
+  and ctype_geq_pt = L.pointer_type ctype_geq_t
+  and ctype_and_pt = L.pointer_type ctype_and_t
+  and ctype_or_pt = L.pointer_type ctype_or_t in
 
   let ctype_t = L.named_struct_type context "CType" in (*define a named struct*)
   let ctype_pt = L.pointer_type ctype_t in
 
 
   (* set ctype and cobj struct bodies *)
-  ignore(L.struct_set_body cobj_t [|i8_pt;ctype_pt|] false);
-  ignore(L.struct_set_body ctype_t [|ctype_add_pt;ctype_sub_pt;ctype_neq_pt;ctype_greater_pt|] false);  (**  **)
+  ignore(L.struct_set_body cobj_t [|char_pt;ctype_pt|] false);
+  ignore(L.struct_set_body ctype_t [|
+  	ctype_add_pt;
+  	ctype_sub_pt;
+  	ctype_mul_pt;
+    ctype_div_pt;
+    ctype_exp_pt;
+    ctype_eq_pt;
+    ctype_neq_pt;
+    ctype_lesser_pt;
+  	ctype_leq_pt;
+  	ctype_greater_pt;
+  	ctype_geq_pt;
+  	ctype_and_pt;
+  	ctype_or_pt |] false);  (**  **)
 
   (*let quick_def_fn fname ret_type formals_types =
     let ftype = L.function_type ret_type formals_types in
@@ -91,8 +129,8 @@ let translate (prgm) =   (* note this whole thing only takes two things: globals
 
 
 
-  (* here's how you go from a cob to the data value: *)
-  let build_getdata_cobj data_type cobj_p b =  (* data_type = i32_t etc *)
+  (* here's how you go from a cobj to the data value: *)
+  let build_getdata_cobj data_type cobj_p b =  (* data_type = int_t etc *)
     (*let x1 = L.build_load (lookup_global_binding "a") "x1" b in*)
     let x2 = L.build_struct_gep cobj_p cobj_data_idx "x2" b in
     let x3 = L.build_load x2 "x3" b in
@@ -122,32 +160,23 @@ let translate (prgm) =   (* note this whole thing only takes two things: globals
 
   (* define the default CTypes *)
   let ctype_int = L.define_global "ctype_int" (L.const_named_struct ctype_t [|int_add_fn;int_sub_fn;int_neq_fn;int_greater_fn|]) the_module in
-  let ctype_bool = L.define_global "ctype_bool" (L.const_named_struct ctype_t [|(L.const_null i8_pt);(L.const_null i8_pt);(L.const_null i8_pt)|]) the_module in
-
-  let ctype_of_datatype = function
-      |i32_t -> ctype_int
-      |i1_t -> ctype_bool
-      (* TODO add more types *)
-  in
-
+  let ctype_bool = L.define_global "ctype_bool" (L.const_named_struct ctype_t [|(L.const_null char_pt);(L.const_null char_pt);(L.const_null char_pt)|]) the_module in
+  let ctype_float = L.define_global "ctype_float" (L.const_named_struct ctype_t [|int_add_fn;int_sub_fn;int_neq_fn;int_greater_fn|]) the_module in
+  let ctype_char = L.define_global "ctype_char" (L.const_named_struct ctype_t [|(L.const_null char_pt);(L.const_null char_pt);(L.const_null char_pt)|]) the_module in
 
   (** define helper functions for commonly used code snippets **)
   let build_new_cobj data_type builder =
     (* malloc the new object and its data *)
     let objptr = L.build_malloc cobj_t "__new_objptr" builder in (* objptr: cobj_t* *)
-    let dataptr = L.build_malloc data_type "__new_dataptr" builder in  (* dataptr: i32_t* when data_type=i32_t *)
-    let dataptr_as_i8ptr = L.build_bitcast dataptr i8_pt "dataptr_as_i8" builder in
+    let dataptr = L.build_malloc data_type "__new_dataptr" builder in  (* dataptr: int_t* when data_type=int_t *)
+    let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" builder in
 
     (* store the data ptr in the object *)
     let datafieldptr = L.build_struct_gep objptr cobj_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
-    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr i8_ppt "datafieldptr_as_i8ptrptr" builder in
+    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in
     ignore(L.build_store dataptr_as_i8ptr datafieldptr_as_i8ptrptr builder);
 
-      (* add ctype ptr *)
-    let ctypefieldptr = L.build_struct_gep objptr cobj_type_idx "ctypefieldptr" builder in
-    ignore(L.build_store (ctype_of_datatype data_type) ctypefieldptr builder);
-
-    (objptr,dataptr)
+    (objptr, dataptr)
   in
 
   let build_new_cobj_init data_type value b = 
@@ -184,39 +213,39 @@ let translate (prgm) =   (* note this whole thing only takes two things: globals
 
     (* *** *)
   let (fn,b) = (int_add_fn,int_add_b) in
-  let (self_data,other_data) = boilerplate_binary_data i32_t fn b in
+  let (self_data,other_data) = boilerplate_binary_data int_t fn b in
   (* compute & return *)
   let result_data = L.build_add self_data other_data "result_data" b in
-  let result = build_new_cobj_init i32_t result_data b in
+  let result = build_new_cobj_init int_t result_data b in
   ignore(L.build_ret result b);
     (* *** *)
 
     (* *** *)
   let (fn,b) = (int_sub_fn,int_sub_b) in
-  let (self_data,other_data) = boilerplate_binary_data i32_t fn b in
+  let (self_data,other_data) = boilerplate_binary_data int_t fn b in
   (* compute & return *)
   let result_data = L.build_sub self_data other_data "result_data" b in
-  let result = build_new_cobj_init i32_t result_data b in
+  let result = build_new_cobj_init int_t result_data b in
   ignore(L.build_ret result b);
     (* *** *)
   
     (* *** *)
   let (fn,b) = (int_neq_fn,int_neq_b) in
-  let (self_data,other_data) = boilerplate_binary_data i32_t fn b in
+  let (self_data,other_data) = boilerplate_binary_data int_t fn b in
   (* compute & return *)
   let result_data = (L.build_icmp L.Icmp.Ne) self_data other_data "result_data" b in
-  (*let result_data = L.const_int i1_t 1 in*)
-  let result = build_new_cobj_init i1_t result_data b in
+  (*let result_data = L.const_int bool_t 1 in*)
+  let result = build_new_cobj_init bool_t result_data b in
   ignore(L.build_ret result b);
     (* *** *)
 
     (* *** *)
   let (fn,b) = (int_greater_fn,int_greater_b) in
-  let (self_data,other_data) = boilerplate_binary_data i32_t fn b in
+  let (self_data,other_data) = boilerplate_binary_data int_t fn b in
   (* compute & return *)
   let result_data = (L.build_icmp L.Icmp.Sgt) self_data other_data "result_data" b in
-  (*let result_data = L.const_int i1_t 1 in*)
-  let result = build_new_cobj_init i1_t result_data b in
+  (*let result_data = L.const_int bool_t 1 in*)
+  let result = build_new_cobj_init bool_t result_data b in
   ignore(L.build_ret result b);
     (* *** *)
 
@@ -245,24 +274,24 @@ let translate (prgm) =   (* note this whole thing only takes two things: globals
 
   (* define printf *)
   let printf_t : L.lltype =   (* define the type that the printf function shd be *)
-      L.var_arg_function_type i32_t [| i8_pt |] in
+      L.var_arg_function_type int_t [| char_pt |] in
   let printf_func : L.llvalue =   (* now use that type to declare printf (dont fill out the body just declare it in the context) *)
       L.declare_function "printf" printf_t the_module in
 
 
 
   (** setup main() where all the code will go **)
-  let main_ftype = L.function_type i32_t [||] in   (* ftype is the full llvm function signature *)
+  let main_ftype = L.function_type int_t [||] in   (* ftype is the full llvm function signature *)
   let main_function = L.define_function "main" main_ftype the_module in
   let main_builder = L.builder_at_end context (L.entry_block main_function) in
 
   (*
   (* basic object creation test *)
-  let (objptr,dataptr) = build_new_cobj i32_t main_builder in
+  let (objptr,dataptr) = build_new_cobj int_t main_builder in
   ignore(L.build_store objptr (lookup_global_binding "a") main_builder);
-  ignore(L.build_store (L.const_int i32_t 69) dataptr main_builder);
+  ignore(L.build_store (L.const_int int_t 69) dataptr main_builder);
 
-  let x5 = build_getdata_cobj i32_t objptr main_builder in
+  let x5 = build_getdata_cobj int_t objptr main_builder in
 
 
 
@@ -271,7 +300,7 @@ let translate (prgm) =   (* note this whole thing only takes two things: globals
   and float_format_str = L.build_global_stringptr "%g\n" "fmt" main_builder in 
 
 
-  let retval = L.build_call printf_func [| int_format_str ; (L.const_int i32_t 10) |] "printf" main_builder in
+  let retval = L.build_call printf_func [| int_format_str ; (L.const_int int_t 10) |] "printf" main_builder in
   let r2 = L.build_call printf_func [| int_format_str ; x5 |] "printf" main_builder in
 *)
 
@@ -285,8 +314,8 @@ let translate (prgm) =   (* note this whole thing only takes two things: globals
   
   let rec expr b namespace e = match e with
     | SLit x -> (match x with
-        |IntLit i -> build_new_cobj_init i32_t (L.const_int i32_t i) b
-        |BoolLit i ->  build_new_cobj_init i1_t (L.const_int i1_t (if i then 1 else 0)) b
+        |IntLit i -> build_new_cobj_init int_t (L.const_int int_t i) b
+        |BoolLit i ->  build_new_cobj_init bool_t (L.const_int bool_t (if i then 1 else 0)) b
         |FloatLit i ->  build_new_cobj_init float_t (L.const_float float_t i) b
     )
         (* TODO stringlit *)
@@ -296,16 +325,30 @@ let translate (prgm) =   (* note this whole thing only takes two things: globals
     | SBinop (e1, op, e2) ->
       let e1' = expr b namespace e1
       and e2' = expr b namespace e2 in
-      let fn_idx = (match op with
-        | Add   -> ctype_add_idx
-        | Sub   -> ctype_sub_idx
-        | Neq   -> ctype_neq_idx
-        | Greater   -> ctype_greater_idx
-        (* TODO more binops *)
-      ) in
+      let fn_idx = match op with
+        | Add      -> ctype_add_idx
+        | Sub      -> ctype_sub_idx
+        | Mul      -> ctype_mul_idx
+        | Div      -> ctype_div_idx
+        | Exp      -> ctype_exp_idx
+        | Eq       -> ctype_eq_idx
+        | Neq      -> ctype_neq_idx
+        | Less     -> ctype_lesser_idx
+        | Leq      -> ctype_leq_idx
+        | Greater  -> ctype_greater_idx
+        | Geq      -> ctype_geq_idx
+        | And      -> ctype_and_idx
+        | Or       -> ctype_or_idx
+        in
       let fn_p = build_getctypefn_cobj fn_idx e1' b in
       (*let fn = L.build_load fn_p "fn" b in*)
       L.build_call fn_p [|e1';e2'|] "binop_result" b
+    (* | SUnop ->
+    | SCall ->
+
+    | SList  L.build_call
+    | Snoexper *)
+
   in
 
     let add_terminal builder instr = 
@@ -328,8 +371,8 @@ let translate (prgm) =   (* note this whole thing only takes two things: globals
       (*|SReturn  (* later *)*)
       |SNop -> b
       |SIf (predicate, then_stmt, else_stmt) ->
-         let bool_val = build_getdata_cobj i1_t (expr b namespace predicate) b in
-         (*let bool_val = (L.const_int i1_t 1) in*)
+         let bool_val = build_getdata_cobj bool_t (expr b namespace predicate) b in
+         (*let bool_val = (L.const_int bool_t 1) in*)
            let merge_bb = L.append_block context "merge" the_function in  
              let build_br_merge = L.build_br merge_bb in 
                let then_bb = L.append_block context "then" the_function in
@@ -344,11 +387,11 @@ let translate (prgm) =   (* note this whole thing only takes two things: globals
               let body_bb = L.append_block context "while_body" the_function in  
                 add_terminal (stmt namespace (L.builder_at_end context body_bb) body)  (L.build_br pred_bb);  
                 let pred_builder = L.builder_at_end context pred_bb in  
-                  let bool_val = build_getdata_cobj i1_t (expr pred_builder namespace predicate) pred_builder in
+                  let bool_val = build_getdata_cobj bool_t (expr pred_builder namespace predicate) pred_builder in
                     let merge_bb = L.append_block context "merge" the_function in  
                       ignore(L.build_cond_br bool_val body_bb merge_bb pred_builder);  
                       L.builder_at_end context merge_bb  
-    | SPrint e -> ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj i32_t (expr b namespace e) b) |] "printf" b); (*build_new_cobj_init i32_t (L.const_int i32_t 0) b;*) b
+    | SPrint e -> ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t (expr b namespace e) b) |] "printf" b); (*build_new_cobj_init int_t (L.const_int int_t 0) b;*) b
   in
   
 
@@ -365,20 +408,20 @@ let translate (prgm) =   (* note this whole thing only takes two things: globals
 
   (*
   let objptr = L.build_load (lookup_global_binding "a") "objptr" main_builder in
-  let x5 = build_getdata_cobj i32_t objptr main_builder in
+  let x5 = build_getdata_cobj int_t objptr main_builder in
   (**we'll need one of these per-fn actually**)
 
   (*
   let objptr = L.build_load (lookup_global_binding "b") "objptr" main_builder in
-  let x6 = build_getdata_cobj i32_t objptr main_builder in
+  let x6 = build_getdata_cobj int_t objptr main_builder in
 *)
 
-  let retval = L.build_call printf_func [| int_format_str ; (L.const_int i32_t 10) |] "printf" main_builder in
+  let retval = L.build_call printf_func [| int_format_str ; (L.const_int int_t 10) |] "printf" main_builder in
   let r2 = L.build_call printf_func [| int_format_str ; x5 |] "printf" main_builder in
   (*let r2 = L.build_call printf_func [| int_format_str ; x6 |] "printf" main_builder in*)
 *)
   
-  ignore(L.build_ret (L.const_int i32_t 0) main_builder);
+  ignore(L.build_ret (L.const_int int_t 0) main_builder);
 
 
   L.dump_module the_module;
