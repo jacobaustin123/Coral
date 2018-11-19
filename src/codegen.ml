@@ -26,21 +26,21 @@ let pv some_llvalue = Printf.printf ";%s%s\n" "---->" (L.string_of_llvalue some_
 let translate prgm =   (* note this whole thing only takes two things: globals= list of (typ,name) (bindings basically). And functions= list of sfunc_decl's (each has styp sfname sformals slocals sbody) *)
   let context = L.global_context () in  (* context keeps track of global vars and stuff i think *)
   
-  (* Create the LLVM compilation module into which
+  (* Create the LLVM compilation module boolo which
      we will generate code *)
   let the_module = L.create_module context "MicroC" in  (* the_module will hold all functs + global vars. its the highest level thing *)
 
   (* Get types from the context *)
   let int_t      = L.i32_type    context
   and float_t    = L.double_type context
-  and char_t     = L.i8_type     context
-  and bool_t     = L.i1_type     context in
-  
+  and bool_t     = L.i1_type     context
+  and char_t     = L.i8_type     context in
+
   (* ptr types *)
   let int_pt = L.pointer_type int_t
   and float_pt = L.pointer_type float_t
-  and char_pt = L.pointer_type char_t
-  and bool_pt = L.pointer_type bool_t in
+  and bool_pt = L.pointer_type bool_t
+  and char_pt = L.pointer_type char_t in
 
   (* define cobj and ctype structs *)
   let cobj_t = L.named_struct_type context "CObj" in (*define a named struct*)
@@ -68,19 +68,19 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   and num_ctype_idxs = 13 in (**must update when adding idxs! (tho not used anywhere yet)**)
 
   (* type sigs for fns in ctype *)
-  let ctype_add_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
-  and ctype_sub_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
-  and ctype_mul_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
-  and ctype_div_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
-  and ctype_exp_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
-  and ctype_eq_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
-  and ctype_neq_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
-  and ctype_lesser_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
-  and ctype_leq_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
-  and ctype_greater_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
-  and ctype_geq_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
-  and ctype_and_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|]
-  and ctype_or_t = L.function_type cobj_pt [|cobj_pt;cobj_pt|] in
+  let ctype_add_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
+  and ctype_sub_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
+  and ctype_mul_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
+  and ctype_div_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
+  and ctype_exp_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
+  and ctype_eq_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
+  and ctype_neq_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
+  and ctype_lesser_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
+  and ctype_leq_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
+  and ctype_greater_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
+  and ctype_geq_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
+  and ctype_and_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
+  and ctype_or_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |] in
 
   (* type sigs for ptrs to fns in ctype *)
   let ctype_add_pt = L.pointer_type ctype_add_t
@@ -100,9 +100,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   let ctype_t = L.named_struct_type context "CType" in (*define a named struct*)
   let ctype_pt = L.pointer_type ctype_t in
 
-
   (* set ctype and cobj struct bodies *)
-  ignore(L.struct_set_body cobj_t [|char_pt;ctype_pt|] false);
+  ignore(L.struct_set_body cobj_t [| char_pt; ctype_pt |] false);
   ignore(L.struct_set_body ctype_t [|
   	ctype_add_pt;
   	ctype_sub_pt;
@@ -116,18 +115,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   	ctype_greater_pt;
   	ctype_geq_pt;
   	ctype_and_pt;
-  	ctype_or_pt |] false);  (**  **)
+  	ctype_or_pt |] false);
 
-  (*let quick_def_fn fname ret_type formals_types =
-    let ftype = L.function_type ret_type formals_types in
+  let build_ctype_fn fname ftype =   (* ftype = "ctype_add_t" etc *)
     let the_function = L.define_function fname ftype the_module in
     let builder = L.builder_at_end context (L.entry_block the_function) in
-    (the_function, ftype, builder)
-    *)
-
-  (* define lookup functions like lltype of typ and lookup for CType of typ or something *)
-
-
+    (the_function,builder)
+  in
 
   (* here's how you go from a cobj to the data value: *)
   let build_getdata_cobj data_type cobj_p b =  (* data_type = int_t etc *)
@@ -147,28 +141,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     fn_ptr
   in
 
-  let build_ctype_fn fname ftype =   (* ftype = "ctype_add_t" etc *)
-    let the_function = L.define_function fname ftype the_module in
-    let builder = L.builder_at_end context (L.entry_block the_function) in
-    (the_function,builder)
-  in
-  
-  let (int_add_fn,int_add_b) = build_ctype_fn "int_add" ctype_add_t in
-  let (int_sub_fn,int_sub_b) = build_ctype_fn "int_sub" ctype_sub_t in
-  let (int_neq_fn,int_neq_b) = build_ctype_fn "int_neq" ctype_neq_t in
-  let (int_greater_fn,int_greater_b) = build_ctype_fn "int_greater" ctype_greater_t in
-
-  (* define the default CTypes *)
-  let ctype_int = L.define_global "ctype_int" (L.const_named_struct ctype_t [|int_add_fn;int_sub_fn;int_neq_fn;int_greater_fn|]) the_module in
-  let ctype_bool = L.define_global "ctype_bool" (L.const_named_struct ctype_t [|(L.const_null char_pt);(L.const_null char_pt);(L.const_null char_pt)|]) the_module in
-  let ctype_float = L.define_global "ctype_float" (L.const_named_struct ctype_t [|int_add_fn;int_sub_fn;int_neq_fn;int_greater_fn|]) the_module in
-  let ctype_char = L.define_global "ctype_char" (L.const_named_struct ctype_t [|(L.const_null char_pt);(L.const_null char_pt);(L.const_null char_pt)|]) the_module in
-
-  (** define helper functions for commonly used code snippets **)
+(** define helper functions for commonly used code snippets **)
   let build_new_cobj data_type builder =
     (* malloc the new object and its data *)
     let objptr = L.build_malloc cobj_t "__new_objptr" builder in (* objptr: cobj_t* *)
-    let dataptr = L.build_malloc data_type "__new_dataptr" builder in  (* dataptr: int_t* when data_type=int_t *)
+    let dataptr = L.build_malloc data_type "__new_dataptr" builder in  (* dataptr: bool_t* when data_type=bool_t *)
     let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" builder in
 
     (* store the data ptr in the object *)
@@ -179,15 +156,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     (objptr, dataptr)
   in
 
-  let build_new_cobj_init data_type value b = 
+  let build_new_cobj_init data_type value b =
       let (objptr,dataptr) = build_new_cobj data_type b in
       ignore(L.build_store value dataptr b);
       objptr
   in
 
-
-
-  (** manually making the ctype_int functions **)
+  (** manually making the ctype_ functions **)
     (* does alloca, store, then load *)  (* note you should not use this if youre not using the values right away !!!!!! TODO note! *)
   let boilerplate_till_load remote_cobj_p prettyname b =
       ignore(L.set_value_name ("remote_"^prettyname) remote_cobj_p);
@@ -197,7 +172,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       cobj_p
   in
 
-  let boilerplate_binary_data data_type fn b = 
+  (*let quick_def_fn fname ret_type formals_types =
+    let ftype = L.function_type ret_type formals_types in
+    let the_function = L.define_function fname ftype the_module in
+    let builder = L.builder_at_end context (L.entry_block the_function) in
+    (the_function, ftype, builder)
+    *)
+
+  (* define lookup functions like lltype of typ and lookup for CType of typ or something *)
+
+  let boilerplate_binary_data data_type fn b =
       let formals_llvalues = (Array.to_list (L.params fn)) in
       let [remote_self_p;remote_other_p] = formals_llvalues in
 
@@ -211,44 +195,100 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       (self_data,other_data)
   in
 
-    (* *** *)
-  let (fn,b) = (int_add_fn,int_add_b) in
-  let (self_data,other_data) = boilerplate_binary_data int_t fn b in
-  (* compute & return *)
-  let result_data = L.build_add self_data other_data "result_data" b in
-  let result = build_new_cobj_init int_t result_data b in
-  ignore(L.build_ret result b);
-    (* *** *)
+  let ops =
+  	let ts = ["int"; "float"; "char"; "bool"] in
+  	let os = ["add"; "sub"; "mul"; "div"; "exp"; "eq"; "neq"; "lesser"; "leq"; "greater"; "geq"; "and"; "or"] in
+  	List.map (fun t -> (List.map (fun o -> build_ctype_fn (t ^ "_" ^ o) ((function
+  		| "add" -> ctype_add_t
+  		| "sub" -> ctype_sub_t
+  		| "mul" -> ctype_mul_t
+  		| "div" -> ctype_div_t
+  		| "exp" -> ctype_exp_t
+  		| "eq" -> ctype_eq_t
+		| "neq" -> ctype_neq_t
+		| "lesser" -> ctype_lesser_t
+		| "leq" -> ctype_leq_t
+		| "greater" -> ctype_greater_t
+		| "geq" -> ctype_geq_t
+		| "and" -> ctype_and_t
+		| "or" -> ctype_or_t) o)) os)) ts in
 
-    (* *** *)
-  let (fn,b) = (int_sub_fn,int_sub_b) in
-  let (self_data,other_data) = boilerplate_binary_data int_t fn b in
-  (* compute & return *)
-  let result_data = L.build_sub self_data other_data "result_data" b in
-  let result = build_new_cobj_init int_t result_data b in
-  ignore(L.build_ret result b);
-    (* *** *)
-  
-    (* *** *)
-  let (fn,b) = (int_neq_fn,int_neq_b) in
-  let (self_data,other_data) = boilerplate_binary_data int_t fn b in
-  (* compute & return *)
-  let result_data = (L.build_icmp L.Icmp.Ne) self_data other_data "result_data" b in
-  (*let result_data = L.const_int bool_t 1 in*)
-  let result = build_new_cobj_init bool_t result_data b in
-  ignore(L.build_ret result b);
-    (* *** *)
+  let [ctype_int; ctype_float; ctype_bool; ctype_char] =
+  	List.map (fun l -> L.define_global "ctype_int" (L.const_named_struct ctype_t (Array.of_list (List.map (fun (f, b) -> f) l))) the_module) ops in
 
-    (* *** *)
-  let (fn,b) = (int_greater_fn,int_greater_b) in
-  let (self_data,other_data) = boilerplate_binary_data int_t fn b in
-  (* compute & return *)
-  let result_data = (L.build_icmp L.Icmp.Sgt) self_data other_data "result_data" b in
-  (*let result_data = L.const_int bool_t 1 in*)
-  let result = build_new_cobj_init bool_t result_data b in
-  ignore(L.build_ret result b);
-    (* *** *)
+  List.map (List.map (fun (fn, b) ->
+	let (self_data, other_data) = boilerplate_binary_data int_t fn b in
+	(* compute & return *)
+	let result_data = (L.build_icmp L.Icmp.Sgt) self_data other_data "result_data" b in
+	(*let result_data = L.const_int int_t 1 in*)
+	let result = build_new_cobj_init int_t result_data b in
+	ignore(L.build_ret result b))) ops;
 
+  (* define the default CTypes *)
+  (*let ctype_int = L.define_global "ctype_int" (L.const_named_struct ctype_t [|
+  	int_add_fn;
+  	int_sub_fn;
+  	int_mul_fn;
+    int_div_fn;
+    int_exp_fn;
+    int_eq_fn;
+    int_neq_fn;
+    int_lesser_fn;
+  	int_leq_fn;
+  	int_leq_fn;
+    int_greater_fn;
+    int_geq_fn;
+    int_and_fn;
+    int_or_fn;
+  	|]) the_module in
+  let ctype_float = L.define_global "ctype_float" (L.const_named_struct ctype_t [|
+  	float_add_fn;
+  	float_sub_fn;
+  	float_mul_fn;
+    float_div_fn;
+    float_exp_fn;
+    float_eq_fn;
+    float_neq_fn;
+    float_lesser_fn;
+  	float_leq_fn;
+  	float_leq_fn;
+    float_greater_fn;
+    float_geq_fn;
+    float_and_fn;
+    float_or_fn;
+    |]) the_module in
+  let ctype_bool = L.define_global "ctype_bool" (L.const_named_struct ctype_t [|
+	bool_add_fn;
+	bool_sub_fn;
+	bool_mul_fn;
+    bool_div_fn;
+    bool_exp_fn;
+    bool_eq_fn;
+    bool_neq_fn;
+    bool_lesser_fn;
+    bool_leq_fn;
+    bool_leq_fn;
+    bool_greater_fn;
+    bool_geq_fn;
+    bool_and_fn;
+    bool_or_fn;
+    |]) the_module in
+  let ctype_char = L.define_global "ctype_char" (L.const_named_struct ctype_t [|
+  	char_add_fn;
+  	char_sub_fn;
+  	char_mul_fn;
+    char_div_fn;
+    char_exp_fn;
+    char_eq_fn;
+    char_neq_fn;
+    char_lesser_fn;
+  	char_leq_fn;
+  	char_leq_fn;
+    char_greater_fn;
+    char_geq_fn;
+    char_and_fn;
+    char_or_fn;
+    |]) the_module in*)
 
 
 
@@ -314,9 +354,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   
   let rec expr b namespace e = match e with
     | SLit x -> (match x with
-        |IntLit i -> build_new_cobj_init int_t (L.const_int int_t i) b
-        |BoolLit i ->  build_new_cobj_init bool_t (L.const_int bool_t (if i then 1 else 0)) b
-        |FloatLit i ->  build_new_cobj_init float_t (L.const_float float_t i) b
+        | IntLit i -> build_new_cobj_init int_t (L.const_int int_t i) b
+        | BoolLit i ->  build_new_cobj_init bool_t (L.const_int bool_t (if i then 1 else 0)) b
+        | FloatLit i ->  build_new_cobj_init float_t (L.const_float float_t i) b
     )
         (* TODO stringlit *)
     | SVar sbind -> (match sbind with
@@ -342,10 +382,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         in
       let fn_p = build_getctypefn_cobj fn_idx e1' b in
       (*let fn = L.build_load fn_p "fn" b in*)
-      L.build_call fn_p [|e1';e2'|] "binop_result" b
+      L.build_call fn_p [| e1'; e2' |] "binop_result" b
     (* | SUnop ->
     | SCall ->
-
     | SList  L.build_call
     | Snoexper *)
 
@@ -372,7 +411,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       |SNop -> b
       |SIf (predicate, then_stmt, else_stmt) ->
          let bool_val = build_getdata_cobj bool_t (expr b namespace predicate) b in
-         (*let bool_val = (L.const_int bool_t 1) in*)
+         (*let bool_val = (L.const_bool bool_t 1) in*)
            let merge_bb = L.append_block context "merge" the_function in  
              let build_br_merge = L.build_br merge_bb in 
                let then_bb = L.append_block context "then" the_function in
@@ -397,12 +436,12 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
 
   (*
-  let ex = SIf(SLit(BoolLit(true)),SAsn([WeakBind("a",Dyn)],SLit(IntLit(42))),SNop) in
+  let ex = SIf(SLit(BoolLit(true)),SAsn([WeakBind("a",Dyn)],SLit(boolLit(42))),SNop) in
   let main_builder = stmt StringMap.empty main_builder ex in
 *)
   let main_builder = stmt StringMap.empty main_builder (SBlock(fst prgm)) in
   (*
-  let ex = SAsn([WeakBind("a",Dyn)],SLit(IntLit(42))) in
+  let ex = SAsn([WeakBind("a",Dyn)],SLit(BoolLit(42))) in
   ignore(stmt StringMap.empty main_builder ex);
   *)
 
