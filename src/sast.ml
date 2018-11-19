@@ -42,8 +42,8 @@ and sstmt = (* this can be refactored using Blocks, but I haven't quite figured 
   | SNop
 
 let rec string_of_sbind = function
-  | WeakBind(s, t) -> s ^ ": (weak) " ^ string_of_typ t
-  | StrongBind(s, t) -> s ^ ": (strong) " ^ string_of_typ t
+  | WeakBind(s, t) -> s ^ ": " ^ string_of_typ t ^ " [weak]"
+  | StrongBind(s, t) -> s ^ ": " ^ string_of_typ t ^ " [strong]"
 
 and string_of_sexpr = function
   | SBinop(e1, o, e2) -> string_of_sexpr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_sexpr e2

@@ -43,7 +43,6 @@ need a map from list/tuple to sstmt. when called, go into it, check all the type
 closure. 
 *)
 
-
 (* converts stmt to string for error handling *)
 let stmt_to_string = function
   | Func(_, _, _) -> "func"
@@ -127,11 +126,21 @@ let comp x y =  match List.length x, List.length y with
 ;;
 
 (* map with list keys, used for recursive functions *)
-module TypeMap = Map.Make(struct type t = typ list let compare = comp end);;
+module StringMap = Map.Make(String)
+
+
+(* type 'a obj = {
+  typdecl : typ option; (* type declared *)
+  typinf : typ option; (* type inferred *)
+  def : bool option; (* is defined? *)
+  data : sstmt option; (* SFunc or SClass *)
+  closure : 'a option;
+} *)
+
+(* module rec TypeMap : string -> TypeMap.t obj = Map.Make(struct type t = TypeMap.t obj let compare = comp end);; *)
 
 (* map with string keys, used for variable lookup *)
 
-module StringMap = Map.Make(String)
 
 (* merge function used to compare and combine two maps for type inference *)
 
@@ -212,11 +221,11 @@ and check_assign map typ = function (* check if a value can be assigned, and ass
   		  		  | _ -> let map' = StringMap.add n (t', Dyn, true, None) map in (map', StrongBind(n, Dyn))) (* fix all this *)
   		 	| _ -> (match t' with
   		 	 	  | Dyn -> (match t with 
-  			  	      | Dyn -> let map' = StringMap.add n (Dyn, typ, true, None) map in (map', StrongBind(n, Dyn))
+  			  	      | Dyn -> let map' = StringMap.add n (Dyn, typ, true, None) map in (map', StrongBind(n, typ))
   			  	      | _ when t = typ -> let m' = StringMap.add n (t, t, true, None) map in (m', StrongBind(n, t))
   			  	      | _ -> raise (Failure ("STypeError: invalid type assigned to " ^ n)))
   			  	  | _ -> (match t with
-  			  	  	  | Dyn when t' = typ -> (map, StrongBind(n, Dyn))
+  			  	  	  | Dyn when t' = typ -> (map, StrongBind(n, typ))
   			  	  	  | _ when t = typ -> let m' = StringMap.add n (t, t, true, None) map in (m', StrongBind(n, t))
   			  	  	  | _ -> raise (Failure ("STypeError: invalid type assigned to " ^ n)))
   			  	  | _ -> raise (Failure ("STypeError: invalid type assigned to " ^ n))))
