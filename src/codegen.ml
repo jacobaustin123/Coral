@@ -18,6 +18,7 @@ open Ast
 open Sast 
 
 
+
 module StringMap = Map.Make(String)
 let pt some_lltype = Printf.printf ";%s%s\n" "---->" (L.string_of_lltype some_lltype)
 let pv some_llvalue = Printf.printf ";%s%s\n" "---->" (L.string_of_llvalue some_llvalue)
@@ -196,101 +197,63 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   in
 
   let ops =
-  	let ts = ["int"; "float"; "char"; "bool"] in
-  	let os = ["add"; "sub"; "mul"; "div"; "exp"; "eq"; "neq"; "lesser"; "leq"; "greater"; "geq"; "and"; "or"] in
-  	List.map (fun t -> (List.map (fun o -> build_ctype_fn (t ^ "_" ^ o) ((function
-  		| "add" -> ctype_add_t
-  		| "sub" -> ctype_sub_t
-  		| "mul" -> ctype_mul_t
-  		| "div" -> ctype_div_t
-  		| "exp" -> ctype_exp_t
-  		| "eq" -> ctype_eq_t
-		| "neq" -> ctype_neq_t
-		| "lesser" -> ctype_lesser_t
-		| "leq" -> ctype_leq_t
-		| "greater" -> ctype_greater_t
-		| "geq" -> ctype_geq_t
-		| "and" -> ctype_and_t
-		| "or" -> ctype_or_t) o)) os)) ts in
-
-  let [ctype_int; ctype_float; ctype_bool; ctype_char] =
-  	List.map (fun l -> L.define_global "ctype_int" (L.const_named_struct ctype_t (Array.of_list (List.map (fun (f, b) -> f) l))) the_module) ops in
-
-  List.map (List.map (fun (fn, b) ->
-	let (self_data, other_data) = boilerplate_binary_data int_t fn b in
-	(* compute & return *)
-	let result_data = (L.build_icmp L.Icmp.Sgt) self_data other_data "result_data" b in
-	(*let result_data = L.const_int int_t 1 in*)
-	let result = build_new_cobj_init int_t result_data b in
-	ignore(L.build_ret result b))) ops;
+  	 let ts = ["int"; "float"; "char"; "bool"] in
+  	 let os = [
+  	   ("add", Some L.build_add, Some L.build_fadd, None, None);
+  	   ("sub", Some L.build_sub, Some L.build_fsub, None, None);
+       ("mul", Some L.build_mul, Some L.build_fmul, None, None);
+  	   ("div", Some L.build_sdiv, Some L.build_fdiv, None, None);
+  	   ("exp", None, None, None, None);
+       ("eq", Some (L.build_icmp L.Icmp.Eq), Some (L.build_fcmp L.Fcmp.Ueq), Some (L.build_icmp L.Icmp.Eq), Some (L.build_icmp L.Icmp.Eq));
+  	   ("neq", Some (L.build_icmp L.Icmp.Ne), Some (L.build_fcmp L.Fcmp.Une), Some (L.build_icmp L.Icmp.Eq), Some (L.build_icmp L.Icmp.Eq));
+       ("lesser", Some (L.build_icmp L.Icmp.Slt), Some (L.build_fcmp L.Fcmp.Ult), Some (L.build_icmp L.Icmp.Slt), Some (L.build_icmp L.Icmp.Slt));
+  	   ("leq", Some (L.build_icmp L.Icmp.Sle), Some (L.build_fcmp L.Fcmp.Ule), Some (L.build_icmp L.Icmp.Sle), Some (L.build_icmp L.Icmp.Sle));
+       ("greater", Some (L.build_icmp L.Icmp.Sgt), Some (L.build_fcmp L.Fcmp.Ugt), Some (L.build_icmp L.Icmp.Sgt), Some (L.build_icmp L.Icmp.Sgt));
+  	   ("geq", Some (L.build_icmp L.Icmp.Sge), Some (L.build_fcmp L.Fcmp.Uge), Some (L.build_icmp L.Icmp.Sge), Some (L.build_icmp L.Icmp.Sge));
+  	   ("and", Some L.build_and, Some L.build_add, Some L.build_and, Some L.build_add);
+       ("or", Some L.build_or, Some L.build_or, Some L.build_or, Some L.build_or);
+       ] in
+  	List.map (fun t -> (List.map (fun (o, i, f, b, c) -> let (fn, bd) = build_ctype_fn (t ^ "_" ^ o) ((function
+  	  | "add" -> ctype_add_t
+  	  | "sub" -> ctype_sub_t
+      | "mul" -> ctype_mul_t
+      | "div" -> ctype_div_t
+      | "exp" -> ctype_exp_t
+  	  | "eq" -> ctype_eq_t
+	  | "neq" -> ctype_neq_t
+      | "lesser" -> ctype_lesser_t
+	  | "leq" -> ctype_leq_t
+      | "greater" -> ctype_greater_t
+	  | "geq" -> ctype_geq_t
+	  | "and" -> ctype_and_t
+	  | "or" -> ctype_or_t) o) in (t, (fn, bd), i, f, b, c)) os)) ts in
 
   (* define the default CTypes *)
-  (*let ctype_int = L.define_global "ctype_int" (L.const_named_struct ctype_t [|
-  	int_add_fn;
-  	int_sub_fn;
-  	int_mul_fn;
-    int_div_fn;
-    int_exp_fn;
-    int_eq_fn;
-    int_neq_fn;
-    int_lesser_fn;
-  	int_leq_fn;
-  	int_leq_fn;
-    int_greater_fn;
-    int_geq_fn;
-    int_and_fn;
-    int_or_fn;
-  	|]) the_module in
-  let ctype_float = L.define_global "ctype_float" (L.const_named_struct ctype_t [|
-  	float_add_fn;
-  	float_sub_fn;
-  	float_mul_fn;
-    float_div_fn;
-    float_exp_fn;
-    float_eq_fn;
-    float_neq_fn;
-    float_lesser_fn;
-  	float_leq_fn;
-  	float_leq_fn;
-    float_greater_fn;
-    float_geq_fn;
-    float_and_fn;
-    float_or_fn;
-    |]) the_module in
-  let ctype_bool = L.define_global "ctype_bool" (L.const_named_struct ctype_t [|
-	bool_add_fn;
-	bool_sub_fn;
-	bool_mul_fn;
-    bool_div_fn;
-    bool_exp_fn;
-    bool_eq_fn;
-    bool_neq_fn;
-    bool_lesser_fn;
-    bool_leq_fn;
-    bool_leq_fn;
-    bool_greater_fn;
-    bool_geq_fn;
-    bool_and_fn;
-    bool_or_fn;
-    |]) the_module in
-  let ctype_char = L.define_global "ctype_char" (L.const_named_struct ctype_t [|
-  	char_add_fn;
-  	char_sub_fn;
-  	char_mul_fn;
-    char_div_fn;
-    char_exp_fn;
-    char_eq_fn;
-    char_neq_fn;
-    char_lesser_fn;
-  	char_leq_fn;
-  	char_leq_fn;
-    char_greater_fn;
-    char_geq_fn;
-    char_and_fn;
-    char_or_fn;
-    |]) the_module in*)
+  let [ctype_int; ctype_float; ctype_bool; ctype_char] =
+  	List.map (fun l -> L.define_global "ctype_int" (L.const_named_struct ctype_t (Array.of_list (List.map (fun (_, (fn, _), _, _, _, _)
+  	  -> fn) l))) the_module) ops in
 
-
+  List.map (fun t -> List.map (fun (t, (fn, bd), i, f, b, c) ->
+	let (self_data, other_data) = boilerplate_binary_data ((function
+	  | "int" -> int_t
+	  | "float" -> float_t
+	  | "bool" -> bool_t
+	  | "char" -> char_t) t) fn bd in
+	let lfn = ((function
+	  | "int" -> i
+	  | "float" -> f
+	  | "bool" -> b
+	  | "char" -> c) t) in
+	match lfn with
+	  | Some l ->
+	  	 let result_data = l self_data other_data "result_data" bd in
+		 let result = (build_new_cobj_init ((function
+		   | "int" -> int_t
+		   | "float" -> float_t
+		   | "bool" -> bool_t
+		   | "char" -> char_t) t) result_data bd) in
+		 ignore(L.build_ret result bd)
+	  | None -> ())) ops;
 
   (** allocate for all the bindings and put them in a map **)
   let build_binding_list_global coral_names =   (* coral_names: string list *)  (* returns a stringmap coral_name -> llvalue *)
