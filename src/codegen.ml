@@ -196,9 +196,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       (self_data,other_data)
   in
 
-  let ops =
-  	 let ts = ["int"; "float"; "char"; "bool"] in
-  	 let os = [
+  let get_t = function
+    | "int" -> int_t
+    | "float" -> float_t
+    | "bool" -> bool_t
+    | "char" -> char_t
+  in
+
+  let built_ops =
+  	 let typs = ["int"; "float"; "bool"; "char"] in
+  	 let ops = [
   	   ("add", Some L.build_add, Some L.build_fadd, None, None);
   	   ("sub", Some L.build_sub, Some L.build_fsub, None, None);
        ("mul", Some L.build_mul, Some L.build_fmul, None, None);
@@ -213,47 +220,54 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   	   ("and", Some L.build_and, Some L.build_add, Some L.build_and, Some L.build_add);
        ("or", Some L.build_or, Some L.build_or, Some L.build_or, Some L.build_or);
        ] in
-  	List.map (fun t -> (List.map (fun (o, i, f, b, c) -> let (fn, bd) = build_ctype_fn (t ^ "_" ^ o) ((function
-  	  | "add" -> ctype_add_t
-  	  | "sub" -> ctype_sub_t
-      | "mul" -> ctype_mul_t
-      | "div" -> ctype_div_t
-      | "exp" -> ctype_exp_t
-  	  | "eq" -> ctype_eq_t
-	  | "neq" -> ctype_neq_t
-      | "lesser" -> ctype_lesser_t
-	  | "leq" -> ctype_leq_t
-      | "greater" -> ctype_greater_t
-	  | "geq" -> ctype_geq_t
-	  | "and" -> ctype_and_t
-	  | "or" -> ctype_or_t) o) in (t, (fn, bd), i, f, b, c)) os)) ts in
 
-  (* define the default CTypes *)
-  let [ctype_int; ctype_float; ctype_bool; ctype_char] =
-  	List.map (fun l -> L.define_global "ctype_int" (L.const_named_struct ctype_t (Array.of_list (List.map (fun (_, (fn, _), _, _, _, _)
-  	  -> fn) l))) the_module) ops in
+  	 List.map (fun t -> let bop = List.map (fun (o, i, f, b, c) ->
+  	   let tfn = match t with
+       	  | "int" -> i
+       	  | "float" -> f
+       	  | "bool" -> b
+       	  | "char" -> c
+       in
+       match tfn with
+         | Some tfn ->
+  	        let (fn, bd) = build_ctype_fn (t ^ "_" ^ o) ((function
+    	      | "add" -> ctype_add_t
+		      | "sub" -> ctype_sub_t
+		      | "mul" -> ctype_mul_t
+		 	  | "div" -> ctype_div_t
+		 	  | "exp" -> ctype_exp_t
+			  | "eq" -> ctype_eq_t
+			  | "neq" -> ctype_neq_t
+			  | "lesser" -> ctype_lesser_t
+			  | "leq" -> ctype_leq_t
+			  | "leq" -> ctype_leq_t
+			  | "greater" -> ctype_greater_t
+			  | "geq" -> ctype_geq_t
+			  | "and" -> ctype_and_t
+			  | "or" -> ctype_or_t) o)
+	        in Some ((fn, bd), i, f, b, c)
+	   	 | None -> None) ops
+	   in (t, bop)) typs
+	 in
 
-  List.map (fun t -> List.map (fun (t, (fn, bd), i, f, b, c) ->
-	let (self_data, other_data) = boilerplate_binary_data ((function
-	  | "int" -> int_t
-	  | "float" -> float_t
-	  | "bool" -> bool_t
-	  | "char" -> char_t) t) fn bd in
-	let lfn = ((function
-	  | "int" -> i
-	  | "float" -> f
-	  | "bool" -> b
-	  | "char" -> c) t) in
-	match lfn with
-	  | Some l ->
-	  	 let result_data = l self_data other_data "result_data" bd in
-		 let result = (build_new_cobj_init ((function
-		   | "int" -> int_t
-		   | "float" -> float_t
-		   | "bool" -> bool_t
-		   | "char" -> char_t) t) result_data bd) in
+    (* define the default CTypes *)
+    let [ctype_int; ctype_float; ctype_bool; ctype_char] =
+  	  List.map (fun (t, bops) -> L.define_global ("ctype_" ^ t) (L.const_named_struct ctype_t (Array.of_list (List.map (function
+  	    | Some ((fn, bd), i, f, b, c) -> fn
+  	    | None -> L.const_pointer_null char_t (* this seems hacky *)) bops))) the_module) built_ops in
+
+    List.iter (fun (t, bops) -> List.iter (function
+      | Some ((fn, bd), i, f, b, c) ->
+         let tfn = match t with
+	       | "int" -> (function Some i -> i | None -> L.build_add) i
+	       | "float" -> (function Some f -> f | None -> L.build_add) f
+	       | "bool" -> (function Some b -> b | None -> L.build_add) b
+	       | "char" -> (function Some c -> c | None -> L.build_add) c in
+	  	 let (self_data, other_data) = boilerplate_binary_data (get_t t) fn bd in
+	  	 let result_data = tfn self_data other_data "result_data" bd in
+		 let result = build_new_cobj_init (get_t t) result_data bd in
 		 ignore(L.build_ret result bd)
-	  | None -> ())) ops;
+	  | None -> ()) bops) built_ops;
 
   (** allocate for all the bindings and put them in a map **)
   let build_binding_list_global coral_names =   (* coral_names: string list *)  (* returns a stringmap coral_name -> llvalue *)
