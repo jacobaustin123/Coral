@@ -259,7 +259,7 @@ let rec file map smap fname run = (* todo combine with loop *)
 
     let program = Parser.program token (Lexing.from_string "") in
     let (sast, smap', globals) = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
-    let m = Codegen.translate (sast,globals) in
+    let m = Codegen.translate (sast, globals) in
     Llvm_analysis.assert_valid_module m;
     print_string (Llvm.string_of_llmodule m)
     (*if run then let (result, mymap) = main map 0.0 program in print_endline (string_of_float result); flush stdout;*)
