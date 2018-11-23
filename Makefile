@@ -8,7 +8,7 @@ all: native
 
 clean:
 	$(OCB) -clean 
-	rm -rf testall.log *.diff *out main
+	rm -rf testall.log *.diff *out main source.ll source.o
 
 native:
 	$(OCB) coral.native

@@ -24,30 +24,30 @@ let pv some_llvalue = Printf.printf ";%s%s\n" "---->" (L.string_of_llvalue some_
 type oprt =
   | Oprt of
       string
-    * (L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) option
-    * (L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) option
-    * (L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) option
-    * (L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) option
+    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
+    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
+    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
+    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
   | Uoprt of
       string
-    * (L.llvalue -> string -> L.llbuilder -> L.llvalue) option
-    * (L.llvalue -> string -> L.llbuilder -> L.llvalue) option
-    * (L.llvalue -> string -> L.llbuilder -> L.llvalue) option
-    * (L.llvalue -> string -> L.llbuilder -> L.llvalue) option
+    * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
+    * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
+    * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
+    * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
 
 type built_oprt =
   | BOprt of
       (L.llvalue * L.llbuilder)
-    * (L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) option
-    * (L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) option
-    * (L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) option
-    * (L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) option
+    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
+    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
+    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
+    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
   | BUoprt of
       (L.llvalue * L.llbuilder)
-    * (L.llvalue -> string -> L.llbuilder -> L.llvalue) option
-    * (L.llvalue -> string -> L.llbuilder -> L.llvalue) option
-    * (L.llvalue -> string -> L.llbuilder -> L.llvalue) option
-    * (L.llvalue -> string -> L.llbuilder -> L.llvalue) option
+    * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
+    * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
+    * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
+    * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
 
 (* translate : Sast.program -> Llvm.module *)
 let translate prgm =   (* note this whole thing only takes two things: globals= list of (typ,name) (bindings basically). And functions= list of sfunc_decl's (each has styp sfname sformals slocals sbody) *)
@@ -155,7 +155,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   let build_ctype_fn fname ftype =   (* ftype = "ctype_add_t" etc *)
     let the_function = L.define_function fname ftype the_module in
     let builder = L.builder_at_end context (L.entry_block the_function) in
-    (the_function,builder)
+    (the_function, builder)
   in
 
   (* here's how you go from a cobj to the data value: *)
@@ -180,7 +180,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   let build_new_cobj data_type builder =
     (* malloc the new object and its data *)
     let objptr = L.build_malloc cobj_t "__new_objptr" builder in (* objptr: cobj_t* *)
-    let dataptr = L.build_malloc data_type "__new_dataptr" builder in  (* dataptr: bool_t* when data_type=bool_t *)
+    let dataptr = L.build_malloc data_type "__new_dataptr" builder in
     let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" builder in
 
     (* store the data ptr in the object *)
@@ -253,21 +253,21 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   	 let typs = ["int"; "float"; "bool"; "char"] in
 
   	 let ops = [
-  	   Oprt("add", Some L.build_add, Some L.build_fadd, None, None);
-  	   Oprt("sub", Some L.build_sub, Some L.build_fsub, None, None);
-       Oprt("mul", Some L.build_mul, Some L.build_fmul, None, None);
-  	   Oprt("div", Some L.build_sdiv, Some L.build_fdiv, None, None);
+  	   Oprt("add", Some((L.build_add), int_t), Some((L.build_fadd), float_t), None, None);
+  	   Oprt("sub", Some((L.build_sub), int_t), Some((L.build_fsub), float_t), None, None);
+       Oprt("mul", Some((L.build_mul), int_t), Some((L.build_fmul), float_t), None, None);
+  	   Oprt("div", Some((L.build_sdiv), int_t), Some((L.build_fdiv), float_t), None, None);
   	   Oprt("exp", None, None, None, None);
-       Oprt("eq", Some (L.build_icmp L.Icmp.Eq), Some (L.build_fcmp L.Fcmp.Ueq), Some (L.build_icmp L.Icmp.Eq), Some (L.build_icmp L.Icmp.Eq));
-  	   Oprt("neq", Some (L.build_icmp L.Icmp.Ne), Some (L.build_fcmp L.Fcmp.Une), Some (L.build_icmp L.Icmp.Eq), Some (L.build_icmp L.Icmp.Eq));
-       Oprt("lesser", Some (L.build_icmp L.Icmp.Slt), Some (L.build_fcmp L.Fcmp.Ult), Some (L.build_icmp L.Icmp.Slt), Some (L.build_icmp L.Icmp.Slt));
-  	   Oprt("leq", Some (L.build_icmp L.Icmp.Sle), Some (L.build_fcmp L.Fcmp.Ule), Some (L.build_icmp L.Icmp.Sle), Some (L.build_icmp L.Icmp.Sle));
-       Oprt("greater", Some (L.build_icmp L.Icmp.Sgt), Some (L.build_fcmp L.Fcmp.Ugt), Some (L.build_icmp L.Icmp.Sgt), Some (L.build_icmp L.Icmp.Sgt));
-  	   Oprt("geq", Some (L.build_icmp L.Icmp.Sge), Some (L.build_fcmp L.Fcmp.Uge), Some (L.build_icmp L.Icmp.Sge), Some (L.build_icmp L.Icmp.Sge));
-  	   Oprt("and", Some L.build_and, Some L.build_add, Some L.build_and, Some L.build_add);
-       Oprt("or", Some L.build_or, Some L.build_or, Some L.build_or, Some L.build_or);
-  	   Uoprt("neg", Some L.build_neg, Some L.build_fneg, Some L.build_neg, None);
-  	   Uoprt("not", Some L.build_not, Some L.build_not, Some L.build_not, Some L.build_not);
+       Oprt("eq", Some((L.build_icmp L.Icmp.Eq), bool_t), Some((L.build_fcmp L.Fcmp.Ueq), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t));
+  	   Oprt("neq", Some((L.build_icmp L.Icmp.Ne), bool_t), Some((L.build_fcmp L.Fcmp.Une), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t));
+       Oprt("lesser", Some((L.build_icmp L.Icmp.Slt), bool_t), Some((L.build_fcmp L.Fcmp.Ult), bool_t), Some((L.build_icmp L.Icmp.Slt), bool_t), Some((L.build_icmp L.Icmp.Slt), bool_t));
+  	   Oprt("leq", Some((L.build_icmp L.Icmp.Sle), bool_t), Some((L.build_fcmp L.Fcmp.Ule), bool_t), Some((L.build_icmp L.Icmp.Sle), bool_t), Some((L.build_icmp L.Icmp.Sle), bool_t));
+       Oprt("greater", Some((L.build_icmp L.Icmp.Sgt), bool_t), Some((L.build_fcmp L.Fcmp.Ugt), bool_t), Some((L.build_icmp L.Icmp.Sgt), bool_t), Some((L.build_icmp L.Icmp.Sgt), bool_t));
+  	   Oprt("geq", Some((L.build_icmp L.Icmp.Sge), bool_t), Some((L.build_fcmp L.Fcmp.Uge), bool_t), Some((L.build_icmp L.Icmp.Sge), bool_t), Some((L.build_icmp L.Icmp.Sge), bool_t));
+  	   Oprt("and", Some((L.build_and), int_t), None, Some((L.build_and), bool_t), Some((L.build_add), char_t));
+       Oprt("or", Some((L.build_or), int_t), None, Some((L.build_or), bool_t), Some((L.build_or), char_t));
+  	   Uoprt("neg", Some((L.build_neg), int_t), Some((L.build_fneg), float_t), Some((L.build_neg), bool_t), None);
+  	   Uoprt("not", Some((L.build_not), int_t), None, Some((L.build_not), bool_t), Some((L.build_not), char_t));
        ] in
 
   	 List.map (fun t -> let bops = List.map (function
@@ -338,29 +338,29 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   	    | Some op -> (match op with
   	       | BOprt((fn, bd), i, f, b, c) -> fn
   	       | BUoprt((fn, bd), i, f, b, c) -> fn)
-  	    | None -> L.const_pointer_null char_t (* this seems hacky *)) bops))) the_module) built_ops in
+  	    | None ->  L.define_function "operator_not_defined_for_type" (get_t t) the_module (* this seems hacky *)) bops))) the_module) built_ops in
 
     List.iter (fun (t, bops) -> List.iter (function
       | Some op -> (match op with
          | BOprt((fn, bd), i, f, b, c) ->
-            let tfn = match t with
-	          | "int" -> (function Some i -> i | None -> L.build_add) i
-	          | "float" -> (function Some f -> f | None -> L.build_add) f
-	          | "bool" -> (function Some b -> b | None -> L.build_add) b
-	          | "char" -> (function Some c -> c | None -> L.build_add) c in
+            let (tfn, tp) = match t with
+	          | "int" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_add, int_t)) i
+	          | "float" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_add), int_t) f
+	          | "bool" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_add, int_t)) b
+	          | "char" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_add, int_t)) c in
 	  	    let (self_data, other_data) = boilerplate_binop (get_t t) fn bd in
 	  	    let result_data = tfn self_data other_data "result_data" bd in
-		    let result = build_new_cobj_init (get_t t) result_data bd in
+		    let result = build_new_cobj_init tp result_data bd in
 		    ignore(L.build_ret result bd)
          | BUoprt((fn, bd), i, f, b, c) ->
-            let tfn = match t with
-	          | "int" -> (function Some i -> i | None -> L.build_neg) i
-	          | "float" -> (function Some f -> f | None -> L.build_neg) f
-	          | "bool" -> (function Some b -> b | None -> L.build_neg) b
-	          | "char" -> (function Some c -> c | None -> L.build_neg) c in
+            let (tfn, tp) = match t with
+	          | "int" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_neg, int_t)) i
+	          | "float" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_neg, int_t)) f
+	          | "bool" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_neg, int_t)) b
+	          | "char" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_neg, int_t)) c in
 	  	    let (self_data) = boilerplate_uop (get_t t) fn bd in
 	  	    let result_data = tfn self_data "result_data" bd in
-		    let result = build_new_cobj_init (get_t t) result_data bd in
+		    let result = build_new_cobj_init tp result_data bd in
 		    ignore(L.build_ret result bd))
 	  | None -> ()) bops) built_ops;
 
