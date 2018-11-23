@@ -53,13 +53,15 @@ let rec expr map = function (* evaluate expressions, return types and add to map
           in let (map1, bindout, exprout) = (List.fold_left2 aux (map, [], []) args exprs) in
           let (map2, block, data, locals) = (func_stmt map map1 TypeMap.empty c) in (* p, q, r is sstmt list, typ, map *)
           match data with
-            | Some (typ2, e', d) -> let Bind(name, btype) = n in if btype <> Dyn && btype <> typ2 then raise (Failure ("STypeError: invalid return type")) else 
+            | Some (typ2, e', d) -> let Bind(name, btype) = n in if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then raise (Failure ("STypeError: invalid return type")) else 
+                let func = (SFunc(WeakBind(name, btype), (List.rev bindout), locals, block)) in (btype, (SCall(WeakBind(name, btype), (List.rev exprout), func)), d) else (* case where definite return type and Dynamic inferrence still has weak bind*)
                 let func = (SFunc(StrongBind(name, typ2), (List.rev bindout), locals, block)) in (typ2, (SCall(StrongBind(name, typ2), (List.rev exprout), func)), d) (* TODO fix this somehow *)
             
             | None -> let Bind(name, btype) = n in if btype <> Dyn then raise (Failure ("STypeError: invalid return type")) else 
               let func = (SFunc(StrongBind(name, Null), (List.rev bindout), locals, block)) in (Null, (SCall(StrongBind(name, Null), (List.rev exprout), func)), None) (* TODO fix this somehow *)
 
-        | None -> print_endline "SWarning: called weak/undefined function"; (Dyn, (SCall(WeakBind(name, Dyn), [], SNop)), None)) (* TODO fix this somehow *)
+        | None -> print_endline "SWarning: called weak/undefined function"; let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr map e' in e' :: acc) [] exprs) in
+              (Dyn, (SCall(WeakBind(name, Dyn), eout, SNop)), None)) (* TODO fix this somehow *)
   | _ as temp -> print_endline ("SNotImplementedError: '" ^ (expr_to_string temp) ^ "' semantic checking not implemented"); (Dyn, SNoexpr, None)
 
 (* checks expressions within functions. differs from expr in how  it handles function calls *)
