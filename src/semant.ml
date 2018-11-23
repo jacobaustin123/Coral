@@ -122,16 +122,16 @@ and check_assign map (typ, e', data) = function (* check if a value can be assig
           | Dyn -> let map' = StringMap.add n (t', Dyn, true, data) map in (map', StrongBind(n, Dyn)) (* fix all this *)
           | _ -> (match t' with
             | Dyn -> (match t with 
-                  | Dyn -> let map' = StringMap.add n (Dyn, typ, true, data) map in (map', StrongBind(n, Dyn))
+                  | Dyn -> let map' = StringMap.add n (Dyn, typ, true, data) map in (map', StrongBind(n, typ))
                   | _ when t = typ -> let m' = StringMap.add n (t, t, true, data) map in (m', StrongBind(n, t))
                   | _ -> raise (Failure ("STypeError: invalid type assigned to " ^ n)))
               | _ -> (match t with
-                  | Dyn when t' = typ -> (map, StrongBind(n, Dyn))
+                  | Dyn when t' = typ -> (map, StrongBind(n, t'))
                   | _ when t = typ -> let m' = StringMap.add n (t, t, true, data) map in (m', StrongBind(n, t))
                   | _ -> raise (Failure ("STypeError: invalid type assigned to " ^ n)))
               | _ -> raise (Failure ("STypeError: invalid type assigned to " ^ n))))
   | Bind(n, t) when not (StringMap.mem n map) -> if t = typ then let m' = StringMap.add n (t, t, true, data) map in (m', StrongBind(n, t))
-        else if t = Dyn then let m' = StringMap.add n (Dyn, typ, true, data) map in (m', StrongBind(n, t))
+        else if t = Dyn then let m' = StringMap.add n (Dyn, typ, true, data) map in (m', StrongBind(n, typ))
         else raise (Failure ("STypeError: invalid type assigned to " ^ n))
   | _ -> raise (Failure ("STypeError: invalid types for assignment."))
 
