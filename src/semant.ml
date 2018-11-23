@@ -153,8 +153,12 @@ and check_array map e b = let (typ, e', data) = expr map e in match typ with (* 
 
 and check_func globals locals out data local_vars stack = (function  
   | [] -> ((List.rev out), data, locals, List.sort_uniq compare (List.rev local_vars))
-  | a :: t when data <> None -> (out, data, locals, local_vars)
-  | a :: t -> let (m', value, d, loc) = func_stmt globals locals stack a in check_func globals m' (value :: out) d (loc @ local_vars) stack t)
+  | a :: t -> let (m', value, d, loc) = func_stmt globals locals stack a in (match (data, d) with
+      | (None, None) -> check_func globals m' (value :: out) None (loc @ local_vars) stack t
+      | (None, _) -> check_func globals m' (value :: out) d (loc @ local_vars) stack t
+      | (_, None) -> check_func globals m' (value :: out) data (loc @ local_vars) stack t
+      | (_, _) when d = data -> check_func globals m' (value :: out) data (loc @ local_vars) stack t
+      | _ -> check_func globals m' (value :: out) (Some (Dyn, SNoexpr, None)) (loc @ local_vars) stack t))
 
 (* used to evaluate functions and handle return types. 
   will be used to handle closures too. 
@@ -190,23 +194,23 @@ and func_stmt globals locals stack = function
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) locals in (map', SFuncDecl(a, b, c), None, [StrongBind(x, t)])
 
   | If(a, b, c) -> let (typ, e', _) = func_expr globals locals stack a in 
-        let (map', value, Some data, out) = func_stmt globals locals stack b in 
-        let (map'', value', Some data', out') = func_stmt globals locals stack c in 
-        if equals map' map'' then if data = data' then (map', SIf(e', value, value'), Some data, out) 
+        let (map', value, data, out) = func_stmt globals locals stack b in 
+        let (map'', value', data', out') = func_stmt globals locals stack c in 
+        if equals map' map'' then if data = data' then (map', SIf(e', value, value'), data, out) 
         else (map', SIf(e', value, value'), Some (Dyn, SNoexpr, None), out) else 
         let merged = merge map' map'' in if data = data' 
-        then (merged, SIf(e', value, value'), Some data, out @ out') 
+        then (merged, SIf(e', value, value'), data, out @ out') 
         else (merged, SIf(e', value, value'), Some (Dyn, SNoexpr, None), out @ out')
 
   | For(a, b, c) -> let (m, x) = check_array locals b a in 
-        let (m', x', Some data, out) = func_stmt globals m stack c in 
+        let (m', x', d, out) = func_stmt globals m stack c in 
         let (typ, e', _) = func_expr globals m' stack b in 
-        if equals locals m' then (m', SFor(x, e', x'), Some data, out) else 
+        if equals locals m' then (m', SFor(x, e', x'), d, out) else 
         let merged = merge locals m' in (merged, SFor(x, e', x'), Some (Dyn, SNoexpr, None), out)
 
   | While(a, b) -> let (typ, e, data) = func_expr globals locals stack a in 
-        let (m', x', Some data, out) = func_stmt globals locals stack b in 
-        if equals locals m' then (m', SWhile(e, x'), Some data, out) else
+        let (m', x', d, out) = func_stmt globals locals stack b in 
+        if equals locals m' then (m', SWhile(e, x'), d, out) else
         let merged = merge locals m' in (merged, SWhile(e, x'), Some (Dyn, SNoexpr, None), out)
 
   | Nop -> let (a, b, out) = stmt locals (Nop) in (a, b, None, out)

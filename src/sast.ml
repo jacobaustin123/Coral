@@ -58,11 +58,11 @@ and string_of_sexpr = function
   | SNoexpr -> ""
 
 and string_of_sstmt = function
-  | SFunc(b, bl1, bl2, s) -> "def " ^ string_of_sbind b ^ "(" ^ String.concat ", " (List.map string_of_sbind bl1) ^ ")\n" ^ string_of_sstmt s
+  | SFunc(b, bl1, bl2, s) -> "def " ^ string_of_sbind b ^ "(" ^ String.concat ", " (List.map string_of_sbind bl1) ^ "): [" ^ String.concat ", " (List.map string_of_sbind bl2) ^ "]\n" ^ string_of_sstmt s
   | SBlock(sl) -> String.concat "\n" (List.map string_of_sstmt sl) ^ "\n"
   | SExpr(e) -> string_of_sexpr e
   | SIf(e, s1, s2) ->  "if " ^ string_of_sexpr e ^ ":\n" ^ string_of_sstmt s1 ^ "else:\n" ^ string_of_sstmt s2
-  | SFor(b, e, s) -> "for" ^ string_of_sbind b ^ " in " ^ string_of_sexpr e ^ ":\n" ^ string_of_sstmt s
+  | SFor(b, e, s) -> "for " ^ string_of_sbind b ^ " in " ^ string_of_sexpr e ^ ":\n" ^ string_of_sstmt s
   | SWhile(e, s) -> "while " ^ string_of_sexpr e ^ ":\n" ^ string_of_sstmt s
   | SReturn(e) -> "return " ^ string_of_sexpr e ^ "\n"
   | SClass(b, s) -> "class " ^ ((function | StrongBind(s, t) -> s | WeakBind(s, t) -> s) b ^ ":\n" ^ string_of_sstmt s)
