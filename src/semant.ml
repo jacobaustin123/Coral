@@ -1,176 +1,9 @@
 open Ast
 open Sast
-
-
-(* 
-
-2. Check types of assignments (x : str[] = 5)
-3. Make sure all variables and functions have been declared (includes getting a list of locals in each scope, somehow handle closures)
-4. Duplicate names in function formals
-5. Do full type inference
-6. Do microC style semantic checking on the sections I can fully infer
-
-sstmt:
-  | SFunc of sfunc_decl
-  | SBlock of stmt list 
-  | SExpr of expr
-  | SIf of expr * stmt * stmt
-  | SFor of bind * expr * stmt
-  | SWhile of expr * stmt
-  | SReturn of expr
-  | SClass of string * stmt
-  | SAsn of bind list * expr
-
-*)
-
-(* 
-
-could have a declared and maybedeclared list, as well as definitely typed and possibly typed. also need to have an explicitly typed list. expressions get translated into SAST versions if
-all arguments and 
-
-x = 3
-
-if (condition):
-  x : int = x
-
-x = "hello"
-
-have a second map of functions containing function statement/args and a map from args to typed sfunc for that type args.
-need a map from list/tuple to sstmt. when called, go into it, check all the types/args with current values. need to attach
-closure. 
-*)
-
-
-(* converts stmt to string for error handling *)
-let stmt_to_string = function
-  | Func(_, _, _) -> "func"
-  | Block(_) -> "block"
-  | Expr(_) -> "expr"
-  | If(_, _, _) -> "if"
-  | For(_, _, _) -> "for"
-  | While(_, _) -> "while"
-  | Return(_) -> "return"
-  | Class(_, _) -> "class"
-  | Asn(_, _) -> "asn"
-  | TypeInfo(_) -> "typeinfo"
-  | Nop -> "nop"
-
-(* converts expr to string for error handling *)
-let expr_to_string = function
-  | Binop(_, _, _) -> "binop"
-  | Lit(_) -> "lit"
-  | Var(_) -> "var"
-  | Unop(_, _) -> "unop"
-  | Call(_, _) -> "call"
-  | Method(_, _, _) -> "method"
-  | Field(_, _) -> "field"
-  | List(_) -> "list"
-
-(* converts type to string for error handling *)
-let type_to_string = function
-  | Dyn -> "dyn"
-  | Int -> "int"
-  | Float -> "float"
-  | Bool -> "bool"
-  | String -> "string"
-  | IntArr -> "int list"
-  | FloatArr -> "float list"
-  | BoolArr -> "bool list"
-  | StringArr -> "string list"
-  | FuncType -> "func"
-  | Null -> "null"
-
-(* converts unop to string for error handling *)
-let unop_to_string = function
-  | Neg -> "-"
-  | Not -> "not"
-
-(* converts binop to string for error handling *)
-let binop_to_string = function
-  | Add -> "+"
-  | Sub -> "-"
-  | Mul -> "*"
-  | Div -> "/"
-  | Exp -> "**"
-  | Eq -> "=="
-  | Neq -> "!="
-  | Less -> "<"
-  | Leq -> "<="
-  | Greater -> ">"
-  | Geq -> ">="
-  | And -> "and"
-  | Or -> "or"
-
-(* converts type to corresponding array type for array handling *)
-let type_to_array = function
-  | Int -> IntArr
-  | Bool -> BoolArr
-  | String -> StringArr
-  | Float -> FloatArr
-  | _ as x -> x
-
-let array_to_type = function
-  | IntArr -> Int
-  | BoolArr -> Bool
-  | FloatArr -> Float
-  | StringArr -> String
-  | _ as x -> x
-
-let is_arr = function
-  | StringArr | BoolArr | IntArr | FloatArr -> true
-  | _ -> false
-
-let split_sbind x = 
-  let rec aux a1 a2 = function
-    | [] -> (List.rev a1, List.rev a2)
-    | a :: t -> match a with
-      | StrongBind(c, d) -> aux (c :: a1) (d :: a2) t
-      | WeakBind(c, d) -> aux (c :: a1) (d :: a2) t
-  in aux [] [] x
-;;
-
-(* compare two lists for use in maps with list keys *)
-let comp x y =  match List.length x, List.length y with
-  | a, b when a < b -> -1
-  | a, b when a > b -> 1
-  | a, b when a = b -> let rec aux = function
-    | [], [] -> 0
-    | x :: t, y :: q when x = y -> aux (t, q)
-    | x :: t, y :: q when x <> y -> compare x y
-    | _ -> raise (Failure "unknown failure in argument matching")
-  in aux (x, y)
-  | _ -> raise (Failure "unknown failure in argument matching")
-;;
-
-let comp_tuple (a, b) (c, d) = if a = c then comp b d else compare a c
-;;
-
-(* map with list keys, used for recursive functions *)
-module TypeMap = Map.Make(struct type t = string * typ list let compare = comp_tuple end);;
-
-(* map with string keys, used for variable lookup *)
-
-module StringMap = Map.Make(String)
-
-(* merge function used to compare and combine two maps for type inference *)
-
-let compare_types a b = if a = b then a else Dyn
-let compare_decl a b = if a = b then a else false
-
-let merge m1 m2 = StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge two lists while keeping type inference intact *)
-    | Some (a, b, c, d), Some (e, f, g, h) -> Some (compare_types a e, compare_types b f, compare_decl c g, None)
-    | Some (a, b, c, d), None -> Some(a, b, false, d)
-    | None, Some(a, b, c, d) -> Some(a, b, false, d)
-    | None, None -> None
-  ) m1 m2
-
-(* check if two maps are equal *)
-
-let equals m1 m2 = (StringMap.equal (fun x y -> (compare x y) = 0) m1 m2) (* check if two maps are equal *)
+open Utilities
 
 (* evaluates expressions and returns a type and semantically checked sexpr object *)
 
-(* to do, return the entire dictionary entry, so it can be assigned appropriately *)
 let rec expr map = function (* evaluate expressions, return types and add to map *)
   | Lit(x) -> let typ = match x with | IntLit(x) -> Int | BoolLit(x) -> Bool | StringLit(x) -> String | FloatLit(x) -> Float in (typ, SLit(x), None) (* convert lit to type, return (type, SLit(x)), check if defined in map *)
   | List(x) -> let rec aux typ out = function
@@ -205,6 +38,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
       | Add when same && is_arr t1 -> (t1, SBinop(e1, op, e2), None)
       | _ -> raise (Failure ("STypeError: unsupported operand type(s)"))
     ))
+
   | Call(name, exprs) -> if not (StringMap.mem name map) then raise (Failure ("SNameError: function not found.")) else (* complex function to do semantic checking for calls. makes sure arguments match types, and then recursively checks given function with the given types *)
       let (typ, t', decl, func) = StringMap.find name map in (* if func = None then raise (Failure ("SNameError: function not found.")) *)
       (match func with
@@ -227,6 +61,8 @@ let rec expr map = function (* evaluate expressions, return types and add to map
 
         | None -> print_endline "SWarning: called weak/undefined function"; (Dyn, (SCall(WeakBind(name, Dyn), [], SNop)), None)) (* TODO fix this somehow *)
   | _ as temp -> print_endline ("SNotImplementedError: '" ^ (expr_to_string temp) ^ "' semantic checking not implemented"); (Dyn, SNoexpr, None)
+
+(* checks expressions within functions. differs from expr in how  it handles function calls *)
 
 and func_expr globals locals stack = function (* evaluate expressions, return types and add to map *)
   | Unop(op, e) -> let (typ, e', _) = func_expr globals locals stack e in (match typ with
@@ -279,6 +115,7 @@ and func_expr globals locals stack = function (* evaluate expressions, return ty
    | _ as other -> expr locals other
 
 (* function to check if a certain assignment can be performed with inferred/given types, does assignment if possible, returns appropriate bind *)
+
 and check_assign map (typ, e', data) = function (* check if a value can be assigned, and assign if true *)
   | Bind(n, t) when StringMap.mem n map -> let (t', _, _, _) = StringMap.find n map in 
         (match typ with
@@ -299,17 +136,35 @@ and check_assign map (typ, e', data) = function (* check if a value can be assig
   | _ -> raise (Failure ("STypeError: invalid types for assignment."))
 
 (* function to check if an array type has a given type, values are appropriate. maybe not work *)
+
 and check_array map e b = let (typ, e', data) = expr map e in match typ with (* make sure an array type can be assigned to a given variable *)
   | IntArr | FloatArr | BoolArr | StringArr -> (check_assign map (array_to_type typ, e', data) b)
   | Dyn -> let Bind(n, t) = b in let map' = StringMap.add n (t, t, false, data) map in (map, WeakBind(n, t)) (* TODO fix this *)
   | _ -> raise (Failure ("STypeError: invalid types for assignment."))
 
-and check_func globals locals out typ local_vars stack = (function  (* check the entire program *)
-  | [] -> ((List.rev out), typ, locals, List.sort_uniq compare (List.rev local_vars))
-  | a :: t when typ <> None -> (out, typ, locals, local_vars)
-  | a :: t -> let (m', value, data, loc) = func_stmt globals locals stack a in check_func globals m' (value :: out) data (loc @ local_vars) stack t)
+(* checks and entire function. 
 
-and func_stmt globals locals stack = function (* used to evaluate functions and handle return types. will be used to handle closures too. duplicate stmt as much as possible *)
+  globals and locals are the globals and locals maps (locals contains all globals).
+  out is a sstmt list containing the semanting checked stmts
+  data is a (typ, e', sstmt) tuple containing return information for the function
+  local_vars is a list of sbinds containing the local variables
+  stack is a TypeMap containing the function call stack 
+*)
+
+and check_func globals locals out data local_vars stack = (function  
+  | [] -> ((List.rev out), data, locals, List.sort_uniq compare (List.rev local_vars))
+  | a :: t when data <> None -> (out, data, locals, local_vars)
+  | a :: t -> let (m', value, d, loc) = func_stmt globals locals stack a in check_func globals m' (value :: out) d (loc @ local_vars) stack t)
+
+(* used to evaluate functions and handle return types. 
+  will be used to handle closures too. 
+  duplicate stmt as much as possible 
+
+  globals and locals are maps containing global and local variables (locals duplicates globals.
+  stack is a TypeMap containing the function stack 
+*)
+
+and func_stmt globals locals stack = function 
   | Return(e) -> let data = func_expr globals locals stack e in let (typ, e', d) = data in (locals, SReturn(e'), (Some data), []) (* for closures, match t with FuncType, attach local scope *)
   | Block(s) -> let (value, data, map', out) = check_func globals locals [] None [] stack s in (map', SBlock(value), data, out)
   | Asn(binds, e) -> let data = func_expr globals locals stack e in let (typ, e', d) = data in
@@ -358,6 +213,7 @@ and func_stmt globals locals stack = function (* used to evaluate functions and 
   | TypeInfo(a) -> let (a, b, out) = stmt locals (TypeInfo a) in (a, b, None, out)
   | _ as s -> let (map', value, out) = stmt locals s in (map', value, None, [])
 
+(* evaluate statements in the global scope *)
 and stmt map = function (* evaluates statements, can pass it a func *)
   | Asn(binds, e) ->  let data = expr map e in let (typ, e', d) = data in
     let rec aux (m, out) = function
@@ -386,7 +242,8 @@ and stmt map = function (* evaluates statements, can pass it a func *)
   | TypeInfo(a) -> let (t, e, _) = expr map a in print_endline (type_to_string t); (map, SNop, [])
   | _ as temp -> print_endline ("NotImplementedError: '" ^ (stmt_to_string temp) ^ "' semantic checking not implemented"); (map, SNop, [])
 
-and check map out globals = function  (* check the entire program *)
+(* check the entire program. out is an sstmt list used to accumulate the output program. globals is the list of global sbinds *)
+and check map out globals = function
   | [] -> ((List.rev out, List.sort_uniq compare (List.rev globals)), map)
   | a :: t -> let (m', value, g) = stmt map a in check m' (value :: out) (g @ globals) t
 
