@@ -13,7 +13,7 @@ What semant does:
 
 type sprogram = sstmt list * sbind list
 
-and sbind =
+and sbind = 
   | WeakBind of string * typ (* Not known to be declared, typ can be dynamic *)
   | StrongBind of string * typ (* Known to be declared, typ can be dynamic *)
 
@@ -71,3 +71,4 @@ and string_of_sstmt = function
   | SNop -> ""
 
 and string_of_sprogram (sl, bl) = String.concat "" (List.map string_of_sstmt sl) ^ "\n\n" ^ String.concat " " (List.map string_of_sbind bl)
+

@@ -99,3 +99,6 @@ let rec string_of_stmt = function
   | Asn(bl, e) -> String.concat ", " (List.map string_of_bind bl) ^ " = "  ^ string_of_expr e
   | TypeInfo(e) -> string_of_expr e
   | Nop -> ""
+
+and string_of_program l = String.concat "" (List.map string_of_stmt l) ^ "\n\n"
+

@@ -1,4 +1,4 @@
-open Ast
+  open Ast
 open Sast
 open Getopt (* package used to handle command line arguments *)
 
@@ -223,10 +223,11 @@ let rec loop map smap =
       | h :: t -> formatted := t ; h in
 
     let program = Parser.program token (Lexing.from_string "") in
+    let _ = if !debug = 1 then print_endline ("PROGRAM:\n" ^ (string_of_program program)) in (* print debug messages *)
     let (sast, smap') = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
-    let _ = if !debug = 1 then print_endline (string_of_sprogram sast)   in (* print debug messages *)
-    let (result, mymap) = main map 0.0 program
-    in print_endline (string_of_float result); flush stdout; loop mymap smap'
+    let _ = if !debug = 1 then print_endline ("SPROGRAM:\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
+    (* let (result, mymap) = main map 0.0 program in print_endline (string_of_float result);  *)
+    flush stdout; loop map smap'
   with
     | Not_found -> loop map smap
     | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; loop map smap
