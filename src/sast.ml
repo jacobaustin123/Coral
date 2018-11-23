@@ -27,6 +27,7 @@ and sexpr =
   | SField of sexpr * string
   | SList of sexpr list * typ
   | SNoexpr 
+  | SListAccess of sexpr * sexpr
 
 and sstmt = (* this can be refactored using Blocks, but I haven't quite figured it out yet *)
   | SFunc of sbind * sbind list * sbind list * sstmt (* string list is list of locals *)

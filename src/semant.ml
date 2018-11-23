@@ -67,6 +67,7 @@ let expr_to_string = function
   | Method(_, _, _) -> "method"
   | Field(_, _) -> "field"
   | List(_) -> "list"
+  | ListAccess(_, _) -> "listaccess"
 
 (* converts type to string for error handling *)
 let type_to_string = function
@@ -129,15 +130,15 @@ let comp x y =  match List.length x, List.length y with
 module StringMap = Map.Make(String)
 
 
-(* type 'a obj = {
+type obj = {
   typdecl : typ option; (* type declared *)
   typinf : typ option; (* type inferred *)
   def : bool option; (* is defined? *)
   data : sstmt option; (* SFunc or SClass *)
-  closure : 'a option;
-} *)
+  closure : (obj StringMap.t) option;
+}
 
-(* module rec TypeMap : string -> TypeMap.t obj = Map.Make(struct type t = TypeMap.t obj let compare = comp end);; *)
+(* module rec ObjectMap = Map.Make(struct type t = obj let compare = comp end);; *)
 
 (* map with string keys, used for variable lookup *)
 
@@ -244,8 +245,8 @@ and check_array map e b = let (typ, e') = expr map e in match typ with (* make s
   | _ -> raise (Failure ("STypeError: invalid types for assignment."))
 
 and check_func map out typ locals = (function  (* check the entire program *)
+  | a :: t when typ <> Null -> print_endline "SWarning: exited due to Null type"; ((List.rev out), typ, map, List.sort_uniq compare (List.rev locals))
   | [] -> ((List.rev out), typ, map, List.sort_uniq compare (List.rev locals))
-  | a :: t when typ <> Null -> (out, typ, map, locals)
   | a :: t -> let (m', value, typ, loc) = func_stmt map a in check_func m' (value :: out) typ (loc @ locals) t)
 
 and func_stmt map = function (* used to evaluate functions and handle return types. will be used to handle closures too. duplicate stmt as much as possible *)
@@ -255,7 +256,7 @@ and func_stmt map = function (* used to evaluate functions and handle return typ
   | Expr(e) -> let (a, b, out) = stmt map (Expr e) in (a, b, Null, out)
   | Func(a, b, c) -> let rec dups = function (* check duplicate argument names *)
       | [] -> ()
-      | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
+      | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SSyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
       | _ :: t -> dups t
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) map in (map', SFuncDecl(a, b, c), Null, [StrongBind(x, t)])
 
@@ -265,7 +266,8 @@ and func_stmt map = function (* used to evaluate functions and handle return typ
   | For(a, b, c) -> let (m, x) = check_array map b a in let (m', x', t1, out) = func_stmt m c in let (typ, e') = expr m' b in if equals map m' then (m', SFor(x, e', x'), t1, out) else 
         let merged = merge m m' in (merged, SFor(x, e', x'), Dyn, out)
 
-  | While(a, b) -> let (_, e) = expr map a in let (m', x', t1, out) = func_stmt map b in if equals map m' then (m', SWhile(e, x'), Dyn, out) else
+  | While(a, b) -> let (t, e) = expr map a in if t <> Dyn && t <> Bool then raise (Failure ("STypeError: while loop expected boolean value")) else
+    let (m', x', t1, out) = func_stmt map b in if equals map m' then (m', SWhile(e, x'), Dyn, out) else
     let merged = merge map m' in (merged, SWhile(e, x'), Dyn, out)
   
   | Nop -> let (a, b, out) = stmt map (Nop) in (a, b, Null, out)
