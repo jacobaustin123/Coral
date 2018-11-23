@@ -269,8 +269,9 @@ let rec file map smap fname run = (* todo combine with loop *)
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout
 ;;
 
-(* main loop of the interpreter *)
-let _ = 
+(* main loop *)
+let _ =
+  print_endline "XXXXXXXXX";
   parse_cmdline specs print_endline; (* parse command line arguments *)
   let emptymap = StringMap.empty in let semptymap = StringMap.empty in
   if String.length !fpath = 0 then 
