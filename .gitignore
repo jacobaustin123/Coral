@@ -21,3 +21,9 @@ setup.log
 
 # Merlin configuring file for Vim and Emacs
 .merlin
+
+# for testing, not source code
+gcd.coral
+
+# IntelliJ nonsense
+.idea/*
