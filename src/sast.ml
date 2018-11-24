@@ -13,6 +13,14 @@ What semant does:
 
 type sprogram = sstmt list * sbind list
 
+and sfunc_decl = {
+  styp : typ;
+  sfname : string;
+  sformals : sbind list;
+  slocals : sbind list;
+  sbody : sstmt
+}
+
 and sbind = 
   | WeakBind of string * typ (* bind when not known to be declared, typ can be dynamic. (name, inferred type) *)
   | StrongBind of string * typ (* known to be declared, typ can be dynamic. (name, inferred type) *)
@@ -30,7 +38,7 @@ and sexpr =
   (* | SListAccess of sexpr * sexpr (* not implemented *) *)
 
 and sstmt = (* this can be refactored using Blocks, but I haven't quite figured it out yet *)
-  | SFunc of sbind * sbind list * sbind list * sstmt (* (name, return type), list of formals, list of locals, body) *)
+  | SFunc of sfunc_decl (* (name, return type), list of formals, list of locals, body) *)
   | SBlock of sstmt list (* block found in function body or for/else/if/while loop *)
   | SExpr of sexpr (* see above *)
   | SIf of sexpr * sstmt * sstmt (* condition, if, else *)
@@ -57,7 +65,7 @@ and string_of_sexpr = function
   | SNoexpr -> ""
 
 and string_of_sstmt = function
-  | SFunc(b, bl1, bl2, s) -> "def " ^ string_of_sbind b ^ "(" ^ String.concat ", " (List.map string_of_sbind bl1) ^ "): [" ^ String.concat ", " (List.map string_of_sbind bl2) ^ "]\n" ^ string_of_sstmt s
+  | SFunc({ styp; sfname; sformals; slocals; sbody }) -> "def " ^ sfname ^ "(" ^ String.concat ", " (List.map string_of_sbind sformals) ^ ") -> " ^ (string_of_typ styp) ^ ": [" ^ String.concat ", " (List.map string_of_sbind slocals) ^ "]\n" ^ string_of_sstmt sbody
   | SBlock(sl) -> String.concat "\n" (List.map string_of_sstmt sl) ^ "\n"
   | SExpr(e) -> string_of_sexpr e
   | SIf(e, s1, s2) ->  "if " ^ string_of_sexpr e ^ ":\n" ^ string_of_sstmt s1 ^ "else:\n" ^ string_of_sstmt s2

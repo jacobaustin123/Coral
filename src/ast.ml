@@ -71,7 +71,7 @@ let rec string_of_typ = function
   | FloatArr -> "float[]"
   | BoolArr -> "bool[]"
   | StringArr -> "str[]"
-  | FuncType -> "funct"
+  | FuncType -> "func"
   | Null -> "null"
 
 let rec string_of_bind = function
