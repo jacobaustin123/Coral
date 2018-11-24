@@ -8,7 +8,7 @@ all: native
 
 clean:
 	$(OCB) -clean 
-	rm -rf testall.log *.diff *out main source.ll source.o
+	rm -rf testall.log *.diff *out main source.ll source.o source.s .ll
 
 native:
 	$(OCB) coral.native
@@ -29,7 +29,3 @@ byte:
 #coral-llvm.tar.gz : $(TARFILES) 
 #	cd .. && tar czf coral-llvm/coral-llvm.tar.gz \
 		$(TARfILES:%=coral-llvm/%
-
-
-
-
