@@ -102,8 +102,8 @@ Check() {
 CheckFail() {
     error=0
     basename=`echo $1 | sed 's/.*\\///
-                             s/.mc//'`
-    reffile=`echo $1 | sed 's/.mc$//'`
+                             s/.cl//'`
+    reffile=`echo $1 | sed 's/.cl$//'`
     basedir="`echo $1 | sed 's/\/[^\/]*$//'`/."
 
     echo -n "$basename..."
@@ -113,28 +113,22 @@ CheckFail() {
 
     generatedfiles=""
 
-    generatedfiles="$generatedfiles ${basename}.err ${basename}.diff" &&
-    #RunFail "$CORAL" "<" $1 "2>" "${basename}.err" ">>" $globallog &&
-    #Compare ${basename}.err ${reffile}.err ${basename}.diff
-
-    RunFail "$CORAL" "-c" "$1" ">" "$source.ll" &&
-    RunFail "$LLC" "$source.ll" "-o" "source.s" &&
-    RunFail "gcc" "-no-pie" "source.s" "-o" "main" && 
-    #prints out llvm 
-    # Run "cat" "source.ll" && 
-    RunFail "./main" > "${basename}.out" &&
+    generatedfiles="$generatedfiles ${basename}.ll ${basename}.s ${basename}.exe ${basename}.out" &&
+    
+    Run "$CORAL" "-c" "$1" ">" "${basename}.out" &&
     Compare ${basename}.out ${reffile}.out ${basename}.diff
+
     # Report the status and clean up the generated files
 
     if [ $error -eq 0 ] ; then
-	if [ $keep -eq 0 ] ; then
-	    rm -f $generatedfiles
-	fi
-	echo "OK"
-	echo "###### SUCCESS" 1>&2
+    if [ $keep -eq 0 ] ; then
+        rm -f $generatedfiles
+    fi
+    echo "OK"
+    echo "###### SUCCESS" 1>&2
     else
-	echo "###### FAILED" 1>&2
-	globalerror=$error
+    echo "###### FAILED" 1>&2
+    globalerror=$error
     fi
 }
 
@@ -153,10 +147,8 @@ do
 	    Check $file 2>> $globallog
 	    ;;
 	*fail-*)
- 	     echo "Fails not checked yet" 
-	     ;;
-	#    CheckFail $file 2>> $globallog
-	#   ;;
+ 	     Check $file 2>> $globallog
+        ;;
 	*)
 	    echo "unknown file type $file"
 	    globalerror=1
