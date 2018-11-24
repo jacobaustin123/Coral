@@ -249,7 +249,7 @@ let rec file map smap fname run = (* todo combine with loop *)
        let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
        let (curr, stack, formatted) = indent temp stack current in
        formatted @ (read curr stack)
-     with End_of_file -> close_in chan; []
+     with End_of_file -> close_in chan; Array.make (Stack.length stack - 1) Parser.DEDENT |> Array.to_list
     in let formatted = ref (read 0 base) in
     let _ = if !debug = 1 then (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "") in (* print debug messages *)
 
