@@ -229,7 +229,7 @@ and func_stmt globals locals stack = function
       | _ :: t -> dups t
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in 
     let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) locals in 
-    
+
     let (map'', bind) = List.fold_left (fun (map, out) (Bind(x, t)) -> let (map', bind) = check_assign map (t, SNoexpr, None) (Bind(x, t)) in (map', bind :: out)) (map', []) b in
     let bindout = List.rev bind in
     let (map2, block, data, locals) = (func_stmt map' map'' TypeMap.empty c) in
@@ -238,14 +238,14 @@ and func_stmt globals locals stack = function
             if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
             raise (Failure ("STypeError: invalid return type")) else 
             let func = (SFunc(WeakBind(name, btype), (List.rev bindout), locals, block)) in 
-              (map', func, None, [StrongBind(x, t)]) else
+              (map', func, None, [StrongBind(x, FuncType)]) else
             let func = (SFunc(StrongBind(name, typ2), (List.rev bindout), locals, block)) in 
-            (map', func, None, [StrongBind(x, t)])
+            (map', func, None, [StrongBind(x, FuncType)])
         
         | None -> let Bind(name, btype) = a in if btype <> Dyn then 
           raise (Failure ("STypeError: invalid return type")) else 
           let func = (SFunc(StrongBind(name, Null), (List.rev bindout), locals, block)) in 
-          (map', func, None, [StrongBind(x, t)]))
+          (map', func, None, [StrongBind(x, FuncType)]))
 
   | If(a, b, c) -> let (typ, e', _) = func_expr globals locals stack a in 
         let (map', value, data, out) = func_stmt globals locals stack b in 
@@ -296,14 +296,14 @@ and stmt map = function (* evaluates statements, can pass it a func *)
             if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
             raise (Failure ("STypeError: invalid return type")) else 
             let func = (SFunc(WeakBind(name, btype), (List.rev bindout), locals, block)) in 
-              (map', func, [StrongBind(name, btype)]) else
+              (map', func, [StrongBind(name, FuncType)]) else
             let func = (SFunc(StrongBind(name, typ2), (List.rev bindout), locals, block)) in 
-            (map', func, [StrongBind(name, btype)])
+            (map', func, [StrongBind(name, FuncType)])
         
         | None -> let Bind(name, btype) = a in if btype <> Dyn then 
           raise (Failure ("STypeError: invalid return type")) else 
           let func = (SFunc(StrongBind(name, Null), (List.rev bindout), locals, block)) in 
-          (map', func, [StrongBind(name, btype)]))
+          (map', func, [StrongBind(name, FuncType)]))
 
   | If(a, b, c) -> let (typ, e', _) = expr map a in let (map', value, out) = stmt map b in let (map'', value', out') = stmt map c in if equals map' map'' then (map', SIf(e', value, value'), out') else 
          let merged = merge map' map'' in (merged, SIf(e', value, value'), out @ out')
