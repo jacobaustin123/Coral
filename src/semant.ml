@@ -11,7 +11,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
         | a :: rest -> let (t, e, _) = expr map a in if t = typ then aux typ (e :: out) rest else aux Dyn (e :: out) rest
           in (match x with
             | a :: rest -> let (t, e, _) = expr map a in aux t [e] rest
-            | [] -> (Dyn, SList([], Dyn), None) (* todo maybe do something with this special case *))
+            | [] -> (Dyn, SList([], Dyn), None) (* todo maybe do something with this special case of empty list *))
   | Var(Bind(x, t)) -> if StringMap.mem x map then let (typ, t', decl, data) = StringMap.find x map in if decl then (t', SVar(StrongBind(x, t')), data) else (t', SVar(WeakBind(x, t')), None) else raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
   | Unop(op, e) -> let (typ, e', _) = expr map e in (match typ with
       | Dyn -> (Dyn, SUnop(op, e'), None)
@@ -39,30 +39,42 @@ let rec expr map = function (* evaluate expressions, return types and add to map
       | _ -> raise (Failure ("STypeError: unsupported operand type(s)"))
     ))
 
-  | Call(name, exprs) -> if not (StringMap.mem name map) then raise (Failure ("SNameError: function not found.")) else (* complex function to do semantic checking for calls. makes sure arguments match types, and then recursively checks given function with the given types *)
-      let (typ, t', decl, func) = StringMap.find name map in (* if func = None then raise (Failure ("SNameError: function not found.")) *)
+  | Call(name, exprs) -> if not (StringMap.mem name map) then 
+    raise (Failure ("SNameError: function not found.")) else (* complex function to do semantic checking for calls. makes sure arguments match types, and then recursively checks given function with the given types *)
+    let (typ, t', decl, func) = StringMap.find name map in (* if func = None then raise (Failure ("SNameError: function not found.")) *)
       (match func with
-        | Some(Func(n, args, c)) -> if t' != FuncType && typ != Dyn then (raise (Failure ("STypeError: cannot call variable"))) else
+        | Some(Func(n, args, c)) -> if t' <> FuncType && typ <> Dyn then 
+          (raise (Failure ("STypeError: cannot call variable"))) else
           let param_length = List.length exprs in
-          if List.length args != param_length then
+          if List.length args <> param_length then
                 raise (Failure ("SyntaxError: unexpected number of arguments in function call"))
 
           else let rec aux (map, bindout, exprout) v1 v2 = match v1, v2 with
-            | b, e -> let data = expr map e in let (t', e', _) = data in let (map1, bind2) = check_assign map data b in (map1, (bind2 :: bindout), (e' :: exprout))
+            | b, e -> let data = expr map e in let (t', e', _) = data in 
+              let (map1, bind2) = check_assign map data b in (map1, (bind2 :: bindout), (e' :: exprout))
 
           in let (map1, bindout, exprout) = (List.fold_left2 aux (map, [], []) args exprs) in
-          let (map2, block, data, locals) = (func_stmt map map1 TypeMap.empty c) in (* p, q, r is sstmt list, typ, map *)
+          let (map2, block, data, locals) = (func_stmt map map1 TypeMap.empty c) in
           match data with
-            | Some (typ2, e', d) -> let Bind(name, btype) = n in if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then raise (Failure ("STypeError: invalid return type")) else 
-                let func = (SFunc(WeakBind(name, btype), (List.rev bindout), locals, block)) in (btype, (SCall(WeakBind(name, btype), (List.rev exprout), func)), d) else (* case where definite return type and Dynamic inferrence still has weak bind*)
-                let func = (SFunc(StrongBind(name, typ2), (List.rev bindout), locals, block)) in (typ2, (SCall(StrongBind(name, typ2), (List.rev exprout), func)), d) (* TODO fix this somehow *)
+            | Some (typ2, e', d) -> let Bind(name, btype) = n in 
+                if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
+                raise (Failure ("STypeError: invalid return type")) else 
+                let func = (SFunc(WeakBind(name, btype), (List.rev bindout), locals, block)) in 
+                  (btype, (SCall(WeakBind(name, btype), (List.rev exprout), func)), d) else (* case where definite return type and Dynamic inferrence still has weak bind*)
+                let func = (SFunc(StrongBind(name, typ2), (List.rev bindout), locals, block)) in 
+                (typ2, (SCall(StrongBind(name, typ2), (List.rev exprout), func)), d)
             
-            | None -> let Bind(name, btype) = n in if btype <> Dyn then raise (Failure ("STypeError: invalid return type")) else 
-              let func = (SFunc(StrongBind(name, Null), (List.rev bindout), locals, block)) in (Null, (SCall(StrongBind(name, Null), (List.rev exprout), func)), None) (* TODO fix this somehow *)
+            | None -> let Bind(name, btype) = n in if btype <> Dyn then 
+              raise (Failure ("STypeError: invalid return type")) else 
+              let func = (SFunc(StrongBind(name, Null), (List.rev bindout), locals, block)) in 
+              (Null, (SCall(StrongBind(name, Null), (List.rev exprout), func)), None)
 
-        | None -> print_endline "SWarning: called weak/undefined function"; let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr map e' in e' :: acc) [] exprs) in
-              (Dyn, (SCall(WeakBind(name, Dyn), eout, SNop)), None)) (* TODO fix this somehow *)
-  | _ as temp -> print_endline ("SNotImplementedError: '" ^ (expr_to_string temp) ^ "' semantic checking not implemented"); (Dyn, SNoexpr, None)
+        | None -> print_endline "SWarning: called weak/undefined function"; 
+            let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr map e' in e' :: acc) [] exprs) in
+            (Dyn, (SCall(WeakBind(name, Dyn), eout, SNop)), None)) (* TODO fix this somehow *)
+
+  | _ as temp -> print_endline ("SNotImplementedError: '" ^ (expr_to_string temp) ^ 
+      "' semantic checking not implemented"); (Dyn, SNoexpr, None)
 
 (* checks expressions within functions. differs from expr in how  it handles function calls *)
 
@@ -92,16 +104,22 @@ and func_expr globals locals stack = function (* evaluate expressions, return ty
       | _ -> raise (Failure ("STypeError: unsupported operand type(s)"))
     ))
 
-  | Call(name, exprs) -> if not (StringMap.mem name locals) then raise (Failure ("SNameError: function not found.")) else (* complex function to do semantic checking for calls. makes sure arguments match types, and then recursively checks given function with the given types *)
-      let (typ, t', decl, func) = StringMap.find name locals in (* if func = None then raise (Failure ("SNameError: function not found.")) *)
+   (* complex function to do semantic checking for calls. makes sure arguments match types, 
+   and then recursively checks given function with the given types *)
+
+  | Call(name, exprs) -> if not (StringMap.mem name locals) then 
+    raise (Failure ("SNameError: function not found.")) else
+      let (typ, t', decl, func) = StringMap.find name locals in 
       (match func with 
-        | Some(Func(n, args, c)) -> if t' != FuncType && typ != Dyn then (raise (Failure ("STypeError: cannot call variable"))) else
+        | Some(Func(n, args, c)) -> if t' <> FuncType && typ <> Dyn then 
+          (raise (Failure ("STypeError: cannot call variable"))) else
           let param_length = List.length exprs in
-          if List.length args != param_length then
+          if List.length args <> param_length then
                 raise (Failure ("SyntaxError: unexpected number of arguments in function call"))
 
           else let rec aux (globals, locals, bindout, exprout) v1 v2 = match v1, v2 with
-            | b, e -> let data = func_expr globals locals stack e in let (t', e', _) = data in let (map1, bind2) = check_assign globals data b in (globals, map1, (bind2 :: bindout), (e' :: exprout))
+            | b, e -> let data = func_expr globals locals stack e in let (t', e', _) = data in 
+            let (map1, bind2) = check_assign globals data b in (globals, map1, (bind2 :: bindout), (e' :: exprout))
 
           in let (_, map1, bindout, exprout) = (List.fold_left2 aux (globals, locals, [], []) args exprs) in
           
@@ -109,19 +127,35 @@ and func_expr globals locals stack = function (* evaluate expressions, return ty
           if TypeMap.mem (name, types) stack then (Dyn, (SCall(WeakBind(name, Dyn), [], SNop)), None) else
           let stack' = TypeMap.add (name, types) true stack in (* temporarily a boolean *)
           
-          let (map2, block, Some (typ2, e', data), locals) = (func_stmt globals map1 stack' c) in (* p, q, r is sstmt list, typ, map *)
-          let Bind(name, btype) = n in if btype <> Dyn && btype <> typ2 then raise (Failure ("STypeError: invalid return type")) else 
-          let func = (SFunc(StrongBind(name, typ2), (List.rev bindout), locals, block)) in 
-          (typ2, (SCall(StrongBind(name, typ2), (List.rev exprout), func)), data) (* TODO fix this somehow *)
-      | None -> print_endline "SWarning: called weak/undefined function"; (Dyn, (SCall(WeakBind(name, Dyn), [], SNop)), None))
-   | _ as other -> expr locals other
+          let (map2, block, data, locals) = (func_stmt globals map1 stack' c) in
+          (match data with
+            | Some (typ2, e', d) -> let Bind(name, btype) = n in if btype <> Dyn && btype <> typ2 then 
+                if typ2 <> Dyn then raise (Failure ("STypeError: invalid return type")) else 
+                let func = (SFunc(WeakBind(name, btype), (List.rev bindout), locals, block)) in 
+                (btype, (SCall(WeakBind(name, btype), (List.rev exprout), func)), d) else (* case where definite return type and Dynamic inferrence still has weak bind*)
+                let func = (SFunc(StrongBind(name, typ2), (List.rev bindout), locals, block)) in 
+                (typ2, (SCall(StrongBind(name, typ2), (List.rev exprout), func)), d) (* TODO fix this somehow *)
+            
+            | None -> let Bind(name, btype) = n in if btype <> Dyn then 
+              raise (Failure ("STypeError: invalid return type")) else 
+              let func = (SFunc(StrongBind(name, Null), (List.rev bindout), locals, block)) in 
+              (Null, (SCall(StrongBind(name, Null), (List.rev exprout), func)), None)) (* TODO fix this somehow *)
+
+        | None -> print_endline "SWarning: called weak/undefined function"; 
+            let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr locals e' in e' :: acc) [] exprs) in
+            (Dyn, (SCall(WeakBind(name, Dyn), eout, SNop)), None)) (* TODO fix this somehow *)
+    | _ as other -> expr locals other
 
 (* function to check if a certain assignment can be performed with inferred/given types, does assignment if possible, returns appropriate bind *)
 
-and check_assign map (typ, e', data) = function (* check if a value can be assigned, and assign if true *)
+and check_assign map (typ, _, data) = function (* check if a value can be assigned, and assign if true *)
   | Bind(n, t) when StringMap.mem n map -> let (t', _, _, _) = StringMap.find n map in 
         (match typ with
-          | Dyn -> let map' = StringMap.add n (t', Dyn, true, data) map in (map', StrongBind(n, Dyn)) (* fix all this *)
+          | Dyn -> (match (t', t) with (* todo deal with the WeakBind thing *)
+              | (Dyn, Dyn) -> let map' = StringMap.add n (Dyn, Dyn, true, data) map in (map', StrongBind(n, Dyn))
+              | (Dyn, _) -> let map' = StringMap.add n (t, t, true, data) map in (map', WeakBind(n, t))
+              | (_, Dyn) -> let map' = StringMap.add n (t', t', true, data) map in (map', WeakBind(n, t'))
+              | (_, _) -> let map' = StringMap.add n (t, t, true, data) map in (map', WeakBind(n, t)))
           | _ -> (match t' with
             | Dyn -> (match t with 
                   | Dyn -> let map' = StringMap.add n (Dyn, typ, true, data) map in (map', StrongBind(n, typ))
@@ -137,14 +171,14 @@ and check_assign map (typ, e', data) = function (* check if a value can be assig
         else raise (Failure ("STypeError: invalid type assigned to " ^ n))
   | _ -> raise (Failure ("STypeError: invalid types for assignment."))
 
-(* function to check if an array type has a given type, values are appropriate. maybe not work *)
-
-and check_array map e b = let (typ, e', data) = expr map e in match typ with (* make sure an array type can be assigned to a given variable *)
+(* makes sure an array type can be assigned to a given variable *)
+and check_array map e b = let (typ, e', data) = expr map e in match typ with
   | IntArr | FloatArr | BoolArr | StringArr -> (check_assign map (array_to_type typ, e', data) b)
-  | Dyn -> let Bind(n, t) = b in let map' = StringMap.add n (t, t, false, data) map in (map, WeakBind(n, t)) (* TODO fix this *)
+  | Dyn -> let Bind(n, t) = b in let map' = StringMap.add n (t, t, false, data) map in 
+    (map, WeakBind(n, t)) (* TODO fix this *)
   | _ -> raise (Failure ("STypeError: invalid types for assignment."))
 
-(* checks and entire function. 
+(* checks an entire function. 
 
   globals and locals are the globals and locals maps (locals contains all globals).
   out is a sstmt list containing the semanting checked stmts
@@ -193,7 +227,25 @@ and func_stmt globals locals stack = function
       | [] -> ()
       | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
       | _ :: t -> dups t
-    in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) locals in (map', SFuncDecl(a, b, c), None, [StrongBind(x, t)])
+    in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in 
+    let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) locals in 
+    
+    let (map'', bind) = List.fold_left (fun (map, out) (Bind(x, t)) -> let (map', bind) = check_assign map (t, SNoexpr, None) (Bind(x, t)) in (map', bind :: out)) (map', []) b in
+    let bindout = List.rev bind in
+    let (map2, block, data, locals) = (func_stmt map' map'' TypeMap.empty c) in
+      (match data with
+        | Some (typ2, e', d) -> let Bind(name, btype) = a in 
+            if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
+            raise (Failure ("STypeError: invalid return type")) else 
+            let func = (SFunc(WeakBind(name, btype), (List.rev bindout), locals, block)) in 
+              (map', func, None, [StrongBind(x, t)]) else
+            let func = (SFunc(StrongBind(name, typ2), (List.rev bindout), locals, block)) in 
+            (map', func, None, [StrongBind(x, t)])
+        
+        | None -> let Bind(name, btype) = a in if btype <> Dyn then 
+          raise (Failure ("STypeError: invalid return type")) else 
+          let func = (SFunc(StrongBind(name, Null), (List.rev bindout), locals, block)) in 
+          (map', func, None, [StrongBind(x, t)]))
 
   | If(a, b, c) -> let (typ, e', _) = func_expr globals locals stack a in 
         let (map', value, data, out) = func_stmt globals locals stack b in 
@@ -233,7 +285,25 @@ and stmt map = function (* evaluates statements, can pass it a func *)
       | [] -> ()
       | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
       | _ :: t -> dups t
-    in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) map in (map', SFuncDecl(a, b, c), [StrongBind(x, t)])
+    in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in 
+    let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) map in 
+
+    let (map'', bind) = List.fold_left (fun (map, out) (Bind(x, t)) -> let (map', bind) = check_assign map (t, SNoexpr, None) (Bind(x, t)) in (map', bind :: out)) (map', []) b in
+    let bindout = List.rev bind in
+    let (map2, block, data, locals) = (func_stmt map' map'' TypeMap.empty c) in
+      (match data with
+        | Some (typ2, e', d) -> let Bind(name, btype) = a in 
+            if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
+            raise (Failure ("STypeError: invalid return type")) else 
+            let func = (SFunc(WeakBind(name, btype), (List.rev bindout), locals, block)) in 
+              (map', func, [StrongBind(name, btype)]) else
+            let func = (SFunc(StrongBind(name, typ2), (List.rev bindout), locals, block)) in 
+            (map', func, [StrongBind(name, btype)])
+        
+        | None -> let Bind(name, btype) = a in if btype <> Dyn then 
+          raise (Failure ("STypeError: invalid return type")) else 
+          let func = (SFunc(StrongBind(name, Null), (List.rev bindout), locals, block)) in 
+          (map', func, [StrongBind(name, btype)]))
 
   | If(a, b, c) -> let (typ, e', _) = expr map a in let (map', value, out) = stmt map b in let (map'', value', out') = stmt map c in if equals map' map'' then (map', SIf(e', value, value'), out') else 
          let merged = merge map' map'' in (merged, SIf(e', value, value'), out @ out')

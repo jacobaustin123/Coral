@@ -168,7 +168,7 @@ typ:
 expr:
 | VARIABLE { Var(Bind($1, Dyn)) }
 | VARIABLE LPAREN actuals_opt RPAREN { Call($1, $3) }
-| expr LBRACK expr RBRACK { ListAccess($1, $3) }
+/* | expr LBRACK expr RBRACK { ListAccess($1, $3) } */
 | expr DOT VARIABLE LPAREN actuals_opt RPAREN { Method($1, $3, $5) }
 | expr DOT VARIABLE { Field($1, $3) }
 | MINUS expr %prec NEG { Unop(Neg, $2) }

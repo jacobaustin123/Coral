@@ -21,7 +21,7 @@ type expr =
   | Method of expr * string * expr list
   | Field of expr * string
   | List of expr list
-  | ListAccess of expr * expr
+  (* | ListAccess of expr * expr *)
 
 type stmt =
   | Func of bind * bind list * stmt
