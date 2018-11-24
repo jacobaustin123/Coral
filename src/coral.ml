@@ -60,22 +60,22 @@ let rec eval_expr map = function
   | Method(_, _, _) -> raise (Runtime "NotImplementedError: Methods have not yet been implemented!");
   | Field(_, _) -> raise (Runtime "NotImplementedError: Fields have not yet been implemented!");
   | Binop(e1, op, e2) ->
-
-let (v1, m1) = eval_expr map e1 in let (v2, m2) = eval_expr m1 e2 in
-match op with
-  | Add -> (v1 +. v2, m2)
-  | Sub -> (v1 -. v2, m2)
-  | Mul -> (v1 *. v2, m2)
-  | Div -> (v1 /. v2, m2)
-  | Exp -> (v1 ** v2, m2)
-  | Greater -> (float_of_bool (v1 > v2), m2)
-  | Less -> (float_of_bool (v1 < v2), m2)
-  | Geq -> (float_of_bool (v1 >= v2), m2)
-  | Leq -> (float_of_bool (v1 <= v2), m2)
-  | Neq -> (float_of_bool (v1 <> v2), m2)
-  | And -> (float_of_bool (v1 <> 0.0 && v2 <> 0.0), m2)
-  | Or -> (float_of_bool (v1 <> 0.0|| v2 <> 0.0), m2)
-  | Eq -> (float_of_bool (v1 = v2), m2)
+    let (v1, m1) = eval_expr map e1 in let (v2, m2) = eval_expr m1 e2 in
+    (match op with
+      | Add -> (v1 +. v2, m2)
+      | Sub -> (v1 -. v2, m2)
+      | Mul -> (v1 *. v2, m2)
+      | Div -> (v1 /. v2, m2)
+      | Exp -> (v1 ** v2, m2)
+      | Greater -> (float_of_bool (v1 > v2), m2)
+      | Less -> (float_of_bool (v1 < v2), m2)
+      | Geq -> (float_of_bool (v1 >= v2), m2)
+      | Leq -> (float_of_bool (v1 <= v2), m2)
+      | Neq -> (float_of_bool (v1 <> v2), m2)
+      | And -> (float_of_bool (v1 <> 0.0 && v2 <> 0.0), m2)
+      | Or -> (float_of_bool (v1 <> 0.0|| v2 <> 0.0), m2)
+      | Eq -> (float_of_bool (v1 = v2), m2))
+  | _ -> raise (Runtime "NotImplementedError: Unknown expression encountered in interpreter!");
 
 (* helper function used to add a list of function arguments to the map of local variables *)
 and add_to_map map = function 

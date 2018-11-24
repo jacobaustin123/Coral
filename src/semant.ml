@@ -69,7 +69,8 @@ let rec expr map = function (* evaluate expressions, return types and add to map
 
         | None -> print_endline "SWarning: called weak/undefined function"; (* TODO probably not necessary *)
             let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr map e' in e' :: acc) [] exprs) in
-            (Dyn, (SCall(WeakBind(name, Dyn), eout, SNop)), None)) (* TODO fix this somehow *)
+            (Dyn, (SCall(WeakBind(name, Dyn), eout, SNop)), None) (* TODO fix this somehow *)
+        | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation")))
 
   | _ as temp -> print_endline ("SNotImplementedError: '" ^ (expr_to_string temp) ^ 
       "' semantic checking not implemented"); (Dyn, SNoexpr, None)
