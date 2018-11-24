@@ -158,90 +158,6 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     (the_function, builder)
   in
 
-  (* here's how you go from a cobj to the data value: *)
-  let build_getdata_cobj data_type cobj_p b =  (* data_type = int_t etc *)
-    (*let x1 = L.build_load (lookup_global_binding "a") "x1" b in*)
-    let x2 = L.build_struct_gep cobj_p cobj_data_idx "x2" b in
-    let x3 = L.build_load x2 "x3" b in
-    let x4 = L.build_bitcast x3 (L.pointer_type data_type) "x4" b in
-    let data = L.build_load x4 "data" b in
-    data
-  in
-
-  let build_getctypefn_cobj ctype_fn_idx cobj_p b =
-    let x2 = L.build_struct_gep cobj_p cobj_type_idx "x2" b in
-    let x3 = L.build_load x2 "x3" b in  (* x3: ctype_pt *)
-    let x4 = L.build_struct_gep x3 ctype_fn_idx "x4" b in
-    let fn_ptr = L.build_load x4 "fn_ptr" b in
-    fn_ptr
-  in
-
-(** define helper functions for commonly used code snippets **)
-  let build_new_cobj data_type builder =
-    (* malloc the new object and its data *)
-    let objptr = L.build_malloc cobj_t "__new_objptr" builder in (* objptr: cobj_t* *)
-    let dataptr = L.build_malloc data_type "__new_dataptr" builder in
-    let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" builder in
-
-    (* store the data ptr in the object *)
-    let datafieldptr = L.build_struct_gep objptr cobj_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
-    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in
-    ignore(L.build_store dataptr_as_i8ptr datafieldptr_as_i8ptrptr builder);
-
-    (objptr, dataptr)
-  in
-
-  let build_new_cobj_init data_type value b =
-      let (objptr,dataptr) = build_new_cobj data_type b in
-      ignore(L.build_store value dataptr b);
-      objptr
-  in
-
-  (** manually making the ctype_ functions **)
-    (* does alloca, store, then load *)  (* note you should not use this if youre not using the values right away !!!!!! TODO note! *)
-  let boilerplate_till_load remote_cobj_p prettyname b =
-      ignore(L.set_value_name ("remote_"^prettyname) remote_cobj_p);
-      let cobj_pp = L.build_alloca cobj_pt (prettyname^"_p") b in
-      ignore(L.build_store remote_cobj_p cobj_pp b);
-      let cobj_p = L.build_load cobj_pp (prettyname^"_p") b in
-      cobj_p
-  in
-
-  (*let quick_def_fn fname ret_type formals_types =
-    let ftype = L.function_type ret_type formals_types in
-    let the_function = L.define_function fname ftype the_module in
-    let builder = L.builder_at_end context (L.entry_block the_function) in
-    (the_function, ftype, builder)
-    *)
-
-  (* define lookup functions like lltype of typ and lookup for CType of typ or something *)
-
-  let boilerplate_binop data_type fn b =
-      let formals_llvalues = (Array.to_list (L.params fn)) in
-      let [ remote_self_p; remote_other_p ] = formals_llvalues in
-
-      (* boilerplate *)
-      let self_p = boilerplate_till_load remote_self_p "self_p" b in
-      let other_p = boilerplate_till_load remote_other_p "other_p" b in
-
-      (* get data *)
-      let self_data = build_getdata_cobj data_type self_p b in
-      let other_data = build_getdata_cobj data_type other_p b in
-      (self_data, other_data)
-  in
-  
-  let boilerplate_uop data_type fn b =
-      let formals_llvalues = (Array.to_list (L.params fn)) in
-      let [ remote_self_p ] = formals_llvalues in
-
-      (* boilerplate *)
-      let self_p = boilerplate_till_load remote_self_p "self_p" b in
-
-      (* get data *)
-      let self_data = build_getdata_cobj data_type self_p b in
-      (self_data)
-  in
-
   let get_t = function
     | "int" -> int_t
     | "float" -> float_t
@@ -332,37 +248,130 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 		 in (t, bops)) typs
        in
 
-    (* define the default CTypes *)
-    let [ctype_int; ctype_float; ctype_bool; ctype_char] =
-  	  List.map (fun (t, bops) -> L.define_global ("ctype_" ^ t) (L.const_named_struct ctype_t (Array.of_list (List.map (function
-  	    | Some op -> (match op with
-  	       | BOprt((fn, bd), i, f, b, c) -> fn
-  	       | BUoprt((fn, bd), i, f, b, c) -> fn)
-  	    | None -> L.const_pointer_null ctype_add_pt (* this seems hacky *)) bops))) the_module) built_ops in
+  (* define the default CTypes *)
+  let [ctype_int; ctype_float; ctype_bool; ctype_char] =
+  	List.map (fun (t, bops) -> L.define_global ("ctype_" ^ t) (L.const_named_struct ctype_t (Array.of_list (List.map (function
+  	  | Some op -> (match op with
+  	     | BOprt((fn, bd), i, f, b, c) -> fn
+  	     | BUoprt((fn, bd), i, f, b, c) -> fn)
+  	  | None -> L.const_pointer_null ctype_add_pt (* this seems hacky *)) bops))) the_module) built_ops in
 
-    List.iter (fun (t, bops) -> List.iter (function
-      | Some op -> (match op with
-         | BOprt((fn, bd), i, f, b, c) ->
-            let (tfn, tp) = match t with
-	          | "int" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_add, int_t)) i
-	          | "float" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_add), int_t) f
-	          | "bool" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_add, int_t)) b
-	          | "char" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_add, int_t)) c in
-	  	    let (self_data, other_data) = boilerplate_binop (get_t t) fn bd in
-	  	    let result_data = tfn self_data other_data "result_data" bd in
-		    let result = build_new_cobj_init tp result_data bd in
-		    ignore(L.build_ret result bd)
-         | BUoprt((fn, bd), i, f, b, c) ->
-            let (tfn, tp) = match t with
-	          | "int" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_neg, int_t)) i
-	          | "float" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_neg, int_t)) f
-	          | "bool" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_neg, int_t)) b
-	          | "char" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_neg, int_t)) c in
-	  	    let (self_data) = boilerplate_uop (get_t t) fn bd in
-	  	    let result_data = tfn self_data "result_data" bd in
-		    let result = build_new_cobj_init tp result_data bd in
-		    ignore(L.build_ret result bd))
-	  | None -> ()) bops) built_ops;
+  let ctype_of_datatype = function
+  	  | int_t -> ctype_int
+  	  | float_t -> ctype_float
+      | bool_t -> ctype_bool
+      | char_t -> ctype_char
+    in
+
+  (* here's how you go from a cobj to the data value: *)
+  let build_getdata_cobj data_type cobj_p b =  (* data_type = int_t etc *)
+    (*let x1 = L.build_load (lookup_global_binding "a") "x1" b in*)
+    let x2 = L.build_struct_gep cobj_p cobj_data_idx "x2" b in
+    let x3 = L.build_load x2 "x3" b in
+    let x4 = L.build_bitcast x3 (L.pointer_type data_type) "x4" b in
+    let data = L.build_load x4 "data" b in
+    data
+  in
+
+  let build_getctypefn_cobj ctype_fn_idx cobj_p b =
+    let x2 = L.build_struct_gep cobj_p cobj_type_idx "x2" b in
+    let x3 = L.build_load x2 "x3" b in  (* x3: ctype_pt *)
+    let x4 = L.build_struct_gep x3 ctype_fn_idx "x4" b in
+    let fn_ptr = L.build_load x4 "fn_ptr" b in
+    fn_ptr
+  in
+
+  (** define helper functions for commonly used code snippets **)
+  let build_new_cobj data_type builder =
+    (* malloc the new object and its data *)
+    let objptr = L.build_malloc cobj_t "__new_objptr" builder in (* objptr: cobj_t* *)
+    let dataptr = L.build_malloc data_type "__new_dataptr" builder in
+    let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" builder in
+    let ctypefieldptr = L.build_struct_gep objptr cobj_type_idx "ctypefieldptr" builder in
+    ignore(L.build_store (ctype_of_datatype data_type) ctypefieldptr builder);
+
+    (* store the data ptr in the object *)
+    let datafieldptr = L.build_struct_gep objptr cobj_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
+    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in
+    ignore(L.build_store dataptr_as_i8ptr datafieldptr_as_i8ptrptr builder);
+
+    (objptr, dataptr)
+  in
+
+  let build_new_cobj_init data_type value b =
+      let (objptr,dataptr) = build_new_cobj data_type b in
+      ignore(L.build_store value dataptr b);
+      objptr
+  in
+
+  (** manually making the ctype_ functions **)
+  (* does alloca, store, then load *)  (* note you should not use this if youre not using the values right away !!!!!! TODO note! *)
+  let boilerplate_till_load remote_cobj_p prettyname b =
+      ignore(L.set_value_name ("remote_"^prettyname) remote_cobj_p);
+      let cobj_pp = L.build_alloca cobj_pt (prettyname^"_p") b in
+      ignore(L.build_store remote_cobj_p cobj_pp b);
+      let cobj_p = L.build_load cobj_pp (prettyname^"_p") b in
+      cobj_p
+  in
+
+  (*let quick_def_fn fname ret_type formals_types =
+    let ftype = L.function_type ret_type formals_types in
+    let the_function = L.define_function fname ftype the_module in
+    let builder = L.builder_at_end context (L.entry_block the_function) in
+    (the_function, ftype, builder)
+    *)
+
+  (* define lookup functions like lltype of typ and lookup for CType of typ or something *)
+
+  let boilerplate_binop data_type fn b =
+      let formals_llvalues = (Array.to_list (L.params fn)) in
+      let [ remote_self_p; remote_other_p ] = formals_llvalues in
+
+      (* boilerplate *)
+      let self_p = boilerplate_till_load remote_self_p "self_p" b in
+      let other_p = boilerplate_till_load remote_other_p "other_p" b in
+
+      (* get data *)
+      let self_data = build_getdata_cobj data_type self_p b in
+      let other_data = build_getdata_cobj data_type other_p b in
+      (self_data, other_data)
+  in
+
+  let boilerplate_uop data_type fn b =
+      let formals_llvalues = (Array.to_list (L.params fn)) in
+      let [ remote_self_p ] = formals_llvalues in
+
+      (* boilerplate *)
+      let self_p = boilerplate_till_load remote_self_p "self_p" b in
+
+      (* get data *)
+      let self_data = build_getdata_cobj data_type self_p b in
+      (self_data)
+  in
+
+  List.iter (fun (t, bops) -> List.iter (function
+    | Some op -> (match op with
+       | BOprt((fn, bd), i, f, b, c) ->
+          let (tfn, tp) = match t with
+	        | "int" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_add, int_t)) i
+	        | "float" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_add), int_t) f
+	        | "bool" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_add, int_t)) b
+	        | "char" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_add, int_t)) c in
+	  	  let (self_data, other_data) = boilerplate_binop (get_t t) fn bd in
+	  	  let result_data = tfn self_data other_data "result_data" bd in
+		  let result = build_new_cobj_init tp result_data bd in
+		  ignore(L.build_ret result bd)
+       | BUoprt((fn, bd), i, f, b, c) ->
+          let (tfn, tp) = match t with
+	        | "int" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_neg, int_t)) i
+	        | "float" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_neg, int_t)) f
+	        | "bool" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_neg, int_t)) b
+	        | "char" -> (function Some(tfn, tp) -> (tfn, tp) | None -> (L.build_neg, int_t)) c in
+	  	  let (self_data) = boilerplate_uop (get_t t) fn bd in
+	  	  let result_data = tfn self_data "result_data" bd in
+		  let result = build_new_cobj_init tp result_data bd in
+		  ignore(L.build_ret result bd))
+	| None -> ()) bops) built_ops;
 
   (** allocate for all the bindings and put them in a map **)
   let build_binding_list_global coral_names =   (* coral_names: string list *)  (* returns a stringmap coral_name -> llvalue *)
