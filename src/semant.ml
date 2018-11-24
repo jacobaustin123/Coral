@@ -52,7 +52,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
               let (map1, bind2) = check_assign map' data b in (map, map1, (bind2 :: bindout), (e' :: exprout))
 
           in let (_, map1, bindout, exprout) = (List.fold_left2 aux (map, map, [], []) args exprs) in
-          let (map2, block, data, locals) = (func_stmt map map1 TypeMap.empty c) in
+          let (map2, block, data, locals) = (func_stmt map map1 TypeMap.empty false c) in
           match data with
             | Some (typ2, e', d) -> let Bind(name, btype) = n in 
                 if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
@@ -77,8 +77,8 @@ let rec expr map = function (* evaluate expressions, return types and add to map
 
 (* checks expressions within functions. differs from expr in how  it handles function calls *)
 
-and func_expr globals locals stack = function (* evaluate expressions, return types and add to map *)
-  | Unop(op, e) -> let (typ, e', _) = func_expr globals locals stack e in (match typ with
+and func_expr globals locals stack flag = function (* evaluate expressions, return types and add to map *)
+  | Unop(op, e) -> let (typ, e', _) = func_expr globals locals stack flag e in (match typ with
       | Dyn -> (Dyn, SUnop(op, e'), None)
       | _ -> (match op with
         | Neg when typ = Int || typ = Float || typ = Bool -> (typ, SUnop(op, e'), None)
@@ -86,7 +86,7 @@ and func_expr globals locals stack = function (* evaluate expressions, return ty
         | _ -> raise (Failure ("STypeError: bad operand type for unary " ^ unop_to_string op ^ ": '" ^ type_to_string typ ^ "'"))
       ))
 
-  | Binop(a, op, b) -> let (t1, e1, _) = func_expr globals locals stack a in let (t2, e2, _) = func_expr globals locals stack b in (match (t1, t2) with (* will have to fix this later depending on behavior *)
+  | Binop(a, op, b) -> let (t1, e1, _) = func_expr globals locals stack flag a in let (t2, e2, _) = func_expr globals locals stack flag b in (match (t1, t2) with (* will have to fix this later depending on behavior *)
     | (Dyn, Dyn) | (Dyn, _) | (_, Dyn) -> (Dyn, SBinop(e1, op, e2), None)
     | _ -> let same = t1 = t2 in (match op with
       | Add | Sub | Mul | Exp when same && t1 = Int   -> (Int, SBinop(e1, op, e2), None)
@@ -106,9 +106,9 @@ and func_expr globals locals stack = function (* evaluate expressions, return ty
    (* complex function to do semantic checking for calls. makes sure arguments match types, 
    and then recursively checks given function with the given types *)
 
-  | Call(name, exprs) -> if not (StringMap.mem name locals) then 
-    raise (Failure ("SNameError: function not found.")) else
-      let (typ, t', decl, func) = StringMap.find name locals in 
+  | Call(name, exprs) -> 
+      let (typ, t', decl, func) = if not (StringMap.mem name locals) then if not flag then (* add flag, boolean condition here *)
+      raise (Failure ("SNameError: function not found.")) else (Dyn, Dyn, false, None) else StringMap.find name locals in 
       (match func with 
         | Some(Func(n, args, c)) -> if t' <> FuncType && typ <> Dyn then 
           (raise (Failure ("STypeError: cannot call variable"))) else
@@ -117,7 +117,7 @@ and func_expr globals locals stack = function (* evaluate expressions, return ty
                 raise (Failure ("SyntaxError: unexpected number of arguments in function call"))
 
           else let rec aux (globals, locals, bindout, exprout) v1 v2 = match v1, v2 with
-            | b, e -> let data = func_expr globals locals stack e in let (t', e', _) = data in 
+            | b, e -> let data = func_expr globals locals stack flag e in let (t', e', _) = data in 
             let (map1, bind2) = check_assign globals data b in (globals, map1, (bind2 :: bindout), (e' :: exprout))
 
           in let (_, map1, bindout, exprout) = (List.fold_left2 aux (globals, locals, [], []) args exprs) in
@@ -126,7 +126,7 @@ and func_expr globals locals stack = function (* evaluate expressions, return ty
           if TypeMap.mem (name, types) stack then (Dyn, (SCall(WeakBind(name, Dyn), [], SNop)), None) else
           let stack' = TypeMap.add (name, types) true stack in (* temporarily a boolean *)
           
-          let (map2, block, data, locals) = (func_stmt globals map1 stack' c) in
+          let (map2, block, data, locals) = (func_stmt globals map1 stack' flag c) in
           (match data with
             | Some (typ2, e', d) -> let Bind(name, btype) = n in if btype <> Dyn && btype <> typ2 then 
                 if typ2 <> Dyn then raise (Failure ("STypeError: invalid return type")) else 
@@ -141,8 +141,10 @@ and func_expr globals locals stack = function (* evaluate expressions, return ty
               (Null, (SCall(StrongBind(name, Null), (List.rev exprout), SFunc(func))), None)) (* TODO fix this somehow *)
 
         | None -> print_endline "SWarning: called weak/undefined function"; 
-            let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr locals e' in e' :: acc) [] exprs) in
+            let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals stack flag e' in e'' :: acc) [] exprs) in
             (Dyn, (SCall(WeakBind(name, Dyn), eout, SNop)), None)) (* TODO fix this somehow *)
+   
+    | Var(Bind(x, t)) -> if StringMap.mem x locals then let (typ, t', decl, data) = StringMap.find x locals in if decl then (t', SVar(StrongBind(x, t')), data) else (t', SVar(WeakBind(x, t')), None) else if flag then (Dyn, SVar(WeakBind(x, Dyn)), None) else raise (Failure ("SNameError: name '" ^ x ^ "' is not defined")) 
     | _ as other -> expr locals other
 
 (* function to check if a certain assignment can be performed with inferred/given types, does assignment if possible, returns appropriate bind *)
@@ -186,14 +188,14 @@ and check_array map e b = let (typ, e', data) = expr map e in match typ with
   stack is a TypeMap containing the function call stack 
 *)
 
-and check_func globals locals out data local_vars stack = (function  
+and check_func globals locals out data local_vars stack flag = (function  
   | [] -> ((List.rev out), data, locals, List.sort_uniq compare (List.rev local_vars))
-  | a :: t -> let (m', value, d, loc) = func_stmt globals locals stack a in (match (data, d) with
-      | (None, None) -> check_func globals m' (value :: out) None (loc @ local_vars) stack t
-      | (None, _) -> check_func globals m' (value :: out) d (loc @ local_vars) stack t
-      | (_, None) -> check_func globals m' (value :: out) data (loc @ local_vars) stack t
-      | (_, _) when d = data -> check_func globals m' (value :: out) data (loc @ local_vars) stack t
-      | _ -> check_func globals m' (value :: out) (Some (Dyn, SNoexpr, None)) (loc @ local_vars) stack t))
+  | a :: t -> let (m', value, d, loc) = func_stmt globals locals stack flag a in (match (data, d) with
+      | (None, None) -> check_func globals m' (value :: out) None (loc @ local_vars) stack flag t
+      | (None, _) -> check_func globals m' (value :: out) d (loc @ local_vars) stack flag t
+      | (_, None) -> check_func globals m' (value :: out) data (loc @ local_vars) stack flag t
+      | (_, _) when d = data -> check_func globals m' (value :: out) data (loc @ local_vars) stack flag t
+      | _ -> check_func globals m' (value :: out) (Some (Dyn, SNoexpr, None)) (loc @ local_vars) stack flag t))
 
 (* used to evaluate functions and handle return types. 
   will be used to handle closures too. 
@@ -203,10 +205,10 @@ and check_func globals locals out data local_vars stack = (function
   stack is a TypeMap containing the function stack 
 *)
 
-and func_stmt globals locals stack = function 
-  | Return(e) -> let data = func_expr globals locals stack e in let (typ, e', d) = data in (locals, SReturn(e'), (Some data), []) (* for closures, match t with FuncType, attach local scope *)
-  | Block(s) -> let (value, data, map', out) = check_func globals locals [] None [] stack s in (map', SBlock(value), data, out)
-  | Asn(binds, e) -> let data = func_expr globals locals stack e in let (typ, e', d) = data in
+and func_stmt globals locals stack flag = function 
+  | Return(e) -> let data = func_expr globals locals stack flag e in let (typ, e', d) = data in (locals, SReturn(e'), (Some data), []) (* for closures, match t with FuncType, attach local scope *)
+  | Block(s) -> let (value, data, map', out) = check_func globals locals [] None [] stack flag s in (map', SBlock(value), data, out)
+  | Asn(binds, e) -> let data = func_expr globals locals stack flag e in let (typ, e', d) = data in
     (match e with 
     | Var(Bind(x, t)) when StringMap.mem x locals -> 
         let info = StringMap.find x locals in
@@ -221,7 +223,7 @@ and func_stmt globals locals stack = function
           | a :: t -> let (m, x) = check_assign locals data a in let Bind(name, _) = a in (aux (m, x :: out) t)
         in let (m, out) = aux (locals, []) binds in (m, SAsn(out, e'), None, out))
 
-  | Expr(e) -> let (t, e', data) = func_expr globals locals stack e in (locals, SExpr(e'), None, [])
+  | Expr(e) -> let (t, e', data) = func_expr globals locals stack flag e in (locals, SExpr(e'), None, [])
   | Func(a, b, c) -> let rec dups = function (* check duplicate argument names *)
       | [] -> ()
       | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
@@ -229,9 +231,11 @@ and func_stmt globals locals stack = function
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in 
     let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) locals in 
 
-    let (map'', bind) = List.fold_left (fun (map, out) (Bind(x, t)) -> let (map', bind) = check_assign map (t, SNoexpr, None) (Bind(x, t)) in (map', bind :: out)) (map', []) b in
+    let semantmap = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) StringMap.empty in (* empty map for semantic checking *)
+
+    let (map'', bind) = List.fold_left (fun (map, out) (Bind(x, t)) -> let (map', bind) = check_assign map (t, SNoexpr, None) (Bind(x, t)) in (map', bind :: out)) (semantmap, []) b in
     let bindout = List.rev bind in
-    let (map2, block, data, locals) = (func_stmt map' map'' TypeMap.empty c) in
+    let (map2, block, data, locals) = (func_stmt map'' map'' TypeMap.empty true c) in
       (match data with
         | Some (typ2, e', d) -> let Bind(name, btype) = a in 
             if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
@@ -246,9 +250,9 @@ and func_stmt globals locals stack = function
           let func = { styp = Null; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
           (map', SFunc(func), None, [StrongBind(x, FuncType)]))
 
-  | If(a, b, c) -> let (typ, e', _) = func_expr globals locals stack a in 
-        let (map', value, data, out) = func_stmt globals locals stack b in 
-        let (map'', value', data', out') = func_stmt globals locals stack c in 
+  | If(a, b, c) -> let (typ, e', _) = func_expr globals locals stack flag a in 
+        let (map', value, data, out) = func_stmt globals locals stack flag b in 
+        let (map'', value', data', out') = func_stmt globals locals stack flag c in 
         if equals map' map'' then if data = data' then (map', SIf(e', value, value'), data, out) 
         else (map', SIf(e', value, value'), Some (Dyn, SNoexpr, None), out) else 
         let merged = merge map' map'' in if data = data' 
@@ -256,13 +260,13 @@ and func_stmt globals locals stack = function
         else (merged, SIf(e', value, value'), Some (Dyn, SNoexpr, None), out @ out')
 
   | For(a, b, c) -> let (m, x) = check_array locals b a in 
-        let (m', x', d, out) = func_stmt globals m stack c in 
-        let (typ, e', _) = func_expr globals m' stack b in 
+        let (m', x', d, out) = func_stmt globals m stack flag c in 
+        let (typ, e', _) = func_expr globals m' stack flag b in 
         if equals locals m' then (m', SFor(x, e', x'), d, out) else 
         let merged = merge locals m' in (merged, SFor(x, e', x'), Some (Dyn, SNoexpr, None), out)
 
-  | While(a, b) -> let (typ, e, data) = func_expr globals locals stack a in 
-        let (m', x', d, out) = func_stmt globals locals stack b in 
+  | While(a, b) -> let (typ, e, data) = func_expr globals locals stack flag a in 
+        let (m', x', d, out) = func_stmt globals locals stack flag b in 
         if equals locals m' then (m', SWhile(e, x'), d, out) else
         let merged = merge locals m' in (merged, SWhile(e, x'), Some (Dyn, SNoexpr, None), out)
 
@@ -287,9 +291,11 @@ and stmt map = function (* evaluates statements, can pass it a func *)
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in 
     let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) map in 
 
-    let (map'', bind) = List.fold_left (fun (map, out) (Bind(x, t)) -> let (map', bind) = check_assign map (t, SNoexpr, None) (Bind(x, t)) in (map', bind :: out)) (map', []) b in
+    let semantmap = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) StringMap.empty in (* empty map for semantic checking *)
+
+    let (map'', bind) = List.fold_left (fun (map, out) (Bind(x, t)) -> let (map', bind) = check_assign map (t, SNoexpr, None) (Bind(x, t)) in (map', bind :: out)) (semantmap, []) b in
     let bindout = List.rev bind in
-    let (map2, block, data, locals) = (func_stmt map' map'' TypeMap.empty c) in
+    let (map2, block, data, locals) = (func_stmt map'' map'' TypeMap.empty true c) in
       (match data with
         | Some (typ2, e', d) -> let Bind(name, btype) = a in 
             if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
