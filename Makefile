@@ -16,7 +16,7 @@ native:
 byte:
 	$(OCB) coral.byte
 
-test:
+test: 
 	./testall.sh
 
 # Building the tarball
