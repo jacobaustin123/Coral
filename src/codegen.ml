@@ -266,8 +266,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   	   Oprt("geq", Some((L.build_icmp L.Icmp.Sge), bool_t), Some((L.build_fcmp L.Fcmp.Uge), bool_t), Some((L.build_icmp L.Icmp.Sge), bool_t), Some((L.build_icmp L.Icmp.Sge), bool_t));
   	   Oprt("and", Some((L.build_and), int_t), None, Some((L.build_and), bool_t), Some((L.build_add), char_t));
        Oprt("or", Some((L.build_or), int_t), None, Some((L.build_or), bool_t), Some((L.build_or), char_t));
-  	   Uoprt("neg", Some((L.build_neg), int_t), Some((L.build_fneg), float_t), Some((L.build_neg), bool_t), None);
-  	   Uoprt("not", Some((L.build_not), int_t), None, Some((L.build_not), bool_t), Some((L.build_not), char_t));
+  	   Uoprt("neg", Some((L.build_neg), int_t), Some((L.build_fneg), float_t), Some((L.build_neg), bool_t), Some((L.build_neg), char_t));
+  	   Uoprt("not", Some((L.build_not), int_t), Some((L.build_fneg), float_t), Some((L.build_not), bool_t), Some((L.build_not), char_t));
        ] in
 
   	 List.map (fun t -> let bops = List.map (function
@@ -338,7 +338,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   	    | Some op -> (match op with
   	       | BOprt((fn, bd), i, f, b, c) -> fn
   	       | BUoprt((fn, bd), i, f, b, c) -> fn)
-  	    | None ->  L.define_function "operator_not_defined_for_type" (get_t t) the_module (* this seems hacky *)) bops))) the_module) built_ops in
+  	    | None -> L.const_pointer_null ctype_add_pt (* this seems hacky *)) bops))) the_module) built_ops in
 
     List.iter (fun (t, bops) -> List.iter (function
       | Some op -> (match op with
@@ -539,5 +539,5 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   ignore(L.build_ret (L.const_int int_t 0) main_builder);
 
 
-  L.dump_module the_module;
+  (* L.dump_module the_module; *)
   the_module  (* return the resulting llvm module with all code!! *)
