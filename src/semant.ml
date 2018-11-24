@@ -86,22 +86,26 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
         | _ -> raise (Failure ("STypeError: bad operand type for unary " ^ unop_to_string op ^ ": '" ^ type_to_string typ ^ "'"))
       ))
 
-  | Binop(a, op, b) -> let (t1, e1, _) = func_expr globals locals stack flag a in let (t2, e2, _) = func_expr globals locals stack flag b in (match (t1, t2) with (* will have to fix this later depending on behavior *)
-    | (Dyn, Dyn) | (Dyn, _) | (_, Dyn) -> (Dyn, SBinop(e1, op, e2), None)
-    | _ -> let same = t1 = t2 in (match op with
-      | Add | Sub | Mul | Exp when same && t1 = Int   -> (Int, SBinop(e1, op, e2), None)
-      | Add | Sub | Mul | Div | Exp when same && t1 = Float -> (Float, SBinop(e1, op, e2), None)
-      | Add | Sub | Mul | Div | Exp when same && t1 = Bool -> (Bool, SBinop(e1, op, e2), None)
-      | Add when same && t1 = String -> (String, SBinop(e1, op, e2), None)
-      | Sub | Mul | Div | Exp when t1 = String || t2 = String -> raise (Failure ("STypeError: unsupported operand type(s)"))
-      | Add | Sub | Mul | Div | Exp when t1 = Int || t1 = Float || t1 = Bool && t2 = Int || t2 = Float || t2 = Bool -> (Float, SBinop(e1, op, e2), None)
+  | Binop(a, op, b) -> 
+    let (t1, e1, _) = func_expr globals locals stack flag a in 
+    let (t2, e2, _) = func_expr globals locals stack flag b in 
+    let typexn = Failure ("STypeError: unsupported operand type(s) for binary " ^ binop_to_string op ^ ": '" ^ type_to_string t1 ^ "' and '" ^ type_to_string t2 ^ "'") in
 
-      | Eq | Neq | Less | Leq | Greater | Geq -> (Bool, SBinop(e1, op, e2), None) (* will have to fix later for strings *)
-      | And | Or when same && t1 = Bool -> (Bool, SBinop(e1, op, e2), None)
-      | Mul when is_arr t1 && t2 = Int -> (t1, SBinop(e1, op, e2), None)
-      | Add when same && is_arr t1 -> (t1, SBinop(e1, op, e2), None)
-      | _ -> raise (Failure ("STypeError: unsupported operand type(s)"))
-    ))
+    (match (t1, t2) with (* will have to fix this later depending on behavior *)
+      | (Dyn, Dyn) | (Dyn, _) | (_, Dyn) -> (Dyn, SBinop(e1, op, e2), None)
+      | _ -> let same = t1 = t2 in (match op with
+        | Add | Sub | Mul | Exp when same && t1 = Int   -> (Int, SBinop(e1, op, e2), None)
+        | Add | Sub | Mul | Div | Exp when same && t1 = Float -> (Float, SBinop(e1, op, e2), None)
+        | Add | Sub | Mul | Div | Exp when same && t1 = Bool -> (Bool, SBinop(e1, op, e2), None)
+        | Add when same && t1 = String -> (String, SBinop(e1, op, e2), None)
+        | Add | Sub | Mul | Div | Exp when t1 = Int || t1 = Float || t1 = Bool && t2 = Int || t2 = Float || t2 = Bool -> (Float, SBinop(e1, op, e2), None)
+
+        | Eq | Neq | Less | Leq | Greater | Geq -> (Bool, SBinop(e1, op, e2), None) (* will have to fix later for strings *)
+        | And | Or when same && t1 = Bool -> (Bool, SBinop(e1, op, e2), None)
+        | Mul when is_arr t1 && t2 = Int -> (t1, SBinop(e1, op, e2), None)
+        | Add when same && is_arr t1 -> (t1, SBinop(e1, op, e2), None)
+        | _ -> raise typexn    
+      ))
 
    (* complex function to do semantic checking for calls. makes sure arguments match types, 
    and then recursively checks given function with the given types *)

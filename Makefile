@@ -7,9 +7,13 @@ all: native
 
 clean:
 	$(OCB) -clean
+	rm -f *.log *.out *.diff
 
 native:
 	$(OCB) coral.native
 
 byte:
 	$(OCB) coral.byte
+
+test:
+	./testall.sh
