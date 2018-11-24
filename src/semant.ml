@@ -47,11 +47,11 @@ let rec expr map = function (* evaluate expressions, return types and add to map
           if List.length args <> param_length then
                 raise (Failure ("SSyntaxError: unexpected number of arguments in function call"))
 
-          else let rec aux (map, bindout, exprout) v1 v2 = match v1, v2 with
+          else let rec aux (map, map', bindout, exprout) v1 v2 = match v1, v2 with
             | b, e -> let data = expr map e in let (t', e', _) = data in 
-              let (map1, bind2) = check_assign map data b in (map1, (bind2 :: bindout), (e' :: exprout))
+              let (map1, bind2) = check_assign map' data b in (map, map1, (bind2 :: bindout), (e' :: exprout))
 
-          in let (map1, bindout, exprout) = (List.fold_left2 aux (map, [], []) args exprs) in
+          in let (_, map1, bindout, exprout) = (List.fold_left2 aux (map, map, [], []) args exprs) in
           let (map2, block, data, locals) = (func_stmt map map1 TypeMap.empty c) in
           match data with
             | Some (typ2, e', d) -> let Bind(name, btype) = n in 
