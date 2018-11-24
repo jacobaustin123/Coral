@@ -29,11 +29,14 @@ let specs =
 let float_of_bool b = if b then 1.0 else 0.0 
 ;;
 
+exception Runtime of string
+;;
+
 (* combine two lists, used to match the argument names and their values *)
 let rec zip lst1 lst2 = match lst1,lst2 with 
   | [], [] -> []
-  | [],_::_-> raise (Failure "TypeError: invalid arguments passed to function!")
-  | _::_, []-> raise (Failure "TypeError: invalid arguments passed to function!")
+  | [],_::_-> raise (Runtime "TypeError: invalid arguments passed to function!")
+  | _::_, []-> raise (Runtime "TypeError: invalid arguments passed to function!")
   | (x::xs),(y::ys) -> (x, y) :: (zip xs ys)
 
 (* expr -> (float, map), used to evaluate expressions *)
@@ -42,9 +45,9 @@ let rec eval_expr map = function
      | FloatLit(y) -> (y, map)
      | IntLit(y) -> (float_of_int y, map)
      | BoolLit(y) -> (float_of_bool y, map)
-     | StringLit(_) -> raise (Failure "NotImplementedError: Strings have not yet been implemented!");
+     | StringLit(_) -> raise (Runtime "NotImplementedError: Strings have not yet been implemented!");
    )
-  | List(x) -> (raise (Failure "NotImplementedError: Lists have not yet been implemented!"); )
+  | List(x) -> (raise (Runtime "NotImplementedError: Lists have not yet been implemented!"); )
   | Var(Bind(x, _)) -> (try let Expr(v) = (StringMap.find x map) in eval_expr map v with Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" x; flush stdout; raise Not_found)
   | Unop(op, v) -> let (v1, m1) = eval_expr map v in
       (match op with
@@ -54,8 +57,8 @@ let rec eval_expr map = function
                             let zipped = zip a args in let m1 = List.fold_left add_to_map map zipped in 
                             let (v2, _) = eval_stmt m1 ex in (v2, map) with 
                             Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" name; flush stdout; raise Not_found) (* raise (Failure "NotImplementedError: Functions have not yet been implemented"); *)
-  | Method(_, _, _) -> raise (Failure "NotImplementedError: Methods have not yet been implemented!");
-  | Field(_, _) -> raise (Failure "NotImplementedError: Fields have not yet been implemented!");
+  | Method(_, _, _) -> raise (Runtime "NotImplementedError: Methods have not yet been implemented!");
+  | Field(_, _) -> raise (Runtime "NotImplementedError: Fields have not yet been implemented!");
   | Binop(e1, op, e2) ->
 
 let (v1, m1) = eval_expr map e1 in let (v2, m2) = eval_expr m1 e2 in
@@ -82,10 +85,10 @@ and add_to_map map = function
 and eval_stmt map = function 
   | Block(a) -> main map 0.0 a                                     
   | Func(Bind(a, t), b, c) -> let m1 = (StringMap.add a (Func(Bind(a, t), b, c)) map) in (0.0, m1) (* raise (Failure "NotImplementedError: Functions have not yet been implemented");        *)(*string * string list * stmt list*)                                         (* stmt list *)
-  | Class(a, b) -> raise (Failure "NotImplementedError: Classes have not yet been implemented!"); 
+  | Class(a, b) -> raise (Runtime "NotImplementedError: Classes have not yet been implemented!"); 
   | Expr(a) -> let (x, m1) = eval_expr map a in (x, m1)                                                                              (* expr *)          
   | If(a, b, c) -> let (x, m1) = eval_expr map a in if x = 1.0 then eval_stmt m1 b else eval_stmt m1 c (* raise (Failure "NotImplementedError: If statements have not yet been implemented"); *)     (* expr * stmt * stmt *)
-  | For(Bind(a, t), b, c) -> raise (Failure "NotImplementedError: For loops have not yet been implemented!");        (* string * expr * expr *)
+  | For(Bind(a, t), b, c) -> raise (Runtime "NotImplementedError: For loops have not yet been implemented!");        (* string * expr * expr *)
   | While(a, b) -> let rec recurse map = let (x, m1) = eval_expr map a in if x = 1.0 then let (x1, m2) = eval_stmt m1  b in recurse m2 else (0.0, map) in recurse map                                          (*raise (Failure "NotImplementedError: While loops have not yet been implemented"); *)      (* expr * stmt *)
   | Return(a) ->  eval_expr map a;       (* expr *)
   | Asn(names, v) -> let (v1, m1) = eval_expr map v in let m2 = List.fold_left (fun m (Bind(name, _)) -> StringMap.add name (Expr(Lit(FloatLit(v1)))) m) m1 names in (v1, m2)
@@ -192,7 +195,7 @@ let indent tokens base current =
     | a :: t -> (* Printf.printf "indent level: %d (%s)\n" curr (print a); *) if Stack.top stack = curr then aux curr t (a::out) stack (* do nothing, continue with next character *)
       else if Stack.top stack > curr then let _ = Stack.pop stack in aux curr (a :: t) (Parser.DEDENT :: out) stack (* if dedented, pop off the stack and add a DEDENT token *)
       else if curr = (Stack.top stack) + 1 then let _ = Stack.push curr stack in aux curr (a :: t) (Parser.INDENT :: out) stack (* if indented by one, push onto the stack and add an indent token *)
-      else raise (Failure "SyntaxError: invalid indentation detected!"); (* else raise an error *)
+      else raise (Failure "SSyntaxError: invalid indentation detected!"); (* else raise an error *)
   in aux current tokens [] base
 ;;
 
@@ -226,12 +229,13 @@ let rec loop map smap =
     (* let _ = if !debug = 1 then print_endline ("PROGRAM:\n" ^ (string_of_program program)) in (* print debug messages *) *)
     let (sast, smap') = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
     let _ = if !debug = 1 then print_endline ("SPROGRAM:\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
-    (* let (result, mymap) = main map 0.0 program in print_endline (string_of_float result);  *)
+    (* let (result, mymap) = main map 0.0 program in print_endline (string_of_float result); flush stdout; loop mymap smap' *)
     flush stdout; loop map smap'
   with
     | Not_found -> loop map smap
     | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; loop map smap
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map smap
+    | Runtime explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map smap
 ;;
 
 let rec file map smap fname run = (* todo combine with loop *)

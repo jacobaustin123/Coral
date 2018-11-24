@@ -18,7 +18,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
       | _ -> (match op with
         | Neg when typ = Int || typ = Float || typ = Bool -> (typ, SUnop(op, e'), None)
         | Not -> (typ, SUnop(op, e'), None)
-        | _ -> raise (Failure ("STypeError: bad operand type for unary " ^ unop_to_string op ^ ": '" ^ type_to_string typ ^ "'"))
+        | _ -> raise (Failure ("STypeError: unsupported operand type for unary " ^ unop_to_string op ^ ": '" ^ type_to_string typ ^ "'"))
       ))
 
   | Binop(a, op, b) -> let (t1, e1, _) = expr map a in let (t2, e2, _) = expr map b in (match (t1, t2) with (* will have to fix this later depending on behavior *)
@@ -28,15 +28,13 @@ let rec expr map = function (* evaluate expressions, return types and add to map
       | Add | Sub | Mul | Div | Exp when same && t1 = Float -> (Float, SBinop(e1, op, e2), None)
       | Add | Sub | Mul | Div | Exp when same && t1 = Bool -> (Bool, SBinop(e1, op, e2), None)
       | Add when same && t1 = String -> (String, SBinop(e1, op, e2), None)
-      | Sub | Mul | Div | Exp when t1 = String || t2 = String -> raise (Failure ("STypeError: unsupported operand type(s)"))
-
       | Add | Sub | Mul | Div | Exp when t1 = Int || t1 = Float || t1 = Bool && t2 = Int || t2 = Float || t2 = Bool -> (Float, SBinop(e1, op, e2), None)
 
       | Eq | Neq | Less | Leq | Greater | Geq -> (Bool, SBinop(e1, op, e2), None) (* will have to fix later for strings *)
       | And | Or when same && t1 = Bool -> (Bool, SBinop(e1, op, e2), None)
       | Mul when is_arr t1 && t2 = Int -> (t1, SBinop(e1, op, e2), None)
       | Add when same && is_arr t1 -> (t1, SBinop(e1, op, e2), None)
-      | _ -> raise (Failure ("STypeError: unsupported operand type(s)"))
+      | _ -> raise (Failure ("STypeError: unsupported operand type(s) for binary " ^ binop_to_string op ^ ": '" ^ type_to_string t1 ^ "' and '" ^ type_to_string t2 ^ "'"))
     ))
 
   | Call(name, exprs) -> if not (StringMap.mem name map) then 
@@ -47,7 +45,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
           (raise (Failure ("STypeError: cannot call variable"))) else
           let param_length = List.length exprs in
           if List.length args <> param_length then
-                raise (Failure ("SyntaxError: unexpected number of arguments in function call"))
+                raise (Failure ("SSyntaxError: unexpected number of arguments in function call"))
 
           else let rec aux (map, bindout, exprout) v1 v2 = match v1, v2 with
             | b, e -> let data = expr map e in let (t', e', _) = data in 
@@ -69,7 +67,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
               let func = { styp = Null; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in
               (Null, (SCall(StrongBind(name, Null), (List.rev exprout), SFunc(func))), None)
 
-        | None -> print_endline "SWarning: called weak/undefined function"; 
+        | None -> print_endline "SWarning: called weak/undefined function"; (* TODO probably not necessary *)
             let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr map e' in e' :: acc) [] exprs) in
             (Dyn, (SCall(WeakBind(name, Dyn), eout, SNop)), None)) (* TODO fix this somehow *)
 
