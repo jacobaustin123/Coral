@@ -1,8 +1,10 @@
-def foo():
-	def bar():
-		return 5
-	
-	return bar
+def foo(a, b):
+	return a
 
-a = foo()
-b = a()
+def call(f):
+	k = 66
+	z = f(k, 1)
+	return z
+
+result = call(foo)
+

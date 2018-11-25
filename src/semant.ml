@@ -122,11 +122,11 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
           if List.length args <> param_length then
                 raise (Failure ("SyntaxError: unexpected number of arguments in function call"))
 
-          else let rec aux (globals, locals, bindout, exprout) v1 v2 = match v1, v2 with
+          else let rec aux (globals, locals, bindout, exprout) v1 v2 = match v1, v2 with 
             | b, e -> let data = func_expr globals locals stack flag e in let (t', e', _) = data in 
-            let (map1, bind2) = check_assign globals data b in (globals, map1, (bind2 :: bindout), (e' :: exprout))
+            let (map1, bind2) = check_assign globals data b in (map1, locals, (bind2 :: bindout), (e' :: exprout))
 
-          in let (_, map1, bindout, exprout) = (List.fold_left2 aux (globals, locals, [], []) args exprs) in
+          in let (map1, _, bindout, exprout) = (List.fold_left2 aux (globals, locals, [], []) args exprs) in
           
           let (formals, types) = split_sbind bindout in 
           if TypeMap.mem (name, types) stack then (Dyn, (SCall(WeakBind(name, Dyn), [], SNop)), None) else

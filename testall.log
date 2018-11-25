@@ -1,0 +1,50 @@
+
+###### Testing stest-add1
+./coral.native -c tests/stest-add1.cl > stest-add1.out
+diff -b stest-add1.out tests/stest-add1.out > stest-add1.diff
+###### SUCCESS
+
+###### Testing stest-func
+./coral.native -c tests/stest-func.cl > stest-func.out
+diff -b stest-func.out tests/stest-func.out > stest-func.diff
+###### SUCCESS
+
+###### Testing stest-func2
+./coral.native -c tests/stest-func2.cl > stest-func2.out
+diff -b stest-func2.out tests/stest-func2.out > stest-func2.diff
+###### SUCCESS
+
+###### Testing stest-func3
+./coral.native -c tests/stest-func3.cl > stest-func3.out
+diff -b stest-func3.out tests/stest-func3.out > stest-func3.diff
+###### SUCCESS
+
+###### Testing stest-gcd
+./coral.native -c tests/stest-gcd.cl > stest-gcd.out
+diff -b stest-gcd.out tests/stest-gcd.out > stest-gcd.diff
+###### SUCCESS
+
+###### Testing stest-type1
+./coral.native -c tests/stest-type1.cl > stest-type1.out
+diff -b stest-type1.out tests/stest-type1.out > stest-type1.diff
+###### SUCCESS
+
+###### Testing stest-type2
+./coral.native -c tests/stest-type2.cl > stest-type2.out
+diff -b stest-type2.out tests/stest-type2.out > stest-type2.diff
+###### SUCCESS
+
+###### Testing sfail-func1
+./coral.native -c tests/sfail-func1.cl > sfail-func1.out
+diff -b sfail-func1.out tests/sfail-func1.out > sfail-func1.diff
+###### SUCCESS
+
+###### Testing sfail-type1
+./coral.native -c tests/sfail-type1.cl > sfail-type1.out
+diff -b sfail-type1.out tests/sfail-type1.out > sfail-type1.diff
+###### SUCCESS
+
+###### Testing sfail-type2
+./coral.native -c tests/sfail-type2.cl > sfail-type2.out
+diff -b sfail-type2.out tests/sfail-type2.out > sfail-type2.diff
+###### SUCCESS
