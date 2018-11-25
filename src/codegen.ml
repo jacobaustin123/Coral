@@ -20,6 +20,8 @@ open Sast
 module StringMap = Map.Make(String)
 let pt some_lltype = Printf.printf ";%s%s\n" "---->" (L.string_of_lltype some_lltype)
 let pv some_llvalue = Printf.printf ";%s%s\n" "---->" (L.string_of_llvalue some_llvalue)
+let tst() = Printf.eprintf "!!!!!!!!!!";()
+let tstp str = Printf.eprintf "%s\n" str;()
 
 type oprt =
   | Oprt of
@@ -72,6 +74,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   (* define cobj and ctype structs *)
   let cobj_t = L.named_struct_type context "CObj" in (*define a named struct*)
   let cobj_pt = L.pointer_type cobj_t in
+  let cobj_ppt = L.pointer_type cobj_pt in
+
+  (* all generic userdef functions follow this type *)
+  let userdef_fn_t = L.function_type cobj_pt [| cobj_ppt |] in   (* takes an argv *)
+  let userdef_fn_pt = L.pointer_type userdef_fn_t in
 
   (* define some global values like idxs in ctype and cobj *)
   (* cobj idxs *)
@@ -94,7 +101,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   and ctype_or_idx = 12
   and ctype_neg_idx = 13
   and ctype_not_idx = 14
-  and num_ctype_idxs = 15 in (**must update when adding idxs! (tho not used anywhere yet)**)
+  and ctype_call_idx = 15
+  and num_ctype_idxs = 16 in (**must update when adding idxs! (tho not used anywhere yet)**)
 
   (* type sigs for fns in ctype *)
   let ctype_add_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
@@ -111,7 +119,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   and ctype_and_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
   and ctype_or_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
   and ctype_neg_t = L.function_type cobj_pt [| cobj_pt |]
-  and ctype_not_t = L.function_type cobj_pt [| cobj_pt |] in
+  and ctype_not_t = L.function_type cobj_pt [| cobj_pt |]
+  and ctype_call_t = L.function_type cobj_pt [| cobj_pt ; cobj_ppt |] in
+  
 
   (* type sigs for ptrs to fns in ctype *)
   let ctype_add_pt = L.pointer_type ctype_add_t
@@ -128,7 +138,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   and ctype_and_pt = L.pointer_type ctype_and_t
   and ctype_or_pt = L.pointer_type ctype_or_t
   and ctype_neg_pt = L.pointer_type ctype_neg_t
-  and ctype_not_pt = L.pointer_type ctype_not_t in
+  and ctype_not_pt = L.pointer_type ctype_not_t
+  and ctype_call_pt = L.pointer_type ctype_call_t in
 
   let ctype_t = L.named_struct_type context "CType" in (*define a named struct*)
   let ctype_pt = L.pointer_type ctype_t in
@@ -150,7 +161,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   	ctype_and_pt;
   	ctype_or_pt;
   	ctype_neg_pt;
-  	ctype_not_pt |] false);
+    ctype_not_pt;
+  	ctype_call_pt 
+  |] false);
 
   let build_ctype_fn fname ftype =   (* ftype = "ctype_add_t" etc *)
     let the_function = L.define_function fname ftype the_module in
@@ -250,11 +263,36 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
   (* define the default CTypes *)
   let [ctype_int; ctype_float; ctype_bool; ctype_char] =
-  	List.map (fun (t, bops) -> L.define_global ("ctype_" ^ t) (L.const_named_struct ctype_t (Array.of_list (List.map (function
+  	List.map (fun (t, bops) -> L.define_global ("ctype_" ^ t) (L.const_named_struct ctype_t (Array.of_list ((List.map (function
   	  | Some op -> (match op with
   	     | BOprt((fn, bd), i, f, b, c) -> fn
   	     | BUoprt((fn, bd), i, f, b, c) -> fn)
-  	  | None -> L.const_pointer_null ctype_add_pt (* this seems hacky *)) bops))) the_module) built_ops in
+    | None -> L.const_pointer_null ctype_add_pt (* this seems hacky *)) bops) @ ([L.const_pointer_null ctype_call_pt])))) the_module) built_ops in
+
+  (* Functions! *)
+
+  let (func_call_fn,func_call_b) = build_ctype_fn "func_call" ctype_call_t in
+
+  let ctype_func = L.define_global "ctype_func" (L.const_named_struct ctype_t [|
+        L.const_pointer_null ctype_add_pt; (* ctype_add_pt *)
+        L.const_pointer_null ctype_sub_pt; (* ctype_sub_pt *)
+        L.const_pointer_null ctype_mul_pt; (* ctype_mul_pt *)
+        L.const_pointer_null ctype_div_pt; (* ctype_div_pt *)
+        L.const_pointer_null ctype_exp_pt; (* ctype_exp_pt *)
+        L.const_pointer_null ctype_eq_pt; (* ctype_eq_pt *)
+        L.const_pointer_null ctype_neq_pt; (* ctype_neq_pt *)
+        L.const_pointer_null ctype_lesser_pt; (* ctype_lesser_pt *)
+        L.const_pointer_null ctype_leq_pt; (* ctype_leq_pt *)
+        L.const_pointer_null ctype_greater_pt; (* ctype_greater_pt *)
+        L.const_pointer_null ctype_geq_pt; (* ctype_geq_pt *)
+        L.const_pointer_null ctype_and_pt; (* ctype_and_pt *)
+        L.const_pointer_null ctype_or_pt; (* ctype_or_pt *)
+        L.const_pointer_null ctype_neg_pt; (* ctype_neg_pt *)
+        L.const_pointer_null ctype_not_pt; (* ctype_not_pt *)
+        func_call_fn; (* ctype_call_pt *)
+    |]) the_module in
+
+
 
   let ctype_of_datatype = function
   	  | int_t -> ctype_int
@@ -262,6 +300,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       | bool_t -> ctype_bool
       | char_t -> ctype_char
     in
+
+  let build_fnptr_of_cfo cobj_p b = 
+    let x2 = L.build_struct_gep cobj_p cobj_data_idx "x2" b in
+    let x3 = L.build_load x2 "x3" b in
+    let fnptr = L.build_bitcast x3 userdef_fn_pt "fnptr" b in
+    fnptr
+  in
 
   (* here's how you go from a cobj to the data value: *)
   let build_getdata_cobj data_type cobj_p b =  (* data_type = int_t etc *)
@@ -282,9 +327,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   in
 
   (** define helper functions for commonly used code snippets **)
+  let build_new_cobj_empty builder =   
+    let objptr = L.build_malloc cobj_t "__new_objptr" builder in (* objptr: cobj_pt* *)
+    let datafieldptr = L.build_struct_gep objptr cobj_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
+    let ctypefieldptr = L.build_struct_gep objptr cobj_type_idx "ctypefieldptr" builder in
+    (objptr,datafieldptr,ctypefieldptr)
+  in
+    
   let build_new_cobj data_type builder =
     (* malloc the new object and its data *)
-    let objptr = L.build_malloc cobj_t "__new_objptr" builder in (* objptr: cobj_t* *)
+    let objptr = L.build_malloc cobj_t "__new_objptr" builder in (* objptr: cobj_pt* *)
     let dataptr = L.build_malloc data_type "__new_dataptr" builder in
     let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" builder in
     let ctypefieldptr = L.build_struct_gep objptr cobj_type_idx "ctypefieldptr" builder in
@@ -373,6 +425,26 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 		  ignore(L.build_ret result bd))
 	| None -> ()) bops) built_ops;
 
+
+    (* Functions! *)
+    (* building __call__ for ctype_func *)
+        let (fn,b) = (func_call_fn,func_call_b) in
+          let formals_llvalues = (Array.to_list (L.params fn)) in
+          let [ remote_self_p ; remote_argv ] = formals_llvalues in
+          let self_p = boilerplate_till_load remote_self_p "self_p" b in
+
+          (* manual boilerplate for argv since it's not a cobj *)
+          ignore(L.set_value_name ("remote_argv") remote_argv);
+          let argv_p = L.build_alloca cobj_ppt "argv_p" b in
+          ignore(L.build_store remote_argv argv_p b);
+          let argv = L.build_load argv_p "argv" b in
+
+          let fn_p = build_fnptr_of_cfo self_p b in
+          let result = L.build_call fn_p [|argv|] "result" b in
+          ignore(L.build_ret result b);
+          
+        
+
   (** allocate for all the bindings and put them in a map **)
   let build_binding_list_global coral_names =   (* coral_names: string list *)  (* returns a stringmap coral_name -> llvalue *)
         List.fold_left (fun map name -> StringMap.add name (L.define_global name (L.const_pointer_null cobj_pt) the_module) map) StringMap.empty coral_names
@@ -425,9 +497,23 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   let r2 = L.build_call printf_func [| int_format_str ; x5 |] "printf" main_builder in
 *)
 
-  let lookup coral_name namespace = 
+  (* useful utility functions! *)
+  let name_of_sbind sbind = match sbind with
+      |WeakBind(name,_) |StrongBind(name,_) -> name
+  in
+  let names_of_sbindlist sbindlist =
+    List.map name_of_sbind sbindlist
+  in
+(* helper fn: seq 4 == [0;1;2;3] *)
+  let seq len =
+    let rec aux len acc =
+      if len<0 then acc else aux (len-1) (len::acc)
+    in aux (len-1) []
+  in
+
+  let lookup coral_name namespace = tstp coral_name;
       try StringMap.find coral_name namespace
-        with Not_found -> lookup_global_binding coral_name
+        with Not_found -> tstp "global"; lookup_global_binding coral_name
   in
 
   let int_format_str = L.build_global_stringptr "%d\n" "fmt" main_builder
@@ -443,6 +529,36 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     | SVar sbind -> (match sbind with
         |WeakBind (coral_name,_) | StrongBind (coral_name,_) -> L.build_load (lookup coral_name namespace) coral_name b
     )
+    | SCall(fname_sbind, arg_expr_list, sfdecl) ->
+            tstp "entering SCALL";
+        let argc = List.length arg_expr_list
+        (* eval the arg exprs *)
+        and llargs = List.map (expr b namespace) (List.rev arg_expr_list) in
+        let cobj_p_arr_t = L.array_type cobj_pt argc in
+        (* allocate stack space for argv *)
+        let argv_as_arr = L.build_alloca cobj_p_arr_t "argv_arr" b in
+        (* store llargs values in argv *)
+
+        let store_arg llarg idx =
+          let gep_addr = L.build_gep argv_as_arr [|L.const_int int_t 0; L.const_int int_t idx|] "arg" b in
+          ignore(L.build_store llarg gep_addr b);()
+        in
+
+        ignore(List.iter2 store_arg llargs (seq argc));
+        (*let argv_as_arr_filled = List.fold_left2 (fun arr llarg idx -> L.build_insertvalue arr llarg idx ("arg"^(string_of_int idx)) b ) argv_as_arr llargs (seq argc) in
+        *)
+        (*ignore(L.build_store (L.const_array cobj_pt (Array.of_list llargs)) argv_as_arr b);*)
+        let argv = L.build_bitcast argv_as_arr cobj_ppt "argv" b in
+
+        (* now we have argv! so we just need to get the fn ptr and call it *)
+        let fname = name_of_sbind fname_sbind in
+            tstp ("SCALL of "^fname);
+
+        let caller_cobj_p = L.build_load (lookup fname namespace) fname b in
+        let call_ptr = build_getctypefn_cobj ctype_call_idx caller_cobj_p b in
+        let result = L.build_call call_ptr [|caller_cobj_p;argv|] "result" b in
+            tstp "leaving SCALL";
+        result
     | SBinop(e1, op, e2) ->
       let e1' = expr b namespace e1
       and e2' = expr b namespace e2 in
@@ -483,15 +599,14 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     
   let the_function = main_function in   (** TEMP **)
 
+
   let rec stmt namespace b = function  (* namespace comes first bc never gets modified unless descending so it works better for fold_left in SBlock *)
       (*|SFuncDecl  (* later. do raw nonfunction stuff first *)*)
       |SBlock s -> List.fold_left (stmt namespace) b s
       |SExpr e ->  ignore(expr b namespace e); b
-      |SAsn (sbinds,e) ->
-        let e' = expr b namespace e in
-        List.iter
-          (fun sbind -> match sbind with
-          |WeakBind (name,_) | StrongBind (name,_) -> ignore(L.build_store e' (lookup name namespace) b)) sbinds; b
+      |SAsn (sbinds,e) -> (*L.dump_module the_module;*) tstp "entering asn";
+        let e' = expr b namespace e in tstp "passing checkpoint";
+        List.iter (fun sbind -> match sbind with |WeakBind (name,_) | StrongBind (name,_) -> ignore(L.build_store e' (lookup name namespace) b)) sbinds; tstp "leaving asn";b (**err in ignore() **)
       (*|SReturn  (* later *)*)
       |SNop -> b
       |SIf (predicate, then_stmt, else_stmt) ->
@@ -516,6 +631,60 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                       ignore(L.build_cond_br bool_val body_bb merge_bb pred_builder);  
                       L.builder_at_end context merge_bb  
     | SPrint e -> ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t (expr b namespace e) b) |] "printf" b); (*build_new_cobj_init int_t (L.const_int int_t 0) b;*) b
+    | SFunc sfdecl ->
+        (* outer scope work: point binding to new cfuncobj *)
+        let fname = sfdecl.sfname in
+        let the_function = L.define_function fname userdef_fn_t the_module in
+
+        (* manually design the fn object w proper data & type ptrs and put in bind *)
+        let _ = 
+          let (fn_obj,datafieldptr,ctypefieldptr) = build_new_cobj_empty b in
+          let dfp_as_fp = L.build_bitcast datafieldptr (L.pointer_type userdef_fn_pt) "dfp_as_fp" b in
+          ignore(L.build_store the_function dfp_as_fp b);  (* store fnptr *)
+          ignore(L.build_store ctype_func ctypefieldptr b);  (* store ctype ptr *)
+          (* store new object in appropriate binding *)
+          ignore(L.build_store fn_obj (lookup fname namespace) b)
+        in
+
+        let fn_b = L.builder_at_end context (L.entry_block the_function) in
+        (* update the namespace *)
+        let fn_namespace =
+          let local_names = names_of_sbindlist sfdecl.slocals
+          and formal_names = names_of_sbindlist sfdecl.sformals in
+          (*List.iter print_endline local_names;*)
+          let argc = List.length formal_names
+          and argv = Array.get (L.params the_function) 0 in (* argv is first/only arg *)
+          let cobj_p_arr_pt = L.pointer_type (L.array_type cobj_pt argc) in
+          let formals_arr_p = L.build_bitcast argv cobj_p_arr_pt "formals_arr_p" fn_b in
+          (* now formals_arr_p is a ptr to an array of cobj_ps which are the formals *)
+          let formals_arr = L.build_load formals_arr_p "formals_arr" fn_b in
+          (*let formal_co_pp_list = List.map (fun idx -> L.build_gep formals_arr_p [|0;idx|] ("arg"^(string_of_int idx)) fn_b in*)
+
+
+          (* Very important! the actual extraction of the formals from formals_arr *)
+          let formal_vals = List.map (fun idx -> L.build_extractvalue formals_arr idx ("arg"^(string_of_int idx)) fn_b) (seq argc)  in
+            (* now formal_vals is a list of co_ps *)
+
+          let add_formal namespace_wip name cobj_p =  (* alloc a formal *)
+              L.set_value_name name cobj_p;  (* cosmetic *)
+              let alloca = L.build_alloca cobj_pt name fn_b in
+              ignore(L.build_store cobj_p alloca fn_b);
+              StringMap.add name alloca namespace_wip
+          and add_local namespace_wip name =  (* alloc a local *)
+              let alloca = L.build_alloca cobj_pt name fn_b in
+              StringMap.add name alloca namespace_wip
+          in   (* pull in add_formal and add_local *)
+          let added_locals = List.fold_left add_local namespace local_names in
+          let added_formals = List.fold_left2 add_formal added_locals formal_names formal_vals
+          in added_formals  (* fn_namespace is now equal to this *)
+        in
+        (* build function body by calling stmt! *)
+        let build_return some_b = L.build_ret (build_new_cobj_init int_t (L.const_int int_t 69) some_b) some_b in
+        add_terminal (stmt fn_namespace fn_b sfdecl.sbody) build_return;b  (* SFunc() returns the original builder *)
+    | SReturn e ->
+            L.build_ret (expr b namespace e) b; b
+        
+
   in
   
 
@@ -524,7 +693,20 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   let ex = SIf(SLit(BoolLit(true)),SAsn([WeakBind("a",Dyn)],SLit(boolLit(42))),SNop) in
   let main_builder = stmt StringMap.empty main_builder ex in
 *)
+
+
   let main_builder = stmt StringMap.empty main_builder (SBlock(fst prgm)) in
+  (*
+  let f = (L.define_function "myfn" (L.function_type (L.void_type context) [||]) the_module) in
+  let myb = L.builder_at_end context (L.entry_block f) in
+  ignore(L.build_ret_void myb);
+  let main_builder = stmt StringMap.empty main_builder (SBlock(fst prgm)) in
+  let f = (L.define_function "myfn" (L.function_type (L.void_type context) [||]) the_module) in
+  let myb = L.builder_at_end context (L.entry_block f) in
+  ignore(L.build_ret_void myb);
+  *)
+
+
   (*
   let ex = SAsn([WeakBind("a",Dyn)],SLit(BoolLit(42))) in
   ignore(stmt StringMap.empty main_builder ex);
@@ -546,6 +728,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 *)
   
   ignore(L.build_ret (L.const_int int_t 0) main_builder);
+  (*L.dump_module the_module;*)
 
 
   (* L.dump_module the_module; *)

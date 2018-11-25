@@ -1,10 +1,14 @@
-.PHONY: all clean byte native
+.PHONY: all clean byte native fn
 
 OCB_FLAGS = -tag bin_annot -I src/getopt -I src -use-ocamlfind 
 OCB = ocamlbuild $(OCB_FLAGS)
 
-all: native 
+all: clean native 
 	./comp.sh llvm-test.cl
+
+fn: clean native
+	./coral.native -c fn-test.cl
+	
 
 clean:
 	$(OCB) -clean 

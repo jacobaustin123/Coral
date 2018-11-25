@@ -67,7 +67,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
               let func = { styp = Null; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in
               (Null, (SCall(StrongBind(name, Null), (List.rev exprout), SFunc(func))), None)
 
-        | None -> print_endline "SWarning: called weak/undefined function"; (* TODO probably not necessary *)
+        | None -> Printf.eprintf "SWarning: called weak/undefined function"; (* TODO probably not necessary *)
             let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr map e' in e' :: acc) [] exprs) in
             (Dyn, (SCall(WeakBind(name, Dyn), eout, SNop)), None) (* TODO fix this somehow *)
         | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation")))
@@ -140,7 +140,7 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
               let func = { styp = Null; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
               (Null, (SCall(StrongBind(name, Null), (List.rev exprout), SFunc(func))), None)) (* TODO fix this somehow *)
 
-        | None -> print_endline "SWarning: called weak/undefined function"; 
+        | None -> Printf.eprintf "SWarning: called weak/undefined function"; 
             let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals stack flag e' in e'' :: acc) [] exprs) in
             (Dyn, (SCall(WeakBind(name, Dyn), eout, SNop)), None)) (* TODO fix this somehow *)
    
