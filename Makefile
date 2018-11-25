@@ -8,6 +8,7 @@ all: clean native
 
 fn: clean native
 	./coral.native -c fn-test.cl
+	./comp.sh fn-test.cl
 	
 
 clean:

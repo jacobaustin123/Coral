@@ -18,10 +18,19 @@ open Ast
 open Sast
 
 module StringMap = Map.Make(String)
-let pt some_lltype = Printf.printf ";%s%s\n" "---->" (L.string_of_lltype some_lltype)
-let pv some_llvalue = Printf.printf ";%s%s\n" "---->" (L.string_of_llvalue some_llvalue)
+let pt some_lltype = Printf.eprintf "pt: %s%s\n" "---->" (L.string_of_lltype some_lltype)
+let pv some_llvalue = Printf.eprintf "pv: %s%s\n" "---->" (L.string_of_llvalue some_llvalue)
 let tst() = Printf.eprintf "!!!!!!!!!!";()
 let tstp str = Printf.eprintf "%s\n" str;()
+
+
+
+(*type state = (L.llvalue StringMap.t) * L.llvalue * L.llbuilder*)
+type state = {
+    namespace: L.llvalue StringMap.t;
+    func: L.llvalue;
+    b: L.llbuilder
+}
 
 type oprt =
   | Oprt of
@@ -58,6 +67,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   (* Create the LLVM compilation module boolo which
      we will generate code *)
   let the_module = L.create_module context "MicroC" in  (* the_module will hold all functs + global vars. its the highest level thing *)
+  let pm() = L.dump_module the_module in
 
   (* Get types from the context *)
   let int_t      = L.i32_type    context
@@ -472,11 +482,14 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       L.declare_function "printf" printf_t the_module in
 
 
-
-  (** setup main() where all the code will go **)
   let main_ftype = L.function_type int_t [||] in   (* ftype is the full llvm function signature *)
   let main_function = L.define_function "main" main_ftype the_module in
   let main_builder = L.builder_at_end context (L.entry_block main_function) in
+  let int_format_str = L.build_global_stringptr "%d\n" "fmt" main_builder
+  and float_format_str = L.build_global_stringptr "%g\n" "fmt" main_builder in 
+  let init_state:state = {namespace=StringMap.empty; func=main_function; b=main_builder} in
+
+  (** setup main() where all the code will go **)
 
   (*
   (* basic object creation test *)
@@ -516,10 +529,10 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         with Not_found -> tstp "global"; lookup_global_binding coral_name
   in
 
-  let int_format_str = L.build_global_stringptr "%d\n" "fmt" main_builder
-  and float_format_str = L.build_global_stringptr "%g\n" "fmt" main_builder in 
   
-  let rec expr b namespace e = match e with
+  let rec expr the_state e = 
+      let (namespace,the_function,b) = (the_state.namespace,the_state.func,the_state.b) in
+      match e with
     | SLit x -> (match x with
         | IntLit i -> build_new_cobj_init int_t (L.const_int int_t i) b
         | BoolLit i ->  build_new_cobj_init bool_t (L.const_int bool_t (if i then 1 else 0)) b
@@ -533,7 +546,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             tstp "entering SCALL";
         let argc = List.length arg_expr_list
         (* eval the arg exprs *)
-        and llargs = List.map (expr b namespace) (List.rev arg_expr_list) in
+        and llargs = List.map (expr the_state) (List.rev arg_expr_list) in
         let cobj_p_arr_t = L.array_type cobj_pt argc in
         (* allocate stack space for argv *)
         let argv_as_arr = L.build_alloca cobj_p_arr_t "argv_arr" b in
@@ -560,8 +573,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             tstp "leaving SCALL";
         result
     | SBinop(e1, op, e2) ->
-      let e1' = expr b namespace e1
-      and e2' = expr b namespace e2 in
+      let e1' = expr the_state e1
+      and e2' = expr the_state e2 in
       let fn_idx = match op with
         | Add      -> ctype_add_idx
         | Sub      -> ctype_sub_idx
@@ -579,7 +592,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       let fn_p = build_getctypefn_cobj fn_idx e1' b in
         L.build_call fn_p [| e1'; e2' |] "binop_result" b
     | SUnop(op, e) ->
-      let e' = expr b namespace e in
+      let e' = expr the_state e in
       let fn_idx = match op with
         | Neg      -> ctype_neg_idx
         | Not      -> ctype_not_idx in
@@ -591,46 +604,53 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
   in
 
-    let add_terminal builder instr = 
-      match L.block_terminator (L.insertion_block builder) with  
+    let add_terminal the_state instr = 
+      match L.block_terminator (L.insertion_block the_state.b) with  
 	    Some _ -> ()   (* do nothing if terminator is there *)
-      | None -> ignore (instr builder)
+      | None -> ignore (instr the_state.b)
     in   
-    
-  let the_function = main_function in   (** TEMP **)
 
+  let change_builder_state old_state b =
+      {namespace=old_state.namespace;func=old_state.func;b=b}
+  in
 
-  let rec stmt namespace b = function  (* namespace comes first bc never gets modified unless descending so it works better for fold_left in SBlock *)
+  let rec stmt the_state s =   (* namespace comes first bc never gets modified unless descending so it works better for fold_left in SBlock *)
+      let (namespace,the_function,b) = (the_state.namespace,the_state.func,the_state.b) in
+      match s with
       (*|SFuncDecl  (* later. do raw nonfunction stuff first *)*)
-      |SBlock s -> List.fold_left (stmt namespace) b s
-      |SExpr e ->  ignore(expr b namespace e); b
+      |SBlock s -> List.fold_left stmt the_state s
+      |SExpr e ->  ignore(expr the_state e); the_state
       |SAsn (sbinds,e) -> (*L.dump_module the_module;*) tstp "entering asn";
-        let e' = expr b namespace e in tstp "passing checkpoint";
-        List.iter (fun sbind -> match sbind with |WeakBind (name,_) | StrongBind (name,_) -> ignore(L.build_store e' (lookup name namespace) b)) sbinds; tstp "leaving asn";b (**err in ignore() **)
+        let e' = expr the_state e in tstp "passing checkpoint";
+        List.iter (fun sbind -> match sbind with |WeakBind (name,_) | StrongBind (name,_) -> ignore(L.build_store e' (lookup name namespace) b)) sbinds; tstp "leaving asn"; the_state
       (*|SReturn  (* later *)*)
-      |SNop -> b
+      |SNop -> the_state
       |SIf (predicate, then_stmt, else_stmt) ->
-         let bool_val = build_getdata_cobj bool_t (expr b namespace predicate) b in
+         let bool_val = build_getdata_cobj bool_t (expr the_state predicate) b in
          (*let bool_val = (L.const_bool bool_t 1) in*)
            let merge_bb = L.append_block context "merge" the_function in  
              let build_br_merge = L.build_br merge_bb in 
                let then_bb = L.append_block context "then" the_function in
-                 add_terminal (stmt namespace (L.builder_at_end context then_bb) then_stmt) build_br_merge;  
-                 let else_bb = L.append_block context "else" the_function in
-                   add_terminal (stmt namespace (L.builder_at_end context else_bb) else_stmt) build_br_merge;  (* same deal as with 'then' BB *)
+               let new_state = change_builder_state the_state (L.builder_at_end context then_bb) in
+                 add_terminal (stmt new_state then_stmt) build_br_merge;  
+               let else_bb = L.append_block context "else" the_function in
+               let new_state = change_builder_state the_state (L.builder_at_end context else_bb) in
+                 add_terminal (stmt new_state else_stmt) build_br_merge;  (* same deal as with 'then' BB *)
                    ignore(L.build_cond_br bool_val then_bb else_bb b);  
-                   L.builder_at_end context merge_bb
+                   let new_state = change_builder_state the_state (L.builder_at_end context merge_bb ) in new_state
       | SWhile (predicate, body) ->
           let pred_bb = L.append_block context "while" the_function in  
             ignore(L.build_br pred_bb b);  
               let body_bb = L.append_block context "while_body" the_function in  
-                add_terminal (stmt namespace (L.builder_at_end context body_bb) body)  (L.build_br pred_bb);  
+               let new_state = change_builder_state the_state (L.builder_at_end context body_bb) in
+                add_terminal (stmt new_state body)  (L.build_br pred_bb);  
                 let pred_builder = L.builder_at_end context pred_bb in  
-                  let bool_val = build_getdata_cobj bool_t (expr pred_builder namespace predicate) pred_builder in
+               let new_state = change_builder_state the_state (L.builder_at_end context pred_bb) in
+                  let bool_val = build_getdata_cobj bool_t (expr new_state predicate) pred_builder in
                     let merge_bb = L.append_block context "merge" the_function in  
                       ignore(L.build_cond_br bool_val body_bb merge_bb pred_builder);  
-                      L.builder_at_end context merge_bb  
-    | SPrint e -> ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t (expr b namespace e) b) |] "printf" b); (*build_new_cobj_init int_t (L.const_int int_t 0) b;*) b
+                      let new_state = change_builder_state the_state (L.builder_at_end context merge_bb ) in new_state
+    | SPrint e -> ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t (expr the_state e) b) |] "printf" b); (*build_new_cobj_init int_t (L.const_int int_t 0) b;*) the_state
     | SFunc sfdecl ->
         (* outer scope work: point binding to new cfuncobj *)
         let fname = sfdecl.sfname in
@@ -678,11 +698,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
           let added_formals = List.fold_left2 add_formal added_locals formal_names formal_vals
           in added_formals  (* fn_namespace is now equal to this *)
         in
+
+        let int_format_str = L.build_global_stringptr "%d\n" "fmt" fn_b
+        and float_format_str = L.build_global_stringptr "%g\n" "fmt" fn_b in 
+
         (* build function body by calling stmt! *)
         let build_return some_b = L.build_ret (build_new_cobj_init int_t (L.const_int int_t 69) some_b) some_b in
-        add_terminal (stmt fn_namespace fn_b sfdecl.sbody) build_return;b  (* SFunc() returns the original builder *)
+        let fn_state:state = {namespace=fn_namespace;func=the_function;b=fn_b} in
+        add_terminal (stmt fn_state sfdecl.sbody) build_return;the_state  (* SFunc() returns the original builder *)
     | SReturn e ->
-            L.build_ret (expr b namespace e) b; b
+            L.build_ret (expr the_state e) b; the_state
         
 
   in
@@ -694,8 +719,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   let main_builder = stmt StringMap.empty main_builder ex in
 *)
 
-
-  let main_builder = stmt StringMap.empty main_builder (SBlock(fst prgm)) in
+  let final_state = stmt init_state (SBlock(fst prgm)) in
   (*
   let f = (L.define_function "myfn" (L.function_type (L.void_type context) [||]) the_module) in
   let myb = L.builder_at_end context (L.entry_block f) in
@@ -727,8 +751,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   (*let r2 = L.build_call printf_func [| int_format_str ; x6 |] "printf" main_builder in*)
 *)
   
-  ignore(L.build_ret (L.const_int int_t 0) main_builder);
+  ignore(L.build_ret (L.const_int int_t 0) final_state.b);
   (*L.dump_module the_module;*)
+  pm();
 
 
   (* L.dump_module the_module; *)
