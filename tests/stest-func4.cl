@@ -7,4 +7,5 @@ def call(f):
 	return z
 
 result = call(foo)
+type(result)
 
