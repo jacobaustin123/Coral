@@ -275,7 +275,7 @@ let rec file map smap fname run = (* todo combine with loop *)
     else if !debug = 1 then print_endline ("Semantically Checked SAST:\n" ^ (string_of_sprogram sast)) (* print debug messages *)
 
   with
-    | Not_found -> loop map smap
+    | Not_found -> Printf.printf "NotFoundError: possibly caused by lexer!\n"; flush stdout
     | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout
 ;;
