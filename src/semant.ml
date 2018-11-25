@@ -56,7 +56,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
           in let (_, map1, bindout, exprout) = (List.fold_left2 aux (map, map, [], []) args exprs) in
           let (map2, block, data, locals) = (func_stmt map map1 TypeMap.empty false c) in
           match data with
-            | Some (typ2, e', d) -> let Bind(name, btype) = n in 
+            | Some (typ2, e', d) -> let Bind(n1, btype) = n in 
                 if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
                 raise (Failure ("STypeError: invalid return type")) else 
                 let func = { styp = btype; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
@@ -134,7 +134,7 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
           
           let (map2, block, data, locals) = (func_stmt globals map1 stack' flag c) in
           (match data with
-            | Some (typ2, e', d) -> let Bind(name, btype) = n in if btype <> Dyn && btype <> typ2 then 
+            | Some (typ2, e', d) -> let Bind(n1, btype) = n in if btype <> Dyn && btype <> typ2 then 
                 if typ2 <> Dyn then raise (Failure ("STypeError: invalid return type")) else 
                 let func = { styp = btype; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in
                 (btype, (SCall(WeakBind(name, btype), (List.rev exprout), SFunc(func))), d) else (* case where definite return type and Dynamic inferrence still has weak bind*)
