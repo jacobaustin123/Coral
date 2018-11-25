@@ -73,7 +73,7 @@ and string_of_sstmt = function
   | SWhile(e, s) -> "while " ^ string_of_sexpr e ^ ":\n" ^ string_of_sstmt s
   | SReturn(e) -> "return " ^ string_of_sexpr e ^ "\n"
   | SClass(b, s) -> "class " ^ ((function | StrongBind(s, t) -> s | WeakBind(s, t) -> s) b ^ ":\n" ^ string_of_sstmt s)
-  | SAsn(bl, e) -> String.concat ", " (List.map string_of_sbind bl) ^ " = "  ^ string_of_sexpr e
+  | SAsn(bl, e) -> String.concat ", " (List.map string_of_sbind bl) ^ " = "  ^ string_of_sexpr e ^ "\n"
   (* | SFuncDecl(b, bl, s) -> "def " ^ string_of_bind b ^ "(" ^ String.concat ", " (List.map string_of_bind bl) ^ ")\n" ^ string_of_stmt s *)
   | SNop -> ""
 
