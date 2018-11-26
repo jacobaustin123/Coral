@@ -277,7 +277,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   	  | Some op -> (match op with
   	     | BOprt((fn, bd), i, f, b, c) -> fn
   	     | BUoprt((fn, bd), i, f, b, c) -> fn)
-    | None -> L.const_pointer_null ctype_add_pt (* this seems hacky *)) bops) @ ([L.const_pointer_null ctype_call_pt])))) the_module) built_ops in
+    | None -> L.const_pointer_null ctype_add_pt (* this seems hacky *)) bops) (*this is jank*) @ ([L.const_pointer_null ctype_call_pt])))) the_module) built_ops in
 
   (* Functions! *)
 

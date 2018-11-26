@@ -1,4 +1,13 @@
 
+def fib(n):
+	if n>1: #idk if this is right lol
+		return fib(n-1) + fib(n-2)
+	else:
+		return 1
+
+print(fib(3))
+
+
 def id(a,b):
 	return a
 
@@ -103,7 +112,23 @@ def boi(a):
 print(boi(1))
 print(boi(1))
 
+def boi(a):
+	return a
 
+print(boi(1))
+
+z = 3
+z = 2.
+
+
+#if False:
+	#x = 4
+#else:
+	#def x():
+		#return 1
+
+
+#x+1
 
 
 
