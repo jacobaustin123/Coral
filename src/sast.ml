@@ -30,7 +30,7 @@ and sexpr =
   | SLit of literal (* literal *)
   | SVar of sbind (* see above *)
   | SUnop of uop * sexpr (* (uop, sexpr ) *)
-  | SCall of sbind * sexpr list * sstmt (* ((name, return type), list of args, SFunc) *)
+  | SCall of sexpr * sexpr list * sstmt (* ((name, return type), list of args, SFunc) *)
   | SMethod of sexpr * string * sexpr list (* not implemented *)
   | SField of sexpr * string (* not implemented *)
   | SList of sexpr list * typ (* (list of expressions, inferred type) *)
@@ -58,7 +58,7 @@ and string_of_sexpr = function
   | SLit(l) -> string_of_lit l
   | SVar(b) -> string_of_sbind b
   | SUnop(o, e) -> string_of_uop o ^ string_of_sexpr e
-  | SCall(f, el, s) -> string_of_sbind f ^ "(" ^ String.concat ", " (List.map string_of_sexpr el) ^ "):\n" ^ string_of_sstmt s
+  | SCall(e, el, s) -> string_of_sexpr e ^ "(" ^ String.concat ", " (List.map string_of_sexpr el) ^ "):\n" ^ string_of_sstmt s
   | SMethod(obj, m, el) -> string_of_sexpr obj ^ "." ^ m ^ "(" ^ String.concat ", " (List.map string_of_sexpr el) ^ ")"
   | SField(obj, s) -> string_of_sexpr obj ^ "." ^ s
   | SList(el, t) -> string_of_typ t ^ " list : " ^ String.concat ", " (List.map string_of_sexpr el)

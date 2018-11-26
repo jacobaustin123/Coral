@@ -53,10 +53,12 @@ let rec eval_expr map = function
       (match op with
         | Neg -> (-.v1, m1)
         | Not -> if v1 = 0.0 then (1.0, m1) else (0.0, m1))
-  | Call(name, args) -> (try let Func(_, a, ex) = StringMap.find name map in 
+  | Call(x, args) -> match x with
+                        | Var(Bind(name, typ)) -> (try let Func(_, a, ex) = StringMap.find name map in 
                             let zipped = zip a args in let m1 = List.fold_left add_to_map map zipped in 
                             let (v2, _) = eval_stmt m1 ex in (v2, map) with 
                             Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" name; flush stdout; raise Not_found) (* raise (Failure "NotImplementedError: Functions have not yet been implemented"); *)
+                        | _ -> raise (Runtime "NotImplementedError: Anonymous functions have not been implemented!");
   | Method(_, _, _) -> raise (Runtime "NotImplementedError: Methods have not yet been implemented!");
   | Field(_, _) -> raise (Runtime "NotImplementedError: Fields have not yet been implemented!");
   | Binop(e1, op, e2) ->

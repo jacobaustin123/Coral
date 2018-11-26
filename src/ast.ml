@@ -17,7 +17,7 @@ type expr =
   | Lit of literal
   | Var of bind
   | Unop of uop * expr
-  | Call of string * expr list
+  | Call of expr * expr list
   | Method of expr * string * expr list
   | Field of expr * string
   | List of expr list
@@ -82,7 +82,7 @@ let rec string_of_expr = function
   | Lit(l) -> string_of_lit l
   | Var(b) -> string_of_bind b
   | Unop(o, e) -> string_of_uop o ^ string_of_expr e
-  | Call(f, el) -> f ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
+  | Call(e, el) -> string_of_expr e ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
   | Method(obj, m, el) -> string_of_expr obj ^ "." ^ m ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
   | Field(obj, s) -> string_of_expr obj ^ "." ^ s
   | List(el) -> String.concat ", " (List.map string_of_expr el)

@@ -113,7 +113,7 @@ let comp_tuple (a, b) (c, d) = if a = c then comp b d else compare a c
 let compare_types a b = if a = b then a else Dyn
 let compare_decl a b = if a = b then a else false
 
-module TypeMap = Map.Make(struct type t = string * typ list let compare = comp_tuple end);;
+module TypeMap = Map.Make(struct type t = stmt * typ list let compare = comp_tuple end);;
 
 (* map with string keys, used for variable lookup *)
 
