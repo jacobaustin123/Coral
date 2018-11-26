@@ -4,7 +4,9 @@ open Utilities
 
 (* evaluates expressions and returns a type and semantically checked sexpr object *)
 
-let binop t1 t2 op = match (t1, t2) with
+let binop t1 t2 op = 
+  let except = (Failure ("STypeError: unsupported operand type(s) for binary " ^ binop_to_string op ^ ": '" ^ type_to_string t1 ^ "' and '" ^ type_to_string t2 ^ "'")) in
+  match (t1, t2) with
   | (Dyn, Dyn) | (Dyn, _) | (_, Dyn) -> Dyn
   | _ -> let same = t1 = t2 in (match op with
     | Add | Sub | Mul | Exp when same && t1 = Int -> Int
@@ -12,14 +14,15 @@ let binop t1 t2 op = match (t1, t2) with
     | Add | Sub | Mul | Div | Exp when same && t1 = Bool -> Bool
     | Add when same && t1 = String -> String
     | Add | Sub | Mul | Div | Exp when t1 = Int || t1 = Float || t1 = Bool && t2 = Int || t2 = Float || t2 = Bool -> Float
-    | Eq | Neq | Less | Leq | Greater | Geq -> Bool (* will have to fix later for strings *)
+    | Less | Leq | Greater | Geq when not same && t1 = String or t2 = String -> raise except
+    | Eq | Neq | Less | Leq | Greater | Geq | And | Or -> Bool
     | And | Or when same && t1 = Bool -> Bool
     | Mul when is_arr t1 && t2 = Int -> t1
     | Mul when is_arr t2 && t1 = Int -> t2
     | Mul when t1 = String && t2 = Int -> String
     | Mul when t2 = String && t1 = Int -> String
     | Add when same && is_arr t1 -> t1
-    | _ -> raise (Failure ("STypeError: unsupported operand type(s) for binary " ^ binop_to_string op ^ ": '" ^ type_to_string t1 ^ "' and '" ^ type_to_string t2 ^ "'"))
+    | _ -> raise except
   )
 
 let unop t1 op = match t1 with
