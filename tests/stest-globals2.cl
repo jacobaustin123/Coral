@@ -6,3 +6,7 @@ def foo():
 	return a
 
 type(foo())
+
+x : str = "hello"
+
+type(foo())

@@ -167,6 +167,7 @@ let print = function
   | Parser.STRINGARR -> "STRINGARR"
   | Parser.BOOLARR -> "BOOLARR"
   | Parser.NOP -> "NOP"
+  | Parser.TYPE -> "TYPE"
   | _ -> "I'm too lazy"
 ;;
 
