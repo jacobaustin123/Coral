@@ -249,9 +249,9 @@ and func_stmt globals locals stack flag = function
       | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
       | _ :: t -> dups t
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in 
-    let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) locals in 
+    let map' = StringMap.add x (Dyn, FuncType, true, Some(Func(a, b, c))) locals in 
 
-    let semantmap = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) StringMap.empty in (* empty map for semantic checking *)
+    let semantmap = StringMap.add x (Dyn, FuncType, true, Some(Func(a, b, c))) StringMap.empty in (* empty map for semantic checking *)
 
     let (map'', bind) = List.fold_left (fun (map, out) (Bind(x, t)) -> let (map', bind) = check_assign map (t, SNoexpr, None) (Bind(x, t)) in (map', bind :: out)) (semantmap, []) b in
     let bindout = List.rev bind in
@@ -309,9 +309,9 @@ and stmt map = function (* evaluates statements, can pass it a func *)
       | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
       | _ :: t -> dups t
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(x, t) = a in 
-    let map' = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) map in 
+    let map' = StringMap.add x (Dyn, FuncType, true, Some(Func(a, b, c))) map in 
 
-    let semantmap = StringMap.add x (FuncType, FuncType, true, Some(Func(a, b, c))) StringMap.empty in (* empty map for semantic checking *)
+    let semantmap = StringMap.add x (Dyn, FuncType, true, Some(Func(a, b, c))) StringMap.empty in (* empty map for semantic checking *)
 
     let (map'', bind) = List.fold_left (fun (map, out) (Bind(x, t)) -> let (map', bind) = check_assign map (t, SNoexpr, None) (Bind(x, t)) in (map', bind :: out)) (semantmap, []) b in
     let bindout = List.rev bind in
