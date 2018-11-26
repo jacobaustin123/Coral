@@ -307,6 +307,7 @@ and func_stmt globals locals stack flag = function
   | TypeInfo(a) -> let (a, b, out) = stmt locals (TypeInfo a) in (a, b, None, out)
   | _ as s -> let (map', value, out) = stmt locals s in (map', value, None, [])
 
+
 (* evaluate statements in the global scope *)
 and stmt map = function (* evaluates statements, can pass it a func *)
   | Asn(binds, e) ->  let data = expr map e in let (typ, e', d) = data in
