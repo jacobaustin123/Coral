@@ -13,13 +13,16 @@ fn: clean native
 
 clean:
 	$(OCB) -clean 
-	rm -rf testall.log *.diff *out main source.ll source.o source.s .ll
+	rm -rf testall.log *.diff *.out main source.ll source.o source.s .ll
 
 native:
 	$(OCB) coral.native
 
 byte:
 	$(OCB) coral.byte
+
+test: native
+	./testall.sh
 
 # Building the tarball
 
@@ -33,4 +36,5 @@ byte:
 
 #coral-llvm.tar.gz : $(TARFILES) 
 #	cd .. && tar czf coral-llvm/coral-llvm.tar.gz \
-		$(TARfILES:%=coral-llvm/%
+# 		$(TARfILES:%=coral-llvm/%
+

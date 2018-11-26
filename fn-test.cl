@@ -1,16 +1,26 @@
+
 #def id(a,b):
-#    return a
-#
+	#return a
+
 #def call(f):
-#    k=666
-#    v=1
-#    z=k+v
-#    return z
-##result = call(id)
-##print(result)
-#
-#
-#
+	#k=666
+	#v=1
+	#z=f(k,v)
+	#return z
+
+#res = call(id)
+#print(res)
+
+
+def foo():
+	def bar():
+		return 5
+	return bar
+
+a= foo()
+b = a()
+print(b)
+
 
 def one_please():
 	return 1
@@ -50,6 +60,8 @@ def gcd(a,b):
 
 print(gcd(1234342213,334232))
 print(gcd(10,2))
+
+
 
 
 #def call_it_args(f,aa,bb):
