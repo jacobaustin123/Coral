@@ -113,7 +113,7 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
    and then recursively checks given function with the given types *)
 
   | Call(name, exprs) -> 
-      let (typ, t', decl, func) = if not (StringMap.mem name locals) then if not flag then (* add flag, boolean condition here *)
+      let (typ, t', decl, func) = if not (StringMap.mem name locals) then if not flag then
       raise (Failure ("SNameError: function not found.")) else (Dyn, Dyn, false, None) else StringMap.find name locals in 
       (match func with 
         | Some(Func(n, args, c)) -> if t' <> FuncType && typ <> Dyn then 
@@ -122,11 +122,11 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
           if List.length args <> param_length then
                 raise (Failure ("SyntaxError: unexpected number of arguments in function call"))
 
-          else let rec aux (globals, locals, bindout, exprout) v1 v2 = match v1, v2 with
+          else let rec aux (globals, locals, bindout, exprout) v1 v2 = match v1, v2 with 
             | b, e -> let data = func_expr globals locals stack flag e in let (t', e', _) = data in 
-            let (map1, bind2) = check_assign globals data b in (globals, map1, (bind2 :: bindout), (e' :: exprout))
+            let (map1, bind2) = check_assign globals data b in (map1, locals, (bind2 :: bindout), (e' :: exprout))
 
-          in let (_, map1, bindout, exprout) = (List.fold_left2 aux (globals, locals, [], []) args exprs) in
+          in let (map1, _, bindout, exprout) = (List.fold_left2 aux (globals, locals, [], []) args exprs) in
           
           let (formals, types) = split_sbind bindout in 
           if TypeMap.mem (name, types) stack then (Dyn, (SCall(WeakBind(name, Dyn), [], SNop)), None) else
@@ -146,11 +146,17 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
               let func = { styp = Null; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
               (Null, (SCall(StrongBind(name, Null), (List.rev exprout), SFunc(func))), None)) (* TODO fix this somehow *)
 
-        | None -> print_endline "SWarning: called weak/undefined function"; 
+        | None -> if not flag then print_endline "SWarning: called weak/undefined function"; 
             let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals stack flag e' in e'' :: acc) [] exprs) in
             (Dyn, (SCall(WeakBind(name, Dyn), eout, SNop)), None)) (* TODO fix this somehow *)
    
-    | Var(Bind(x, t)) -> if StringMap.mem x locals then let (typ, t', decl, data) = StringMap.find x locals in if decl then (t', SVar(StrongBind(x, t')), data) else (t', SVar(WeakBind(x, t')), None) else if flag then (Dyn, SVar(WeakBind(x, Dyn)), None) else raise (Failure ("SNameError: name '" ^ x ^ "' is not defined")) 
+    | Var(Bind(x, t)) -> if StringMap.mem x locals then 
+          let (typ, t', decl, data) = StringMap.find x locals in 
+          if decl then (t', SVar(StrongBind(x, t')), data) 
+          else (t', SVar(WeakBind(x, t')), None) else 
+          if flag then (Dyn, SVar(WeakBind(x, Dyn)), None) 
+          else raise (Failure ("SNameError: name '" ^ x ^ "' is not defined")) 
+
     | _ as other -> expr locals other
 
 (* function to check if a certain assignment can be performed with inferred/given types, does assignment if possible, returns appropriate bind *)
