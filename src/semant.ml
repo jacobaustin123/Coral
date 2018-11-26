@@ -84,7 +84,8 @@ let rec expr map = function (* evaluate expressions, return types and add to map
               | b, e -> let data = expr map e in let (t', e', _) = data in 
                 let (map1, bind2) = check_assign map' data b in (map, map1, (bind2 :: bindout), (e' :: exprout))
 
-            in let (_, map1, bindout, exprout) = (List.fold_left2 aux (map, map, [], []) formals args) in
+            in let map' = StringMap.map (fun (a, b, c, d) -> (Dyn, b, c, d)) map
+            in let (_, map1, bindout, exprout) = (List.fold_left2 aux (map, map', [], []) formals args) in
             let (map2, block, data, locals) = (func_stmt map map1 TypeMap.empty false body) in
 
             (match data with (* match return type with *)
@@ -150,13 +151,15 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
               | b, e -> let data = func_expr globals locals stack flag e in let (t', e', _) = data in 
               let (map1, bind2) = check_assign globals data b in (map1, locals, (bind2 :: bindout), (e' :: exprout))
 
-            in let (map1, _, bindout, exprout) = (List.fold_left2 aux (globals, locals, [], []) formals args) in
-            
+            in let map' = StringMap.map (fun (a, b, c, d) -> (Dyn, b, c, d)) locals
+            in let (map1, _, bindout, exprout) = (List.fold_left2 aux (globals, map', [], []) formals args)
+            in let (map'', _) = check_assign map1 (Dyn, (SCall(e, [], SNop)), data) name in
+
             let (_, types) = split_sbind bindout in 
-            if TypeMap.mem (x, types) stack then (Dyn, (SCall(e, [], SNop)), None) else (* let func = TypeMap.find (x, types) stack *)
+            if TypeMap.mem (x, types) stack then (Dyn, (SCall(e, [], SNop)), data) else (* let func = TypeMap.find (x, types) stack *)
             let stack' = TypeMap.add (x, types) true stack in (* temporarily a boolean *)
             
-            let (map2, block, data, locals) = (func_stmt globals map1 stack' flag body) in
+            let (map2, block, data, locals) = (func_stmt globals map'' stack' flag body) in
             (match data with
               | Some (typ2, e', d) -> let Bind(n1, btype) = name in if btype <> Dyn && btype <> typ2 then 
                   if typ2 <> Dyn then raise (Failure ("STypeError: invalid return type")) else 
