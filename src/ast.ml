@@ -1,4 +1,4 @@
-type operator = Add | Sub | Mul | Div | Exp | Eq | Neq | Less | Leq | Greater | Geq | And | Or
+type operator = Add | Sub | Mul | Div | Exp | Eq | Neq | Less | Leq | Greater | Geq | And | Or | ListAccess
 
 type uop = Neg | Not
 
@@ -21,7 +21,6 @@ type expr =
   | Method of expr * string * expr list
   | Field of expr * string
   | List of expr list
-  (* | ListAccess of expr * expr *)
 
 type stmt =
   | Func of bind * bind list * stmt
@@ -51,6 +50,7 @@ let rec string_of_op = function
   | Geq -> ">="
   | And -> "and"
   | Or -> "or"
+  | ListAccess -> "at index"
 
 let rec string_of_uop = function
   | Neg -> "-"
