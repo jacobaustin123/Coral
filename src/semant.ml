@@ -57,7 +57,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
               in let (_, map1, bindout, exprout) = (List.fold_left2 aux (map, map, [], []) formals args) in
               let (map2, block, data, locals) = (func_stmt map map1 TypeMap.empty false body) in
 
-              match data with (* match return type with *)
+              (match data with (* match return type with *)
                 | Some (typ2, e', d) -> (* it did return something *)
                     let Bind(n1, btype) = name in 
                     if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
@@ -71,13 +71,13 @@ let rec expr map = function (* evaluate expressions, return types and add to map
                     let Bind(n1, btype) = name in if btype <> Dyn then  
                     raise (Failure ("STypeError: invalid return type")) else 
                     let func = { styp = Null; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in
-                    (Null, (SCall(e, (List.rev exprout), SFunc(func))), None)
+                    (Null, (SCall(e, (List.rev exprout), SFunc(func))), None))
+            
             | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation")))
         
         | None -> print_endline "SWarning: called weak/undefined function"; (* TODO probably not necessary *)
             let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr map e' in e' :: acc) [] args) in
-            (Dyn, (SCall(e, eout, SNop)), None) (* TODO fix this somehow *)
-        | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation")))
+            (Dyn, (SCall(e, eout, SNop)), None)) (* TODO fix this somehow *)
 
   | _ as temp -> print_endline ("SNotImplementedError: '" ^ (expr_to_string temp) ^ 
       "' semantic checking not implemented"); (Dyn, SNoexpr, None)
@@ -117,9 +117,9 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
    (* complex function to do semantic checking for calls. makes sure arguments match types, 
    and then recursively checks given function with the given types *)
 
-  | Call(exp, args) -> let (t, e, data) = func_expr globals locals stack flag exp in
+  | Call(exp, args) -> let (t, e, data) = func_expr globals locals stack flag exp in (* exp is either a variable or an SCall object *)
       if t <> Dyn && t <> FuncType then raise (Failure ("STypeError: cannot call objects of type " ^ type_to_string t)) else
-      (match data with 
+      (match data with (* data is either the Func info *)
         | Some(x) -> 
           (match x with 
             | Func(name, formals, body) -> if t <> FuncType && t <> Dyn then 
@@ -135,7 +135,7 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
               in let (map1, _, bindout, exprout) = (List.fold_left2 aux (globals, locals, [], []) formals args) in
               
               let (_, types) = split_sbind bindout in 
-              if TypeMap.mem (x, types) stack then (Dyn, (SCall(e, [], SNop)), None) else
+              if TypeMap.mem (x, types) stack then (Dyn, (SCall(e, [], SNop)), None) else (* let func = TypeMap.find (x, types) stack *)
               let stack' = TypeMap.add (x, types) true stack in (* temporarily a boolean *)
               
               let (map2, block, data, locals) = (func_stmt globals map1 stack' flag body) in
@@ -151,7 +151,9 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
                   raise (Failure ("STypeError: invalid return type")) else 
                   let func = { styp = Null; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
                   (Null, (SCall(e, (List.rev exprout), SFunc(func))), None)) (* TODO fix this somehow *)
+            
             | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation")))
+        
         | None -> if not flag then print_endline "SWarning: called weak/undefined function"; 
             let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals stack flag e' in e'' :: acc) [] args) in
             (Dyn, (SCall(e, eout, SNop)), None)) (* TODO fix this somehow *)
