@@ -15,5 +15,5 @@ native:
 byte:
 	$(OCB) coral.byte
 
-test:
+test: native
 	./testall.sh
