@@ -1,15 +1,14 @@
 
-#def id(a,b):
-	#return a
+def id(a,b):
+	return a
 
-#def call(f):
-	#k=666
-	#v=1
-	#z=f(k,v)
-	#return z
+def call(f):
+	k=666
+	z=f(k,1)
+	return z
 
-#res = call(id)
-#print(res)
+res = call(id)
+print(res)
 
 
 def foo():
@@ -63,6 +62,14 @@ print(gcd(10,2))
 
 
 
+def call_it_args(f,a,b):
+	return f(a,b)
+
+
+print(call_it_args(sum,call_it(one_please),call_it(one_please)*6))
+
+
+
 
 #def call_it_args(f,aa,bb):
 #    return f(aa,bb)
@@ -87,7 +94,14 @@ print(gcd(10,2))
 #print(call_it_args(sum,1,1))
 
 
+def boi(a):
+	n=3-a
+	if True:
+		print(n)
+	return n
 
+print(boi(1))
+print(boi(1))
 
 
 
