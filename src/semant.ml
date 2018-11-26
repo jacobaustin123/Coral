@@ -127,6 +127,14 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
    (* complex function to do semantic checking for calls. makes sure arguments match types, 
    and then recursively checks given function with the given types *)
 
+  | Var(Bind(x, t)) -> 
+    if StringMap.mem x locals then 
+    let (typ, t', decl, data) = StringMap.find x locals in 
+    if decl then (t', SVar(StrongBind(x, t')), data) 
+    else (t', SVar(WeakBind(x, t')), None) 
+    else if flag then (Dyn, SVar(WeakBind(x, Dyn)), None) else
+    raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
+
   | Call(exp, args) -> let (t, e, data) = func_expr globals locals stack flag exp in (* exp is either a variable or an SCall object *)
     if t <> Dyn && t <> FuncType then raise (Failure ("STypeError: cannot call objects of type " ^ type_to_string t)) else
     (match data with (* data is either the Func info *)
