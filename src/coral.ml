@@ -16,6 +16,9 @@ let fpath = ref ""
 (* boolean flag used to check if program should be run by interpreter *)
 let run = ref 0
 
+let sem = ref 0
+;;
+
 (* function used to handle command line arguments *)
 let specs =
 [
@@ -230,11 +233,11 @@ let rec loop map smap =
     let program = Parser.program token (Lexing.from_string "") in
     let (sast, smap') = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
     let _ = if !debug = 1 then print_endline (string_of_sprogram sast) in (* print debug messages *)
-    let m = Codegen.translate sast in
-    Llvm_analysis.assert_valid_module m;
-    print_string (Llvm.string_of_llmodule m)
-    (*let (result, mymap) = main map 0.0 program*)
-    (*in print_endline (string_of_float result); flush stdout; loop mymap smap'*)
+    (* let m = Codegen.translate sast in *)
+    (* Llvm_analysis.assert_valid_module m; *)
+    (* print_string (Llvm.string_of_llmodule m) *)
+    (* let (result, mymap) = main map 0.0 program *)
+    flush stdout; loop map smap'
   with
     | Not_found -> loop map smap
     | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; loop map smap
@@ -253,7 +256,7 @@ let rec file map smap fname run = (* todo combine with loop *)
        let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
        let (curr, stack, formatted) = indent temp stack current in
        formatted @ (read curr stack)
-     with End_of_file -> close_in chan; []
+     with End_of_file -> close_in chan; Array.make (Stack.length stack - 1) Parser.DEDENT |> Array.to_list
     in let formatted = ref (read 0 base) in
     let _ = if !debug = 1 then (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "") in (* print debug messages *)
 
@@ -264,13 +267,15 @@ let rec file map smap fname run = (* todo combine with loop *)
 
     let program = Parser.program token (Lexing.from_string "") in
     let (sast, smap') = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
-    let m = Codegen.translate sast in
-    Llvm_analysis.assert_valid_module m;
-    print_string (Llvm.string_of_llmodule m)
-    (* if run then let (result, mymap) = main map 0.0 program in print_endline (string_of_float result); flush stdout; *)
+    
+    if run then 
+      let m = Codegen.translate sast in
+      Llvm_analysis.assert_valid_module m;
+      print_string (Llvm.string_of_llmodule m)
+    else if !debug = 1 then print_endline ("Semantically Checked SAST:\n" ^ (string_of_sprogram sast)) (* print debug messages *)
 
   with
-    | Not_found -> loop map smap
+    | Not_found -> Printf.printf "NotFoundError: possibly caused by lexer!\n"; flush stdout
     | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout
 ;;
@@ -278,7 +283,8 @@ let rec file map smap fname run = (* todo combine with loop *)
 (* main loop *)
 let _ =
   parse_cmdline specs print_endline; (* parse command line arguments *)
-  let emptymap = StringMap.empty in let semptymap = StringMap.empty in
+  if !debug = 1 && !run = 1 then raise (Failure "CompilerError: cannot run file and view debug information at the same time. Use either -d or -r flags.")
+  else let emptymap = StringMap.empty in let semptymap = StringMap.empty in
   if String.length !fpath = 0 then 
       (Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
       try loop emptymap semptymap with Scanner.Eof -> exit 0)

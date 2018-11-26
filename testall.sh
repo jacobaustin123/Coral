@@ -6,7 +6,6 @@
 #  Compile, run, and check the output of each expected-to-work test
 #  Compile and check the error of each expected-to-fail test
 
-
 # Path to the LLVM interpreter
 LLI="lli"
 #LLI="/usr/local/opt/llvm/bin/lli"
@@ -77,7 +76,8 @@ RunFail() {
     return 0
 }
 
-Check() {
+
+CheckLLVM() {
     error=0
     basename=`echo $1 | sed 's/.*\\///
                              s/.cl//'`
@@ -93,7 +93,7 @@ Check() {
 
     generatedfiles="$generatedfiles ${basename}.ll ${basename}.s ${basename}.exe ${basename}.out" &&
     
-    Run "$CORAL" "-c" "$1" ">" "$source.ll" &&
+    Run "$CORAL" "-r -c" "$1" ">" "$source.ll" &&
     Run "$LLC" "$source.ll" "-o" "source.s" &&
     Run "gcc" "-no-pie" "source.s" "-o" "main" && 
     #prints out llvm 
@@ -104,22 +104,22 @@ Check() {
     # Report the status and clean up the generated files
 
     if [ $error -eq 0 ] ; then
-	if [ $keep -eq 0 ] ; then
-	    rm -f $generatedfiles
-	fi
-	echo "OK"
-	echo "###### SUCCESS" 1>&2
+    if [ $keep -eq 0 ] ; then
+        rm -f $generatedfiles
+    fi
+    echo "OK"
+    echo "###### SUCCESS" 1>&2
     else
-	echo "###### FAILED" 1>&2
-	globalerror=$error
+    echo "###### FAILED" 1>&2
+    globalerror=$error
     fi
 }
 
-CheckFail() {
+CheckSemant() {
     error=0
     basename=`echo $1 | sed 's/.*\\///
-                             s/.mc//'`
-    reffile=`echo $1 | sed 's/.mc$//'`
+                             s/.cl//'`
+    reffile=`echo $1 | sed 's/.cl$//'`
     basedir="`echo $1 | sed 's/\/[^\/]*$//'`/."
 
     echo -n "$basename..."
@@ -129,17 +129,11 @@ CheckFail() {
 
     generatedfiles=""
 
-    generatedfiles="$generatedfiles ${basename}.err ${basename}.diff" &&
-    #RunFail "$CORAL" "<" $1 "2>" "${basename}.err" ">>" $globallog &&
-    #Compare ${basename}.err ${reffile}.err ${basename}.diff
-
-    RunFail "$CORAL" "-c" "$1" ">" "$source.ll" &&
-    RunFail "$LLC" "$source.ll" "-o" "source.s" &&
-    RunFail "gcc" "-no-pie" "source.s" "-o" "main" && 
-    #prints out llvm 
-    # Run "cat" "source.ll" && 
-    RunFail "./main" > "${basename}.out" &&
+    generatedfiles="$generatedfiles ${basename}.out" &&
+    
+    Run "$CORAL" "-c" "$1" ">" "${basename}.out" &&
     Compare ${basename}.out ${reffile}.out ${basename}.diff
+
     # Report the status and clean up the generated files
 
     if [ $error -eq 0 ] ; then
@@ -154,25 +148,29 @@ CheckFail() {
     fi
 }
 
-
 if [ $# -ge 1 ]
 then
     files=$@
 else
-    files="tests/test-*.cl tests/fail-*.cl"
+    files="tests/test-*.cl tests/sfail-*.cl tests/stest-*.cl" # tests/fail-*.cl 
 fi
 
 for file in $files
 do
     case $file in
-	*test-*)
-	    Check $file 2>> $globallog
+               
+	*stest-*)
+	    CheckSemant $file 2>> $globallog
 	    ;;
-	*fail-*)
- 	     echo "Fails not checked yet" 
-	     ;;
-	#    CheckFail $file 2>> $globallog
-	#   ;;
+	*sfail-*)
+ 	     CheckSemant $file 2>> $globallog
+        ;;
+    *test-*)
+        CheckLLVM $file 2>> $globallog
+        ;;
+    *fail-*)
+        CheckLLVM $file 2>> $globallog
+        ;;
 	*)
 	    echo "unknown file type $file"
 	    globalerror=1
