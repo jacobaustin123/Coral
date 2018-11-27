@@ -218,6 +218,12 @@ let process_output_to_list = fun command ->
 let cmd_to_list command =
   let (l, _) = process_output_to_list command in l
 
+let strip_stmt = function
+  | TypeInfo(x) | Print(x) -> Nop
+  | _ as x -> x
+
+let strip_print ast = List.rev (List.fold_left (fun acc x -> (strip_stmt x) :: acc) [] ast)
+
 (* this is the main function loop for the interpreter. We lex the input from stdin,
 convert it to a list of Parser.token, apply the appropriate indentation corrections,
 check to make sure we are at 0 indentation level, print more dots otherwise, and then
@@ -244,7 +250,7 @@ let rec loop map smap past run =
       | []     -> Parser.EOF 
       | h :: t -> formatted := t ; h in
 
-    let program = if run then past @ (Parser.program token (Lexing.from_string ""))
+    let program = if run then (strip_print past) @ (Parser.program token (Lexing.from_string ""))
     else (Parser.program token (Lexing.from_string "")) in
 
     (* let _ = (List.iter (Printf.printf "%s ") (List.map print program); print_endline "") in (* print debug messages *) *)
