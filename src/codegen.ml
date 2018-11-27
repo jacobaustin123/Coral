@@ -753,7 +753,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   
   ignore(L.build_ret (L.const_int int_t 0) final_state.b);
   (*L.dump_module the_module;*)
-  pm();
+  (* pm(); *)
 
 
   (* L.dump_module the_module; *)

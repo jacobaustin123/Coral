@@ -204,11 +204,25 @@ let indent tokens base current =
   in aux current tokens [] base
 ;;
 
+let process_output_to_list = fun command -> 
+  let chan = Unix.open_process_in command in
+  let res = ref ([] : string list) in
+  let rec process_otl_aux () =  
+    let e = input_line chan in
+    res := e::!res;
+    process_otl_aux() in
+  try process_otl_aux ()
+  with End_of_file ->
+    let stat = Unix.close_process_in chan in (List.rev !res,stat)
+
+let cmd_to_list command =
+  let (l, _) = process_output_to_list command in l
+
 (* this is the main function loop for the interpreter. We lex the input from stdin,
 convert it to a list of Parser.token, apply the appropriate indentation corrections,
 check to make sure we are at 0 indentation level, print more dots otherwise, and then
 compute the correct value and repeat *)
-let rec loop map smap = 
+let rec loop map smap past run = 
   try 
     Printf.printf ">>> "; flush stdout;
     let base = Stack.create() in let _ = Stack.push 0 base in
@@ -230,19 +244,35 @@ let rec loop map smap =
       | []     -> Parser.EOF 
       | h :: t -> formatted := t ; h in
 
-    let program = Parser.program token (Lexing.from_string "") in
+    let program = if run then past @ (Parser.program token (Lexing.from_string ""))
+    else (Parser.program token (Lexing.from_string "")) in
+
+    (* let _ = (List.iter (Printf.printf "%s ") (List.map print program); print_endline "") in (* print debug messages *) *)
+
     let (sast, smap') = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
-    let _ = if !debug = 1 then print_endline (string_of_sprogram sast) in (* print debug messages *)
+    
+    if run then 
+      let m = Codegen.translate sast in
+      Llvm_analysis.assert_valid_module m;
+      let oc = open_out "source.ll" in
+      (* (Llvm.string_of_llmodule m); *)
+      (* Printf.printf "%s\n" (Llvm.string_of_llmodule m); *)
+      Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc;
+      let output = cmd_to_list "./inter.sh source.ll" in
+      List.iter print_endline output; flush stdout; loop map smap program run
+    else
+      let _ = if !debug = 1 then print_endline (string_of_sprogram sast) in (* print debug messages *)
+      flush stdout; loop map smap' [] false
     (* let m = Codegen.translate sast in *)
     (* Llvm_analysis.assert_valid_module m; *)
     (* print_string (Llvm.string_of_llmodule m) *)
     (* let (result, mymap) = main map 0.0 program *)
-    flush stdout; loop map smap'
+    (* flush stdout; loop map smap' *)
   with
-    | Not_found -> loop map smap
-    | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; loop map smap
-    | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map smap
-    | Runtime explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map smap
+    | Not_found -> loop map smap past run
+    | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; loop map smap past run
+    | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map smap past run
+    | Runtime explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map smap past run
 ;;
 
 let rec file map smap fname run = (* todo combine with loop *)
@@ -271,7 +301,7 @@ let rec file map smap fname run = (* todo combine with loop *)
     if run then 
       let m = Codegen.translate sast in
       Llvm_analysis.assert_valid_module m;
-      print_string (Llvm.string_of_llmodule m)
+      print_string (Llvm.string_of_llmodule m);
     else if !debug = 1 then print_endline ("Semantically Checked SAST:\n" ^ (string_of_sprogram sast)) (* print debug messages *)
 
   with
@@ -287,7 +317,7 @@ let _ =
   else let emptymap = StringMap.empty in let semptymap = StringMap.empty in
   if String.length !fpath = 0 then 
       (Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
-      try loop emptymap semptymap with Scanner.Eof -> exit 0)
+      try loop emptymap semptymap [] (!run = 1) with Scanner.Eof -> exit 0)
   else if (Sys.file_exists !fpath) then if !run = 1 then file emptymap semptymap !fpath true else file emptymap semptymap !fpath false
   else raise (Failure "CompilerError: invalid file passed to Coral compiler.")
 ;;
