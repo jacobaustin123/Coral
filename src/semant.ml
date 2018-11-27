@@ -84,7 +84,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
               | b, e -> let data = expr map e in let (t', e', _) = data in 
                 let (map1, bind2) = check_assign map' data b in (map, map1, (bind2 :: bindout), (e' :: exprout))
 
-            in let map' = StringMap.map (fun (a, b, c, d) -> (Dyn, b, c, d)) map
+            in let map' = StringMap.map (fun (a, b, c, d) -> (Dyn, b, c, d)) map (* ignore dynamic types when not in same scope *)
             in let (_, map1, bindout, exprout) = (List.fold_left2 aux (map, map', [], []) formals args) in
             let (map2, block, data, locals) = (func_stmt map map1 TypeMap.empty false body) in
 
