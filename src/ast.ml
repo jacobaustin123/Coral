@@ -21,7 +21,8 @@ type expr =
   | Method of expr * string * expr list
   | Field of expr * string
   | List of expr list
-  (* | ListAccess of expr * expr *)
+  | ListAccess of expr * expr (* expr, entry *)
+  | ListSlice of expr * expr * expr (* expr, left, right *)
 
 type stmt =
   | Func of bind * bind list * stmt
@@ -32,7 +33,7 @@ type stmt =
   | While of expr * stmt
   | Return of expr
   | Class of string * stmt
-  | Asn of bind list * expr
+  | Asn of expr list * expr
   | TypeInfo of expr
   | Nop
 
@@ -96,7 +97,7 @@ let rec string_of_stmt = function
   | While(e, s) -> "while " ^ string_of_expr e ^ ":\n" ^ string_of_stmt s
   | Return(e) -> "return " ^ string_of_expr e ^ "\n"
   | Class(str, s) -> "class " ^ str ^ ":\n" ^ string_of_stmt s
-  | Asn(bl, e) -> String.concat ", " (List.map string_of_bind bl) ^ " = "  ^ string_of_expr e
+  | Asn(el, e) -> String.concat ", " (List.map string_of_expr el) ^ " = "  ^ string_of_expr e
   | TypeInfo(e) -> string_of_expr e
   | Nop -> ""
 

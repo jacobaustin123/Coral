@@ -93,7 +93,7 @@ and eval_stmt map = function
   | For(Bind(a, t), b, c) -> raise (Runtime "NotImplementedError: For loops have not yet been implemented!");        (* string * expr * expr *)
   | While(a, b) -> let rec recurse map = let (x, m1) = eval_expr map a in if x = 1.0 then let (x1, m2) = eval_stmt m1  b in recurse m2 else (0.0, map) in recurse map                                          (*raise (Failure "NotImplementedError: While loops have not yet been implemented"); *)      (* expr * stmt *)
   | Return(a) ->  eval_expr map a;       (* expr *)
-  | Asn(names, v) -> let (v1, m1) = eval_expr map v in let m2 = List.fold_left (fun m (Bind(name, _)) -> StringMap.add name (Expr(Lit(FloatLit(v1)))) m) m1 names in (v1, m2)
+  | Asn(names, v) -> let (v1, m1) = eval_expr map v in let m2 = List.fold_left (fun m (Var(Bind(name, _))) -> StringMap.add name (Expr(Lit(FloatLit(v1)))) m) m1 names in (v1, m2)
   | TypeInfo(_) -> (0.0, map)
   | Nop -> (0.0, map)
 (* takes a stmt list, iterates through the list and evaluates it in order *)

@@ -4,6 +4,12 @@ open Utilities
 
 (* evaluates expressions and returns a type and semantically checked sexpr object *)
 
+(* let update_map key value map = 
+  if is_mutable value then StringMap.add key value map
+  else StringMap.add key value map *)
+
+let convert_map (t1, t2, decl, data) = (t2, SNoexpr, data) (* convert map object to expr object *)
+
 let binop t1 t2 op = 
   let except = (Failure ("STypeError: unsupported operand type(s) for binary " ^ binop_to_string op ^ ": '" ^ type_to_string t1 ^ "' and '" ^ type_to_string t2 ^ "'")) in
   match (t1, t2) with
@@ -14,7 +20,7 @@ let binop t1 t2 op =
     | Add | Sub | Mul | Div | Exp when same && t1 = Bool -> Bool
     | Add when same && t1 = String -> String
     | Add | Sub | Mul | Div | Exp when t1 = Int || t1 = Float || t1 = Bool && t2 = Int || t2 = Float || t2 = Bool -> Float
-    | Less | Leq | Greater | Geq when not same && t1 = String or t2 = String -> raise except
+    | Less | Leq | Greater | Geq when not same && t1 = String || t2 = String -> raise except
     | Eq | Neq | Less | Leq | Greater | Geq | And | Or -> Bool
     | And | Or when same && t1 = Bool -> Bool
     | Mul when is_arr t1 && t2 = Int -> t1
@@ -42,7 +48,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
       | FloatLit(x) -> Float 
     in (typ, SLit(x), None) (* convert lit to type, return (type, SLit(x)), check if defined in map *)
   
-  | List(x) -> 
+  | List(x) -> (* maybe attach list to data *)
     let rec aux typ out = function
       | [] -> (type_to_array typ, SList(List.rev out, type_to_array typ), None)
       | a :: rest -> let (t, e, _) = expr map a in 
@@ -52,11 +58,24 @@ let rec expr map = function (* evaluate expressions, return types and add to map
           | a :: rest -> let (t, e, _) = expr map a in aux t [e] rest
           | [] -> (Dyn, SList([], Dyn), None)) (* todo maybe do something with this special case of empty list *)
 
+  | ListAccess(e, x) ->
+    let (t1, e1, _) = expr map e in
+    let (t2, e2, _) = expr map x in
+    if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn then raise (Failure ("STypeError: invalid types for list access"))
+    else (array_to_type t1, SListAccess(e1, e2), None)
+
+  | ListSlice(e, x1, x2) ->
+    let (t1, e1, _) = expr map e in
+    let (t2, e2, _) = expr map x1 in
+    let (t3, e3, _) = expr map x2 in
+    if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t3 <> Int && t3 <> Dyn then raise (Failure ("STypeError: invalid types for list access"))
+    else (array_to_type t1, SListSlice(e1, e2, e3), None)
+
   | Var(Bind(x, t)) -> 
     if StringMap.mem x map then 
     let (typ, t', decl, data) = StringMap.find x map in 
-    if decl then (t', SVar(StrongBind(x, t')), data) 
-    else (t', SVar(WeakBind(x, t')), None) 
+    if decl then (t', SVar(Bind(x, t')), data) 
+    else (t', SVar(Bind(x, t')), None) 
     else raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
   
   | Unop(op, e) -> 
@@ -82,7 +101,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
 
             else let rec aux (map, map', bindout, exprout) v1 v2 = match v1, v2 with
               | b, e -> let data = expr map e in let (t', e', _) = data in 
-                let (map1, bind2) = check_assign map' data b in (map, map1, (bind2 :: bindout), (e' :: exprout))
+                let (map1, bind2) = assign map' data b in (map, map1, (bind2 :: bindout), (e' :: exprout))
 
             in let map' = StringMap.map (fun (a, b, c, d) -> (Dyn, b, c, d)) map (* ignore dynamic types when not in same scope *)
             in let (_, map1, bindout, exprout) = (List.fold_left2 aux (map, map', [], []) formals args) in
@@ -95,7 +114,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
                   then raise (Failure ("STypeError: invalid return type")) 
                   else let func = { styp = btype; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
                     (btype, (SCall(e, (List.rev exprout), SFunc(func))), d) 
-                  else let func = { styp = typ2; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in (* case where definite return type and Dynamic inferrence still has weak bind*)
+                  else let func = { styp = typ2; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in (* case where definite return type and Dynamic inferrence still has  bind*)
                   (typ2, (SCall(e, (List.rev exprout), SFunc(func))), d)
               
               | None -> (* function didn't return anything *)
@@ -106,7 +125,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
           
           | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation"))) (* can be expanded to allow classes in the future *)
       
-      | None -> print_endline "SWarning: called weak/undefined function"; (* TODO probably not necessary, may be a problem for recursion *)
+      | None -> print_endline "SWarning: called /undefined function"; (* TODO probably not necessary, may be a problem for recursion *)
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr map e' in e' :: acc) [] args) in
           (Dyn, (SCall(e, eout, SNop)), None))
 
@@ -131,10 +150,23 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
   | Var(Bind(x, t)) -> 
     if StringMap.mem x locals then 
     let (typ, t', decl, data) = StringMap.find x locals in 
-    if decl then (t', SVar(StrongBind(x, t')), data) 
-    else (t', SVar(WeakBind(x, t')), None) 
-    else if flag then (Dyn, SVar(WeakBind(x, Dyn)), None) else
+    if decl then (t', SVar(Bind(x, t')), data) 
+    else (t', SVar(Bind(x, t')), None) 
+    else if flag then (t, SVar(Bind(x, Dyn)), None) else
     raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
+
+  | ListAccess(e, x) ->
+    let (t1, e1, _) = func_expr globals locals stack flag e in
+    let (t2, e2, _) = func_expr globals locals stack flag x in
+    if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn then raise (Failure ("STypeError: invalid types for list access"))
+    else (array_to_type t1, SListAccess(e1, e2), None)
+
+  | ListSlice(e, x1, x2) ->
+    let (t1, e1, _) = func_expr globals locals stack flag e in
+    let (t2, e2, _) = func_expr globals locals stack flag x1 in
+    let (t3, e3, _) = func_expr globals locals stack flag x2 in
+    if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t3 <> Int && t3 <> Dyn then raise (Failure ("STypeError: invalid types for list access"))
+    else (array_to_type t1, SListSlice(e1, e2, e3), None)
 
   | Call(exp, args) -> let (t, e, data) = func_expr globals locals stack flag exp in (* exp is either a variable or an SCall object *)
     if t <> Dyn && t <> FuncType then raise (Failure ("STypeError: cannot call objects of type " ^ type_to_string t)) else
@@ -149,11 +181,11 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
 
             else let rec aux (globals, locals, bindout, exprout) v1 v2 = match v1, v2 with 
               | b, e -> let data = func_expr globals locals stack flag e in let (t', e', _) = data in 
-              let (map1, bind2) = check_assign globals data b in (map1, locals, (bind2 :: bindout), (e' :: exprout))
+              let (map1, bind2) = assign globals data b in (map1, locals, (bind2 :: bindout), (e' :: exprout))
 
             in let map' = StringMap.map (fun (a, b, c, d) -> (Dyn, b, c, d)) locals
             in let (map1, _, bindout, exprout) = (List.fold_left2 aux (globals, map', [], []) formals args)
-            in let (map'', _) = check_assign map1 (Dyn, (SCall(e, [], SNop)), data) name in
+            in let (map'', _) = assign map1 (Dyn, (SCall(e, [], SNop)), data) name in
 
             let (_, types) = split_sbind bindout in 
             if TypeMap.mem (x, types) stack then (Dyn, (SCall(e, [], SNop)), data) else (* let func = TypeMap.find (x, types) stack *)
@@ -164,7 +196,7 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
               | Some (typ2, e', d) -> let Bind(n1, btype) = name in if btype <> Dyn && btype <> typ2 then 
                   if typ2 <> Dyn then raise (Failure ("STypeError: invalid return type")) else 
                   let func = { styp = btype; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in
-                  (btype, (SCall(e, (List.rev exprout), SFunc(func))), d) else (* case where definite return type and Dynamic inferrence still has weak bind*)
+                  (btype, (SCall(e, (List.rev exprout), SFunc(func))), d) else (* case where definite return type and Dynamic inferrence still has  bind*)
                   let func = { styp = typ2; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in
                   (typ2, (SCall(e, (List.rev exprout), SFunc(func))), d) (* TODO fix this somehow *)
               
@@ -175,7 +207,7 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
           
           | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation")))
       
-      | None -> if not flag then print_endline "SWarning: called weak/undefined function"; 
+      | None -> if not flag then print_endline "SWarning: called /undefined function"; 
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals stack flag e' in e'' :: acc) [] args) in
           (Dyn, (SCall(e, eout, SNop)), None)) (* TODO fix this somehow *)
 
@@ -183,26 +215,32 @@ and func_expr globals locals stack flag = function (* evaluate expressions, retu
 
 (* function to check if a certain assignment can be performed with inferred/given types, does assignment if possible, returns appropriate bind *)
 
-and check_assign map (typ, _, data) = function (* check if a value can be assigned, and assign if true *)
+and assign_full map (t, e, data) (t', e', data') = match e' with (* (t, e, data) is thing being assigned to, info is expr being assigned to it *)
+  | SListAccess(e, index) -> raise (Failure "NotImplementedError: ListAccess is not implemented")
+  | SListSlice(e, low, high) -> raise (Failure "NotImplementedError: ListAccess is not implemented")
+  | SField(a, b) -> raise (Failure "NotImplementedError: Fields are not implemented")
+  | _ -> raise (Failure "NotImplementedError: Other features are not implemented")
+
+and assign map (typ, _, data) = function (* check if a value can be assigned, and assign if true *)
   | Bind(n, t) when StringMap.mem n map -> let (t', _, _, _) = StringMap.find n map in 
         (match typ with
-          | Dyn -> (match (t', t) with (* todo deal with the WeakBind thing *)
-              | (Dyn, Dyn) -> let map' = StringMap.add n (Dyn, Dyn, true, data) map in (map', StrongBind(n, Dyn))
-              | (Dyn, _) -> let map' = StringMap.add n (t, t, true, data) map in (map', WeakBind(n, t))
-              | (_, Dyn) -> let map' = StringMap.add n (t', t', true, data) map in (map', WeakBind(n, t'))
-              | (_, _) -> let map' = StringMap.add n (t, t, true, data) map in (map', WeakBind(n, t)))
+          | Dyn -> (match (t', t) with (* todo deal with the Bind thing *)
+              | (Dyn, Dyn) -> let map' = StringMap.add n (Dyn, Dyn, true, data) map in (map', Bind(n, Dyn)) (*  *)
+              | (Dyn, _) -> let map' = StringMap.add n (t, t, true, data) map in (map', Bind(n, t)) (*  *)
+              | (_, Dyn) -> let map' = StringMap.add n (t', t', true, data) map in (map', Bind(n, t')) (*  *)
+              | (_, _) -> let map' = StringMap.add n (t, t, true, data) map in (map', Bind(n, t))) (*  *)
           | _ -> (match t' with
             | Dyn -> (match t with 
-                  | Dyn -> let map' = StringMap.add n (Dyn, typ, true, data) map in (map', StrongBind(n, typ))
-                  | _ when t = typ -> let m' = StringMap.add n (t, t, true, data) map in (m', StrongBind(n, t))
+                  | Dyn -> let map' = StringMap.add n (Dyn, typ, true, data) map in (map', Bind(n, typ)) (*  *)
+                  | _ when t = typ -> let m' = StringMap.add n (t, t, true, data) map in (m', Bind(n, t)) (*  *)
                   | _ -> raise (Failure ("STypeError: invalid type assigned to " ^ n)))
               | _ -> (match t with
-                  | Dyn when t' = typ -> (map, StrongBind(n, t'))
-                  | _ when t = typ -> let m' = StringMap.add n (t, t, true, data) map in (m', StrongBind(n, t))
+                  | Dyn when t' = typ -> (map, Bind(n, t')) (*  *)
+                  | _ when t = typ -> let m' = StringMap.add n (t, t, true, data) map in (m', Bind(n, t)) (*  *)
                   | _ -> raise (Failure ("STypeError: invalid type assigned to " ^ n)))
               | _ -> raise (Failure ("STypeError: invalid type assigned to " ^ n))))
-  | Bind(n, t) when not (StringMap.mem n map) -> if t = typ then let m' = StringMap.add n (t, t, true, data) map in (m', StrongBind(n, t))
-        else if t = Dyn then let m' = StringMap.add n (Dyn, typ, true, data) map in (m', StrongBind(n, typ))
+  | Bind(n, t) when not (StringMap.mem n map) -> if t = typ then let m' = StringMap.add n (t, t, true, data) map in (m', Bind(n, t)) (*  *)
+        else if t = Dyn then let m' = StringMap.add n (Dyn, typ, true, data) map in (m', Bind(n, typ)) (*  *)
         else raise (Failure ("STypeError: invalid type assigned to " ^ n))
   | _ -> raise (Failure ("STypeError: invalid types for assignment."))
 
@@ -210,10 +248,9 @@ and check_assign map (typ, _, data) = function (* check if a value can be assign
 and check_array map e b = 
   let (typ, e', data) = expr map e in 
   match typ with
-  | IntArr | FloatArr | BoolArr | StringArr -> (check_assign map (array_to_type typ, e', data) b)
-  | Dyn -> let Bind(n, t) = b in 
-    let map' = StringMap.add n (t, t, false, data) map in 
-    (map, WeakBind(n, t)) (* TODO fix this *)
+  | IntArr | FloatArr | BoolArr | StringArr -> assign map (array_to_type typ, e', data) b
+  | Dyn -> let Bind (n, t) = b in 
+    let map' = assign map (t, e', data) b in (map, Bind(n, t))
   | _ -> raise (Failure ("STypeError: invalid types for assignment."))
 
 (* checks an entire function. 
@@ -242,6 +279,15 @@ and check_func globals locals out data local_vars stack flag = (function
   stack is a TypeMap containing the function stack 
 *)
 
+(* | Var(Bind(x, t)) when StringMap.mem x locals -> 
+        let info = StringMap.find x locals in
+        let rec aux (m, out) = (function
+          | [] -> (m, List.rev out)
+          | a :: t -> let (m, x) = assign locals data a in
+            let (map', _) = assign m (convert_map info) a in aux (map', x :: out) t)
+        in let (m, out) = aux (locals, []) binds in (m, SAsn(out, e'), None, out)
+     *)
+
 and func_stmt globals locals stack flag = function 
   | Return(e) -> 
     let data = func_expr globals locals stack flag e in 
@@ -250,20 +296,20 @@ and func_stmt globals locals stack flag = function
 
   | Block(s) -> let (value, data, map', out) = check_func globals locals [] None [] stack flag s in (map', SBlock(value), data, out)
   
-  | Asn(binds, e) -> let data = func_expr globals locals stack flag e in let (typ, e', d) = data in
-    (match e with 
-    | Var(Bind(x, t)) when StringMap.mem x locals -> 
-        let info = StringMap.find x locals in
-        let rec aux (m, out) = (function
-          | [] -> (m, List.rev out)
-          | a :: t -> let (m, x) = check_assign locals data a in let Bind(name, _) = a in 
-            let map' = StringMap.add name info m in aux (map', x :: out) t)
-        in let (m, out) = aux (locals, []) binds in (m, SAsn(out, e'), None, out)
-    | _ ->
-      let rec aux (m, out) = function
-        | [] -> (m, List.rev out)
-        | a :: t -> let (m, x) = check_assign locals data a in let Bind(name, _) = a in (aux (m, x :: out) t)
-      in let (m, out) = aux (locals, []) binds in (m, SAsn(out, e'), None, out))
+  | Asn(exprs, e) -> 
+    let data = func_expr globals locals stack flag e in 
+    let (typ, e', d) = data in
+
+    let rec aux (m, out, binds) = function
+      | [] -> (m, List.rev out, List.rev binds)
+      | a :: t -> match a with
+        | Var x -> 
+          let (m, b) = assign locals data x in (aux (m, (SVar b) :: out, b :: binds) t)
+        | _ -> 
+          let info = func_expr globals locals stack flag a in 
+          let (m, x) = assign_full locals data info in (aux (m, x :: out, binds) t)
+
+    in let (m, out, locals) = aux (locals, [], []) exprs in (m, SAsn(out, e'), None, locals)
 
   | Expr(e) -> let (t, e', data) = func_expr globals locals stack flag e in (locals, SExpr(e'), None, [])
   
@@ -273,10 +319,10 @@ and func_stmt globals locals stack flag = function
       | _ :: t -> dups t
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(name, btype) = a in 
     
-    let (map', _) = check_assign locals (FuncType, SNoexpr, Some(Func(a, b, c))) (Bind(name, Dyn)) in
-    let (semantmap, _) = check_assign StringMap.empty (FuncType, SNoexpr, Some(Func(a, b, c))) (Bind(name, Dyn)) in (* empty map for semantic checking *)
+    let (map', _) = assign locals (FuncType, SNoexpr, Some(Func(a, b, c))) (Bind (name, Dyn)) in
+    let (semantmap, _) = assign StringMap.empty (FuncType, SNoexpr, Some(Func(a, b, c))) (Bind(name, Dyn)) in (* empty map for semantic checking *)
 
-    let (map'', bind) = List.fold_left (fun (map, out) (Bind(x, t)) -> let (map', bind) = check_assign map (t, SNoexpr, None) (Bind(x, t)) in (map', bind :: out)) (semantmap, []) b in
+    let (map'', bind) = List.fold_left (fun (map, out) (Bind (x, t)) -> let (map', bind) = assign map (t, SNoexpr, None) (Bind (x, t)) in (map', bind :: out)) (semantmap, []) b in
     let bindout = List.rev bind in
     let (map2, block, data, locals) = (func_stmt map'' map'' TypeMap.empty true c) in
       (match data with
@@ -284,15 +330,15 @@ and func_stmt globals locals stack flag = function
           if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
           raise (Failure ("STypeError: invalid return type")) else 
           let func = { styp = btype; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
-            (map', SFunc(func), None, [StrongBind(name, FuncType)]) 
+            (map', SFunc(func), None, [Bind(name, FuncType)]) 
           else let func = { styp = typ2; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
-          (map', SFunc(func), None, [StrongBind(name, FuncType)])
+          (map', SFunc(func), None, [Bind(name, FuncType)])
       
         | None -> 
           if btype <> Dyn then 
           raise (Failure ("STypeError: invalid return type")) else 
           let func = { styp = Null; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
-          (map', SFunc(func), None, [StrongBind(name, FuncType)]))
+          (map', SFunc(func), None, [Bind(name, FuncType)]))
 
   | If(a, b, c) -> let (typ, e', _) = func_expr globals locals stack flag a in 
         let (map', value, data, out) = func_stmt globals locals stack flag b in 
@@ -321,11 +367,22 @@ and func_stmt globals locals stack flag = function
 
 (* evaluate statements in the global scope *)
 and stmt map = function (* evaluates statements, can pass it a func *)
-  | Asn(binds, e) ->  let data = expr map e in let (typ, e', d) = data in
-    let rec aux (m, out) = function
-      | [] -> (m, List.rev out)
-      | a :: t -> let (m, x) = check_assign map data a in let Bind(name, _) = a in (aux (m, x :: out) t)
-    in let (m, out) = aux (map, []) binds in (m, SAsn(out, e'), out)
+  | Asn(exprs, e) -> 
+    let data = expr map e in 
+    let (typ, e', d) = data in
+
+    let rec aux (m, out, binds) = function
+      | [] -> (m, List.rev out, List.rev binds)
+      | a :: t -> match a with
+        | Var x -> 
+          let (m', b) = assign m data x in (aux (m', (SVar b) :: out, b :: binds) t)
+        | _ -> 
+          let info = expr m a in 
+          let (m', x) = assign_full m data info in (aux (m', x :: out, binds) t)
+
+    in let (m, out, locals) = aux (map, [], []) exprs in (m, SAsn(out, e'), locals)
+
+
   | Expr(e) -> let (t, e', _) = expr map e in (map, SExpr(e'), [])
   | Block(s) -> let ((value, globals), map') = check map [] [] s in (map', SBlock(value), globals)
   | Return(e) -> raise (Failure ("SyntaxError: return statement outside of function"))
@@ -335,10 +392,10 @@ and stmt map = function (* evaluates statements, can pass it a func *)
       | _ :: t -> dups t
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(name, btype) = a in 
     
-    let (map', _) = check_assign map (FuncType, SNoexpr, Some(Func(a, b, c))) (Bind(name, Dyn)) in
-    let (semantmap, _) = check_assign StringMap.empty (FuncType, SNoexpr, Some(Func(a, b, c))) (Bind(name, Dyn)) in (* empty map for semantic checking *)
+    let (map', _) = assign map (FuncType, SNoexpr, Some(Func(a, b, c))) (Bind (name, Dyn)) in
+    let (semantmap, _) = assign StringMap.empty (FuncType, SNoexpr, Some(Func(a, b, c))) (Bind(name, Dyn)) in (* empty map for semantic checking *)
 
-    let (map'', bind) = List.fold_left (fun (map, out) (Bind(x, t)) -> let (map', bind) = check_assign map (t, SNoexpr, None) (Bind(x, t)) in (map', bind :: out)) (semantmap, []) b in
+    let (map'', bind) = List.fold_left (fun (map, out) (Bind(x, t)) -> let (map', bind) = assign map (t, SNoexpr, None) (Bind(x, t)) in (map', bind :: out)) (semantmap, []) b in
     let bindout = List.rev bind in
     let (map2, block, data, locals) = (func_stmt map'' map'' TypeMap.empty true c) in
       (match data with
@@ -346,15 +403,15 @@ and stmt map = function (* evaluates statements, can pass it a func *)
             if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
             raise (Failure ("STypeError: invalid return type")) else 
             let func = { styp = btype; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
-              (map', SFunc(func), [StrongBind(name, FuncType)]) else
+              (map', SFunc(func), [Bind(name, FuncType)]) else
               let func = { styp = typ2; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
-            (map', SFunc(func), [StrongBind(name, FuncType)])
+            (map', SFunc(func), [Bind(name, FuncType)])
         
         | None -> 
           if btype <> Dyn then 
           raise (Failure ("STypeError: invalid return type")) else 
           let func = { styp = Null; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
-          (map', SFunc(func), [StrongBind(name, FuncType)]))
+          (map', SFunc(func), [Bind(name, FuncType)]))
 
   | If(a, b, c) -> 
     let (typ, e', _) = expr map a in 

@@ -25,6 +25,8 @@ let expr_to_string = function
   | Method(_, _, _) -> "method"
   | Field(_, _) -> "field"
   | List(_) -> "list"
+  | ListAccess(_, _) -> "list access"
+  | ListSlice(_, _, _) -> "list slice"
 
 (* converts type to string for error handling *)
 let type_to_string = function
@@ -86,8 +88,8 @@ let split_sbind x =
   let rec aux a1 a2 = function
     | [] -> (List.rev a1, List.rev a2)
     | a :: t -> match a with
-      | StrongBind(c, d) -> aux (c :: a1) (d :: a2) t
-      | WeakBind(c, d) -> aux (c :: a1) (d :: a2) t
+      | Bind(c, d) -> aux (c :: a1) (d :: a2) t
+      | _ -> raise (Failure "unknown failure in argument matching")
   in aux [] [] x
 ;;
 
