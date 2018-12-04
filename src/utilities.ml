@@ -60,6 +60,7 @@ let binop_to_string = function
   | Geq -> ">="
   | And -> "and"
   | Or -> "or"
+  | ListAccess -> "at index"
 
 (* converts type to corresponding array type for array handling *)
 let type_to_array = function

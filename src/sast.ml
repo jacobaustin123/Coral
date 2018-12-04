@@ -35,7 +35,6 @@ and sexpr =
   | SField of sexpr * string (* not implemented *)
   | SList of sexpr list * typ (* (list of expressions, inferred type) *)
   | SNoexpr (* no expression *)
-  (* | SListAccess of sexpr * sexpr (* not implemented *) *)
 
 and sstmt = (* this can be refactored using Blocks, but I haven't quite figured it out yet *)
   | SFunc of sfunc_decl (* (name, return type), list of formals, list of locals, body) *)
