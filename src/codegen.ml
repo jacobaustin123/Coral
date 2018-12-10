@@ -205,19 +205,22 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     L.build_bitcast objptr clist_pt "__clistptr" b
   in
 
-
   let build_idx self_p other_p name b =
     (* get capacity *)
-    (*let gep_addr = L.build_struct_gep self_p clist_cap_idx "__gep_addr" b in
+    let gep_addr = L.build_struct_gep self_p clist_cap_idx "__gep_addr" b in
     let gep_addr_as_intptr = L.build_bitcast gep_addr int_pt "__gep_addr_as_intptr" b in
-    let capacity = L.build_load gep_addr_as_intptr "__capacity" b in *)
+    let capacity = L.build_load gep_addr_as_intptr "__capacity" b in
+
+    (* TODO: throw error if array bounds exceeded *)
+    let inbounds = L.build_icmp L.Icmp.Slt other_p capacity "__inbounds" b in (* other_p is index being accessed *)
 
     (* get elememnt *)
     let gep_addr = L.build_struct_gep self_p clist_data_idx "__gep_addr" b in
-    let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (L.pointer_type (L.pointer_type cobj_pt)) "__gep_addr_as_cobjptrptr" b in
+    let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (L.pointer_type (L.pointer_type cobj_pt)) "__gep_addr_as_cobjptrptrptr" b in
     let gep_addr_as_cobjptrptr = L.build_load gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
-    let gep_addr_as_cobptr = L.build_load gep_addr_as_cobjptrptr "__gep_addr_as_cobjptr" b in
-    gep_addr_as_cobptr
+    let gep_addr_as_cobjptrptr = L.build_gep gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
+    let cobjptr = L.build_load gep_addr_as_cobjptrptr "__cobjptr" b in
+    cobjptr
   in
 
   let built_ops =
@@ -262,7 +265,6 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                 | "eq" -> ctype_eq_t
                 | "neq" -> ctype_neq_t
                 | "lesser" -> ctype_lesser_t
-                | "leq" -> ctype_leq_t
                 | "leq" -> ctype_leq_t
                 | "greater" -> ctype_greater_t
                 | "geq" -> ctype_geq_t
@@ -310,21 +312,21 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   	List.map (fun (t, bops) -> L.define_global ("ctype_" ^ t) (L.const_named_struct ctype_t (Array.of_list (List.map (function
   	  | BOprt(o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
-  	    | None -> L.const_pointer_null ctype_add_pt) (* this seems hacky *)
+  	    | None -> L.const_pointer_null ctype_add_pt)
   	  | BUoprt(o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
-  	    | None -> L.const_pointer_null ctype_neg_pt) (* this seems hacky *)
+  	    | None -> L.const_pointer_null ctype_neg_pt)
   	  | BLoprt(o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
-  	    | None -> L.const_pointer_null ctype_idx_pt)) (* this seems hacky *) bops))) the_module) built_ops in
+  	    | None -> L.const_pointer_null ctype_idx_pt)) bops))) the_module) built_ops in
 
   let ctype_of_datatype = function
-      | int_t -> ctype_int
-      | float_t -> ctype_float
-      | bool_t -> ctype_bool
-      | char_t -> ctype_char
-      | clist_t -> ctype_list
-    in
+    | dt when dt = int_t -> ctype_int
+    | dt when dt = float_t -> ctype_float
+    | dt when dt = bool_t -> ctype_bool
+    | dt when dt = char_t -> ctype_char
+    | dt when dt = clist_t -> ctype_list
+  in
 
   let build_getctypefn_cobj ctype_fn_idx cobj_p b =
     let x2 = L.build_struct_gep cobj_p cobj_type_idx "x2" b in
@@ -445,7 +447,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   in
 
   let boilerplate_lop data_type fn b =
-     let formals_llvalues = Array.to_list (L.params fn) in
+      (* TODO: throw error if array bounds exceeded *)
+    let formals_llvalues = Array.to_list (L.params fn) in
     let [ remote_self_p; remote_other_p ] = formals_llvalues in
 
     (* boilerplate *)
