@@ -11,54 +11,55 @@ What semant does:
   5. duplicate formal arguments
 *)
 
-type sprogram = sstmt list * sbind list
+type sprogram = sstmt list * bind list
 
 and sfunc_decl = {
   styp : typ;
   sfname : string;
-  sformals : sbind list;
-  slocals : sbind list;
+  sformals : bind list;
+  slocals : bind list;
   sbody : sstmt
 }
 
-and sbind = 
-  | WeakBind of string * typ (* bind when not known to be declared, typ can be dynamic. (name, inferred type) *)
-  | StrongBind of string * typ (* known to be declared, typ can be dynamic. (name, inferred type) *)
-
-and sexpr =
+and sexp =
   | SBinop of sexpr * operator * sexpr (* (left sexpr, op, right sexpr) *)
   | SLit of literal (* literal *)
-  | SVar of sbind (* see above *)
+  | SVar of bind (* whole sexp = inferred_type*SVar(Bind(name,explicit_type)) *)
   | SUnop of uop * sexpr (* (uop, sexpr ) *)
-  | SCall of sbind * sexpr list * sstmt (* ((name, return type), list of args, SFunc) *)
+  | SCall of sexpr * sexpr list * sstmt (* SVar or SCall, list of args, SFunc) *)
   | SMethod of sexpr * string * sexpr list (* not implemented *)
   | SField of sexpr * string (* not implemented *)
   | SList of sexpr list * typ (* (list of expressions, inferred type) *)
   | SNoexpr (* no expression *)
+  | SListAccess of sexpr * sexpr (* not implemented *)
+  | SListSlice of sexpr * sexpr * sexpr (* not implemented *)
+
+and sexpr = sexp * typ
 
 and sstmt = (* this can be refactored using Blocks, but I haven't quite figured it out yet *)
   | SFunc of sfunc_decl (* (name, return type), list of formals, list of locals, body) *)
   | SBlock of sstmt list (* block found in function body or for/else/if/while loop *)
   | SExpr of sexpr (* see above *)
   | SIf of sexpr * sstmt * sstmt (* condition, if, else *)
-  | SFor of sbind * sexpr * sstmt (* (variable, list, body (block)) *)
+  | SFor of bind * sexpr * sstmt (* (variable, list, body (block)) *)
   | SWhile of sexpr * sstmt (* (condition, body (block)) *)
   | SReturn of sexpr (* return statement *)
-  | SClass of sbind * sstmt (* not implemented *)
-  | SAsn of sbind list * sexpr (* x : int = sexpr, (Bind(x, int), sexpr) *)
+  | SClass of bind * sstmt (* not implemented *)
+  | SAsn of sexpr list * sexpr (* x : int = sexpr, (Bind(x, int), sexpr) *)
   | SPrint of sexpr
   | SNop
 
 let rec string_of_sbind = function
-  | WeakBind(s, t) -> s ^ ": " ^ string_of_typ t ^ " [weak]"
-  | StrongBind(s, t) -> s ^ ": " ^ string_of_typ t ^ " [strong]"
+  | Bind(s, t) -> s ^ ": " ^ string_of_typ t
 
-and string_of_sexpr = function
+and string_of_sexpr (e, t) = string_of_sexp e
+
+and string_of_sexp = function
   | SBinop(e1, o, e2) -> string_of_sexpr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_sexpr e2
   | SLit(l) -> string_of_lit l
   | SVar(b) -> string_of_sbind b
   | SUnop(o, e) -> string_of_uop o ^ string_of_sexpr e
-  | SCall(f, el, s) -> string_of_sbind f ^ "(" ^ String.concat ", " (List.map string_of_sexpr el) ^ "):\n" ^ string_of_sstmt s
+  | SCall(e, el, s) -> string_of_sexpr e ^ "(" ^ String.concat ", " (List.map string_of_sexpr el) ^ "):\n" ^ string_of_sstmt s
   | SMethod(obj, m, el) -> string_of_sexpr obj ^ "." ^ m ^ "(" ^ String.concat ", " (List.map string_of_sexpr el) ^ ")"
   | SField(obj, s) -> string_of_sexpr obj ^ "." ^ s
   | SList(el, t) -> string_of_typ t ^ " list : " ^ String.concat ", " (List.map string_of_sexpr el)
@@ -72,9 +73,9 @@ and string_of_sstmt = function
   | SFor(b, e, s) -> "for " ^ string_of_sbind b ^ " in " ^ string_of_sexpr e ^ ":\n" ^ string_of_sstmt s
   | SWhile(e, s) -> "while " ^ string_of_sexpr e ^ ":\n" ^ string_of_sstmt s
   | SReturn(e) -> "return " ^ string_of_sexpr e ^ "\n"
-  | SClass(b, s) -> "class " ^ ((function | StrongBind(s, t) -> s | WeakBind(s, t) -> s) b ^ ":\n" ^ string_of_sstmt s)
-  | SAsn(bl, e) -> String.concat ", " (List.map string_of_sbind bl) ^ " = "  ^ string_of_sexpr e ^ "\n"
   | SPrint(e) -> "print (" ^ string_of_sexpr e ^ ")"
+  | SClass(b, s) -> "class " ^ string_of_sbind b ^ ":\n" ^ string_of_sstmt s
+  | SAsn(el, e) -> String.concat ", " (List.map string_of_sexpr el) ^ " = "  ^ string_of_sexpr e ^ "\n"
   | SNop -> ""
 
 and string_of_sprogram (sl, bl) = String.concat "" (List.map string_of_sstmt sl) ^ "\n\n" ^ String.concat " " (List.map string_of_sbind bl)

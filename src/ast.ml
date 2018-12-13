@@ -17,10 +17,12 @@ type expr =
   | Lit of literal
   | Var of bind
   | Unop of uop * expr
-  | Call of string * expr list
+  | Call of expr * expr list
   | Method of expr * string * expr list
   | Field of expr * string
   | List of expr list
+  | ListAccess of expr * expr (* expr, entry *)
+  | ListSlice of expr * expr * expr (* expr, left, right *)
 
 type stmt =
   | Func of bind * bind list * stmt
@@ -31,7 +33,7 @@ type stmt =
   | While of expr * stmt
   | Return of expr
   | Class of string * stmt
-  | Asn of bind list * expr
+  | Asn of expr list * expr
   | TypeInfo of expr
   | Print of expr
   | Nop
@@ -83,7 +85,7 @@ let rec string_of_expr = function
   | Lit(l) -> string_of_lit l
   | Var(b) -> string_of_bind b
   | Unop(o, e) -> string_of_uop o ^ string_of_expr e
-  | Call(f, el) -> f ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
+  | Call(e, el) -> string_of_expr e ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
   | Method(obj, m, el) -> string_of_expr obj ^ "." ^ m ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
   | Field(obj, s) -> string_of_expr obj ^ "." ^ s
   | List(el) -> String.concat ", " (List.map string_of_expr el)
@@ -97,7 +99,7 @@ let rec string_of_stmt = function
   | While(e, s) -> "while " ^ string_of_expr e ^ ":\n" ^ string_of_stmt s
   | Return(e) -> "return " ^ string_of_expr e ^ "\n"
   | Class(str, s) -> "class " ^ str ^ ":\n" ^ string_of_stmt s
-  | Asn(bl, e) -> String.concat ", " (List.map string_of_bind bl) ^ " = "  ^ string_of_expr e
+  | Asn(el, e) -> String.concat ", " (List.map string_of_expr el) ^ " = "  ^ string_of_expr e
   | TypeInfo(e) -> string_of_expr e
   | Print(e) -> string_of_expr e
   | Nop -> ""

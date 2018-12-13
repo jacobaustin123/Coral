@@ -56,10 +56,12 @@ let rec eval_expr map = function
       (match op with
         | Neg -> (-.v1, m1)
         | Not -> if v1 = 0.0 then (1.0, m1) else (0.0, m1))
-  | Call(name, args) -> (try let Func(_, a, ex) = StringMap.find name map in 
+  | Call(x, args) -> match x with
+                        | Var(Bind(name, typ)) -> (try let Func(_, a, ex) = StringMap.find name map in 
                             let zipped = zip a args in let m1 = List.fold_left add_to_map map zipped in 
                             let (v2, _) = eval_stmt m1 ex in (v2, map) with 
                             Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" name; flush stdout; raise Not_found) (* raise (Failure "NotImplementedError: Functions have not yet been implemented"); *)
+                        | _ -> raise (Runtime "NotImplementedError: Anonymous functions have not been implemented!");
   | Method(_, _, _) -> raise (Runtime "NotImplementedError: Methods have not yet been implemented!");
   | Field(_, _) -> raise (Runtime "NotImplementedError: Fields have not yet been implemented!");
   | Binop(e1, op, e2) ->
@@ -94,10 +96,12 @@ and eval_stmt map = function
   | For(Bind(a, t), b, c) -> raise (Runtime "NotImplementedError: For loops have not yet been implemented!");        (* string * expr * expr *)
   | While(a, b) -> let rec recurse map = let (x, m1) = eval_expr map a in if x = 1.0 then let (x1, m2) = eval_stmt m1  b in recurse m2 else (0.0, map) in recurse map                                          (*raise (Failure "NotImplementedError: While loops have not yet been implemented"); *)      (* expr * stmt *)
   | Return(a) ->  eval_expr map a;       (* expr *)
-  | Asn(names, v) -> let (v1, m1) = eval_expr map v in let m2 = List.fold_left (fun m (Bind(name, _)) -> StringMap.add name (Expr(Lit(FloatLit(v1)))) m) m1 names in (v1, m2)
+  | Asn(names, v) -> let (v1, m1) = eval_expr map v in let m2 = List.fold_left (fun m (Var(Bind(name, _))) -> StringMap.add name (Expr(Lit(FloatLit(v1)))) m) m1 names in (v1, m2)
   | TypeInfo(_) -> (0.0, map)
   | Print(_) -> (0.0, map)
   | Nop -> (0.0, map)
+
+
 (* takes a stmt list, iterates through the list and evaluates it in order *)
 and main map value = function 
   | [] -> (value, map)
@@ -170,6 +174,7 @@ let print = function
   | Parser.STRINGARR -> "STRINGARR"
   | Parser.BOOLARR -> "BOOLARR"
   | Parser.NOP -> "NOP"
+  | Parser.TYPE -> "TYPE"
   | _ -> "I'm too lazy"
 ;;
 

@@ -25,6 +25,8 @@ let expr_to_string = function
   | Method(_, _, _) -> "method"
   | Field(_, _) -> "field"
   | List(_) -> "list"
+  | ListAccess(_, _) -> "list access"
+  | ListSlice(_, _, _) -> "list slice"
 
 (* converts type to string for error handling *)
 let type_to_string = function
@@ -87,8 +89,8 @@ let split_sbind x =
   let rec aux a1 a2 = function
     | [] -> (List.rev a1, List.rev a2)
     | a :: t -> match a with
-      | StrongBind(c, d) -> aux (c :: a1) (d :: a2) t
-      | WeakBind(c, d) -> aux (c :: a1) (d :: a2) t
+      | Bind(c, d) -> aux (c :: a1) (d :: a2) t
+      | _ -> raise (Failure "unknown failure in argument matching")
   in aux [] [] x
 ;;
 
@@ -114,7 +116,7 @@ let comp_tuple (a, b) (c, d) = if a = c then comp b d else compare a c
 let compare_types a b = if a = b then a else Dyn
 let compare_decl a b = if a = b then a else false
 
-module TypeMap = Map.Make(struct type t = string * typ list let compare = comp_tuple end);;
+module TypeMap = Map.Make(struct type t = stmt * typ list let compare = comp_tuple end);;
 
 (* map with string keys, used for variable lookup *)
 

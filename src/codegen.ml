@@ -576,11 +576,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         List.fold_left (fun map name -> StringMap.add name (L.build_malloc cobj_pt name builder) map) StringMap.empty coral_names
   (*let example_binding = L.declare_global cobj_ppt "example_binding" the_module in*)
   in
+
+  let name_of_bind = function
+      |Bind(name,_) -> name
+  in
   
   let globals_map =
-      let globals_list = List.map (fun sbind -> match sbind with  (* fn to extract coral_names *)
-            |WeakBind(coral_name,_)|StrongBind(coral_name,_) -> coral_name
-            ) (snd prgm)  (* snd prgrm is the sbind list of globals *) in
+      let globals_list = List.map name_of_bind (snd prgm)  (* snd prgrm is the bind list of globals *) in
   (*let globals_map = build_binding_list_global ["a";"b";"c"] in*)
       build_binding_list_global globals_list
   in
@@ -622,11 +624,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 *)
 
   (* useful utility functions! *)
-  let name_of_sbind sbind = match sbind with
-      |WeakBind(name,_) |StrongBind(name,_) -> name
-  in
-  let names_of_sbindlist sbindlist =
-    List.map name_of_sbind sbindlist
+  let names_of_bindlist bindlist =
+    List.map name_of_bind bindlist
   in
 (* helper fn: seq 4 == [0;1;2;3] *)
   let seq len =
@@ -641,10 +640,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   in
 
   
-  let rec expr the_state e = 
+  let rec expr the_state typed_e = 
       let (namespace,the_function,b) = (the_state.namespace,the_state.func,the_state.b) in
+      let (e,ty) = typed_e in
       match e with
-    | SLit x -> (match x with
+    | SLit lit -> (match lit with
         | IntLit i -> build_new_cobj_init int_t (L.const_int int_t i) b
         | BoolLit i -> build_new_cobj_init bool_t (L.const_int bool_t (if i then 1 else 0)) b
         | FloatLit i -> build_new_cobj_init float_t (L.const_float float_t i) b
@@ -655,10 +655,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
           let _ = build_new_clist dataptr elements b in
           objptr
     )
-    | SVar sbind -> (match sbind with
-        |WeakBind (coral_name,_) | StrongBind (coral_name,_) -> L.build_load (lookup coral_name namespace) coral_name b
-    )
-    | SCall(fname_sbind, arg_expr_list, sfdecl) ->
+    | SVar bind -> let coral_name = name_of_bind bind in
+        L.build_load (lookup coral_name namespace) coral_name b
+    | SCall(fexpr, arg_expr_list, sfdecl) ->
             tstp "entering SCALL";
         let argc = List.length arg_expr_list
         (* eval the arg exprs *)
@@ -680,14 +679,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let argv = L.build_bitcast argv_as_arr cobj_ppt "argv" b in
 
         (* now we have argv! so we just need to get the fn ptr and call it *)
-        let fname = name_of_sbind fname_sbind in
+        (*let fname = name_of_bind fname_sbind in
             tstp ("SCALL of "^fname);
-
         let caller_cobj_p = L.build_load (lookup fname namespace) fname b in
+  *)
+        let caller_cobj_p = expr the_state fexpr in
         let call_ptr = build_getctypefn_cobj ctype_call_idx caller_cobj_p b in
         let result = L.build_call call_ptr [|caller_cobj_p;argv|] "result" b in
             tstp "leaving SCALL";
         result
+    | SListAccess(e1,e2)  -> expr the_state (SBinop(e1,ListAccess,e2),ty)
     | SBinop(e1, op, e2) ->
       let e1' = expr the_state e1
       and e2' = expr the_state e2 in
@@ -741,9 +742,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       (*|SFuncDecl  (* later. do raw nonfunction stuff first *)*)
       |SBlock s -> List.fold_left stmt the_state s
       |SExpr e ->  ignore(expr the_state e); the_state
-      |SAsn (sbinds,e) -> (*L.dump_module the_module;*) tstp "entering asn";
+      |SAsn (sexpr_list,e) -> (*L.dump_module the_module;*) tstp "entering asn";
         let e' = expr the_state e in tstp "passing checkpoint";
-        List.iter (fun sbind -> match sbind with |WeakBind (name,_) | StrongBind (name,_) -> ignore(L.build_store e' (lookup name namespace) b)) sbinds; tstp "leaving asn"; the_state
+        let get_name = (fun (SVar(Bind(name,explicit_t)),inferred_t) -> name) in
+        let names = List.map get_name sexpr_list in
+        List.iter (fun name -> ignore (L.build_store e' (lookup name namespace) b)) names ; tstp "leaving asn"; the_state
       (*|SReturn  (* later *)*)
       |SNop -> the_state
       |SIf (predicate, then_stmt, else_stmt) ->
@@ -790,8 +793,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let fn_b = L.builder_at_end context (L.entry_block the_function) in
         (* update the namespace *)
         let fn_namespace =
-          let local_names = names_of_sbindlist sfdecl.slocals
-          and formal_names = names_of_sbindlist sfdecl.sformals in
+          let local_names = names_of_bindlist sfdecl.slocals
+          and formal_names = names_of_bindlist sfdecl.sformals in
           (*List.iter print_endline local_names;*)
           let argc = List.length formal_names
           and argv = Array.get (L.params the_function) 0 in (* argv is first/only arg *)

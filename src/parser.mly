@@ -20,8 +20,12 @@
 /* this is done to eliminate shift/reduce conflicts in the first lexing stage. 
 none of these tokens need precedence declarations. be careful about this if rules won't reduce */
 
+%nonassoc NOFIELD
+%nonassoc FIELD
+
 %nonassoc NOELSE
 %nonassoc ELSE
+
 %right ASN
 %left DOT
 %left OR
@@ -34,7 +38,8 @@ none of these tokens need precedence declarations. be careful about this if rule
 %right NOT NEG
 %left SEP
 
-%nonassoc RECURSE 
+%nonassoc LPAREN LBRACK LBRACE
+%nonassoc RPAREN RBRACK RBRACE
 
 %start tokenize
 %type <token list> tokenize /* used to handle indentation */
@@ -45,68 +50,71 @@ none of these tokens need precedence declarations. be careful about this if rule
 %%
 
 tokenize: /* used by the parser to read the input into the indentation function */
-  | token EOL { $1 @ [EOL] }
+  | seq EOL { $1 @ [EOL] }
   | EOL { NOP :: [EOL] }
 
-token: /* used by the parser to read the input into the indentation function. generated from scanner.mll with an awk script */
-  | COLON { [COLON] }
-  | TAB { [TAB] }
-  | ARROW { [ARROW] }
-  | RETURN { [RETURN] }
-  | NOT { [NOT] }
-  | IF { [IF] }
-  | ELSE { [ELSE] }
-  | FOR { [FOR] }
-  | WHILE { [WHILE] }
-  | DEF { [DEF] }
-  | COMMA { [COMMA] }
-  | NEQ { [NEQ] }
-  | LT { [LT] }
-  | GT { [GT] }
-  | LEQ { [LEQ] }
-  | GEQ { [GEQ] }
-  | AND { [AND] }
-  | OR { [OR] }
-  | IN { [IN] }
-  | TRUE { [TRUE] }
-  | FALSE { [FALSE] }
-  | IS { [IS] }
-  | PLUS { [PLUS] }
-  | MINUS { [MINUS] }
-  | TIMES { [TIMES] }
-  | DIVIDE { [DIVIDE] }
-  | EXP { [EXP] }
-  | LPAREN { [LPAREN] }
-  | RPAREN { [RPAREN] }
-  | LBRACK { [LBRACK] }
-  | RBRACK { [RBRACK] }
-  | LBRACE { [LBRACE] }
-  | RBRACE { [RBRACE] }
-  | EQ { [EQ] }
-  | ASN { [ASN] }
-  | SEP { [SEP] }
-  | BOOL { [BOOL] }
-  | INT { [INT] }
-  | FLOAT { [FLOAT] }
-  | STRING { [STRING] }
-  | INTARR { [INTARR] }
-  | FLOATARR { [FLOATARR] }
-  | STRINGARR { [STRINGARR] }
-  | BOOLARR { [BOOLARR] }
-  | INDENT { [INDENT] }
-  | DEDENT { [DEDENT] }
-  | VARIABLE { [VARIABLE($1)] }
-  | FLOAT_LITERAL { [FLOAT_LITERAL($1)] }
-  | INT_LITERAL { [INT_LITERAL($1)] }
-  | BOOL_LITERAL { [BOOL_LITERAL($1)] }
-  | STRING_LITERAL { [STRING_LITERAL($1)] }
-  | EOF { [EOF] }
-  | CLASS { [CLASS] }
-  | NONE { [NONE] }
-  | DOT { [DOT] }
-  | TYPE { [TYPE] }
-  | PRINT { [PRINT] }
-  | token token %prec RECURSE { $1 @ $2 }
+seq: /* used by the parser to read the input into the indentation function. generated from scanner.mll with an awk script */
+  | token { [$1] }
+  | token seq { $1 :: $2 }
+
+token:
+  | COLON { COLON }
+  | TAB { TAB }
+  | ARROW { ARROW }
+  | RETURN { RETURN }
+  | NOT { NOT }
+  | IF { IF }
+  | ELSE { ELSE }
+  | FOR { FOR }
+  | WHILE { WHILE }
+  | DEF { DEF }
+  | COMMA { COMMA }
+  | NEQ { NEQ }
+  | LT { LT }
+  | GT { GT }
+  | LEQ { LEQ }
+  | GEQ { GEQ }
+  | AND { AND }
+  | OR { OR }
+  | IN { IN }
+  | TRUE { TRUE }
+  | FALSE { FALSE }
+  | IS { IS }
+  | PLUS { PLUS }
+  | MINUS { MINUS }
+  | TIMES { TIMES }
+  | DIVIDE { DIVIDE }
+  | EXP { EXP }
+  | LPAREN { LPAREN }
+  | RPAREN { RPAREN }
+  | LBRACK { LBRACK }
+  | RBRACK { RBRACK }
+  | LBRACE { LBRACE }
+  | RBRACE { RBRACE }
+  | EQ { EQ }
+  | ASN { ASN }
+  | SEP { SEP }
+  | BOOL { BOOL }
+  | INT { INT }
+  | FLOAT { FLOAT }
+  | STRING { STRING }
+  | INTARR { INTARR }
+  | FLOATARR { FLOATARR }
+  | STRINGARR { STRINGARR }
+  | BOOLARR { BOOLARR }
+  | INDENT { INDENT }
+  | DEDENT { DEDENT }
+  | VARIABLE { VARIABLE($1) }
+  | FLOAT_LITERAL { FLOAT_LITERAL($1) }
+  | INT_LITERAL { INT_LITERAL($1) }
+  | BOOL_LITERAL { BOOL_LITERAL($1) }
+  | STRING_LITERAL { STRING_LITERAL($1) }
+  | EOF { EOF }
+  | CLASS { CLASS }
+  | NONE { NONE }
+  | DOT { DOT }
+  | TYPE { TYPE }
+  | PRINT { PRINT }
 
 program: stmt_list EOF { List.rev $1 } /* the main program function */
 
@@ -131,12 +139,17 @@ stmt:
   | NOP { Nop }
 
 formal_asn_list:
-  | bind_opt { [$1] }
-  | formal_asn_list ASN bind_opt { $3 :: $1 }
+  | bind_opt { [Var $1] }
+  | list_access { [$1] }
+  | formal_asn_list ASN bind_opt { Var $3 :: $1 }
 
 bind_opt:
   | VARIABLE { Bind($1, Dyn) }
   | VARIABLE COLON typ { Bind($1, $3) }
+
+list_access:
+  | expr LBRACK expr RBRACK { ListAccess($1, $3) }
+  | expr LBRACK expr COLON expr RBRACK { ListSlice($1, $3, $5) }
 
 stmt_block: 
   | INDENT SEP stmt_list DEDENT { Block(List.rev $3) }
@@ -168,11 +181,11 @@ typ:
   | STRINGARR { StringArr }
 
 expr:
+| list_access { $1 }
 | VARIABLE { Var(Bind($1, Dyn)) }
-| VARIABLE LPAREN actuals_opt RPAREN { Call($1, $3) }
-| expr LBRACK expr RBRACK { Binop($1, ListAccess, $3) }
+| expr LPAREN actuals_opt RPAREN { Call($1, $3) }
 | expr DOT VARIABLE LPAREN actuals_opt RPAREN { Method($1, $3, $5) }
-| expr DOT VARIABLE { Field($1, $3) }
+| expr DOT VARIABLE %prec FIELD { Field($1, $3) }
 | MINUS expr %prec NEG { Unop(Neg, $2) }
 | NOT expr %prec NOT { Unop(Not, $2) }
 | LPAREN expr RPAREN { $2 }
