@@ -8,6 +8,3 @@ while a != b:
 		b = b-a
 
 print(a)
-
-
-
