@@ -36,6 +36,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
       | Mul when t1 = String && t2 = Int -> (String, SBinop(e1, op, e2), None)
       | Mul when t2 = String && t1 = Int -> (String, SBinop(e1, op, e2), None)
       | Add when same && is_arr t1 -> (t1, SBinop(e1, op, e2), None)
+      | ListAccess -> (t1, SBinop(e1, op, e2), None)
       | _ -> raise (Failure ("STypeError: unsupported operand type(s) for binary " ^ binop_to_string op ^ ": '" ^ type_to_string t1 ^ "' and '" ^ type_to_string t2 ^ "'"))
     ))
 
