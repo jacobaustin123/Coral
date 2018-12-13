@@ -69,7 +69,7 @@ let rec expr map = function (* evaluate expressions, return types and add to map
               let func = { styp = Null; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in
               (Null, (SCall(StrongBind(name, Null), (List.rev exprout), SFunc(func))), None)
 
-        | None -> print_endline "SWarning: called weak/undefined function"; (* TODO probably not necessary *)
+        | None -> Printf.eprintf "SWarning: called weak/undefined function"; (* TODO probably not necessary *)
             let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr map e' in e' :: acc) [] exprs) in
             (Dyn, (SCall(WeakBind(name, Dyn), eout, SNop)), None) (* TODO fix this somehow *)
         | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation")))
