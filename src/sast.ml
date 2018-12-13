@@ -21,7 +21,7 @@ and sfunc_decl = {
   sbody : sstmt
 }
 
-and sexpr =
+and sexp =
   | SBinop of sexpr * operator * sexpr (* (left sexpr, op, right sexpr) *)
   | SLit of literal (* literal *)
   | SVar of bind (* see above *)
@@ -33,6 +33,8 @@ and sexpr =
   | SNoexpr (* no expression *)
   | SListAccess of sexpr * sexpr (* not implemented *)
   | SListSlice of sexpr * sexpr * sexpr (* not implemented *)
+
+and sexpr = sexp * typ
 
 and sstmt = (* this can be refactored using Blocks, but I haven't quite figured it out yet *)
   | SFunc of sfunc_decl (* (name, return type), list of formals, list of locals, body) *)
@@ -49,7 +51,9 @@ and sstmt = (* this can be refactored using Blocks, but I haven't quite figured 
 let rec string_of_sbind = function
   | Bind(s, t) -> s ^ ": " ^ string_of_typ t
 
-and string_of_sexpr = function
+and string_of_sexpr (e, t) = string_of_sexp e
+
+and string_of_sexp = function
   | SBinop(e1, o, e2) -> string_of_sexpr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_sexpr e2
   | SLit(l) -> string_of_lit l
   | SVar(b) -> string_of_sbind b
