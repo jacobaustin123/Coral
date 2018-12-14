@@ -229,13 +229,25 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     L.build_bitcast objptr clist_pt "__clistptr" b
   in
 
-  let build_idx self_p other_p name b =
-    (* get capacity *)
-    let gep_addr = L.build_struct_gep self_p clist_cap_idx "__gep_addr" b in
+  let build_getlen_clist clist_p b =
+    let gep_addr = L.build_struct_gep clist_p clist_len_idx "__gep_addr" b in
+    let gep_addr_as_intptr = L.build_bitcast gep_addr int_pt "__gep_addr_as_intptr" b in
+    let length = L.build_load gep_addr_as_intptr "__length" b in
+    length
+  in
+
+  let build_getcap_clist clist_p b =
+
+    let gep_addr = L.build_struct_gep clist_p clist_cap_idx "__gep_addr" b in
     let gep_addr_as_intptr = L.build_bitcast gep_addr int_pt "__gep_addr_as_intptr" b in
     let capacity = L.build_load gep_addr_as_intptr "__capacity" b in
+    capacity
+  in
+
+  let build_idx self_p other_p name b =
 
     (* TODO: throw error if array bounds exceeded *)
+    let capacity = build_getcap_clist self_p b in
     let inbounds = L.build_icmp L.Icmp.Slt other_p capacity "__inbounds" b in (* other_p is index being accessed *)
 
     (* get elememnt *)
@@ -635,9 +647,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     in aux (len-1) []
   in
 
-  let lookup coral_name namespace = tstp coral_name;
+  let lookup coral_name namespace =
       try StringMap.find coral_name namespace
-        with Not_found -> tstp "global"; lookup_global_binding coral_name
+        with Not_found -> lookup_global_binding coral_name
   in
 
   
@@ -659,7 +671,6 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         |WeakBind (coral_name,_) | StrongBind (coral_name,_) -> L.build_load (lookup coral_name namespace) coral_name b
     )
     | SCall(fname_sbind, arg_expr_list, sfdecl) ->
-            tstp "entering SCALL";
         let argc = List.length arg_expr_list
         (* eval the arg exprs *)
         and llargs = List.map (expr the_state) (List.rev arg_expr_list) in
@@ -681,12 +692,10 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
         (* now we have argv! so we just need to get the fn ptr and call it *)
         let fname = name_of_sbind fname_sbind in
-            tstp ("SCALL of "^fname);
 
         let caller_cobj_p = L.build_load (lookup fname namespace) fname b in
         let call_ptr = build_getctypefn_cobj ctype_call_idx caller_cobj_p b in
         let result = L.build_call call_ptr [|caller_cobj_p;argv|] "result" b in
-            tstp "leaving SCALL";
         result
     | SBinop(e1, op, e2) ->
       let e1' = expr the_state e1
@@ -715,7 +724,6 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         | Not         -> ctype_not_idx in
       let fn_p = build_getctypefn_cobj fn_idx e' b in
         L.build_call fn_p [| e' |] "uop_result" b
-    (* | SCall -> *)
     | SList(el, t) ->
       let elements = List.map (fun e ->
         expr the_state e) el in
@@ -738,13 +746,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   let rec stmt the_state s =   (* namespace comes first bc never gets modified unless descending so it works better for fold_left in SBlock *)
       let (namespace,the_function,b) = (the_state.namespace,the_state.func,the_state.b) in
       match s with
-      (*|SFuncDecl  (* later. do raw nonfunction stuff first *)*)
       |SBlock s -> List.fold_left stmt the_state s
       |SExpr e ->  ignore(expr the_state e); the_state
-      |SAsn (sbinds,e) -> (*L.dump_module the_module;*) tstp "entering asn";
-        let e' = expr the_state e in tstp "passing checkpoint";
-        List.iter (fun sbind -> match sbind with |WeakBind (name,_) | StrongBind (name,_) -> ignore(L.build_store e' (lookup name namespace) b)) sbinds; tstp "leaving asn"; the_state
-      (*|SReturn  (* later *)*)
+      |SAsn (sbinds,e) ->
+        let e' = expr the_state e in
+        List.iter (fun sbind -> match sbind with | WeakBind (name,_) | StrongBind (name,_) -> ignore(L.build_store e' (lookup name namespace) b)) sbinds; the_state
       |SNop -> the_state
       |SIf (predicate, then_stmt, else_stmt) ->
          let bool_val = build_getdata_cobj bool_t (expr the_state predicate) b in
@@ -760,17 +766,54 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                    ignore(L.build_cond_br bool_val then_bb else_bb b);  
                    let new_state = change_builder_state the_state (L.builder_at_end context merge_bb ) in new_state
       | SWhile (predicate, body) ->
-          let pred_bb = L.append_block context "while" the_function in  
-            ignore(L.build_br pred_bb b);  
-              let body_bb = L.append_block context "while_body" the_function in  
-               let new_state = change_builder_state the_state (L.builder_at_end context body_bb) in
-                add_terminal (stmt new_state body)  (L.build_br pred_bb);  
-                let pred_builder = L.builder_at_end context pred_bb in  
-               let new_state = change_builder_state the_state (L.builder_at_end context pred_bb) in
-                  let bool_val = build_getdata_cobj bool_t (expr new_state predicate) pred_builder in
-                    let merge_bb = L.append_block context "merge" the_function in  
-                      ignore(L.build_cond_br bool_val body_bb merge_bb pred_builder);  
-                      let new_state = change_builder_state the_state (L.builder_at_end context merge_bb ) in new_state
+        let pred_bb = L.append_block context "while" the_function in
+          ignore(L.build_br pred_bb b);
+        let body_bb = L.append_block context "while_body" the_function in
+        let new_state = change_builder_state the_state (L.builder_at_end context body_bb) in
+          add_terminal (stmt new_state body) (L.build_br pred_bb);
+        let pred_builder = L.builder_at_end context pred_bb in
+        let new_state = change_builder_state the_state (L.builder_at_end context pred_bb) in
+        let bool_val = build_getdata_cobj bool_t (expr new_state predicate) pred_builder in
+        let merge_bb = L.append_block context "merge" the_function in
+          ignore(L.build_cond_br bool_val body_bb merge_bb pred_builder);
+        let new_state = change_builder_state the_state (L.builder_at_end context merge_bb) in
+          new_state
+      | SFor(var, lst, body) ->
+         (* initialize list index variable and list length *)
+         let objptr = expr the_state lst in
+         let listptr = build_getlist_cobj objptr b in
+         let nptr = L.build_alloca int_t "nptr" b in
+           ignore(L.build_store (L.const_int int_t (0)) nptr b);
+         let n = L.build_load nptr "n" b in
+         let ln = build_getlen_clist listptr b in
+
+         (* iter block *)
+         let iter_bb = L.append_block context "iter" the_function in
+           ignore(L.build_br iter_bb b);
+
+         let iter_builder = L.builder_at_end context iter_bb in
+         let n = L.build_load nptr "n" iter_builder in
+         let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
+           ignore(L.build_store nnext nptr iter_builder);
+
+         let iter_complete = (L.build_icmp L.Icmp.Sge) n ln "iter_complete" iter_builder in (* true if n exceeds list length *)
+
+         (* body of for loop *)
+         let body_bb = L.append_block context "for_body" the_function in
+         let body_builder = L.builder_at_end context body_bb in
+
+         let name = (match var with
+           | WeakBind(nm, _) -> nm
+           | StrongBind(nm, _) -> nm) in
+         let elmptr = build_idx listptr n "binop_result" body_builder in
+           ignore(L.build_store elmptr (lookup name namespace) body_builder);
+         let new_state = change_builder_state the_state body_builder in
+           add_terminal (stmt new_state body) (L.build_br iter_bb);
+
+         let merge_bb = L.append_block context "merge" the_function in
+           ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
+         let new_state = change_builder_state the_state (L.builder_at_end context merge_bb) in
+           new_state
     | SPrint e -> ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t (expr the_state e) b) |] "printf" b); (*build_new_cobj_init int_t (L.const_int int_t 0) b;*) the_state
     | SFunc sfdecl ->
         (* outer scope work: point binding to new cfuncobj *)
@@ -821,7 +864,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         in
 
         let int_format_str = L.build_global_stringptr "%d\n" "fmt" fn_b
-        and float_format_str = L.build_global_stringptr "%g\n" "fmt" fn_b in 
+        and float_format_str = L.build_global_stringptr "%g\n" "fmt" fn_b in
 
         (* build function body by calling stmt! *)
         let build_return some_b = L.build_ret (build_new_cobj_init int_t (L.const_int int_t 69) some_b) some_b in
@@ -871,5 +914,5 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 *)
 
   ignore(L.build_ret (L.const_int int_t 0) final_state.b);
-  (* pm(); (* prints module *) *)
+  (* pm(); *)(* prints module *)
   the_module  (* return the resulting llvm module with all code!! *)

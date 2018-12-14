@@ -189,7 +189,7 @@ and check_assign map (typ, _, data) = function (* check if a value can be assign
 and check_array map e b = let (typ, e', data) = expr map e in match typ with
   | IntArr | FloatArr | BoolArr | StringArr -> (check_assign map (array_to_type typ, e', data) b)
   | Dyn -> let Bind(n, t) = b in let map' = StringMap.add n (t, t, false, data) map in 
-    (map, WeakBind(n, t)) (* TODO fix this *)
+    (map', WeakBind(n, t)) (* TODO fix this *)
   | _ -> raise (Failure ("STypeError: invalid types for assignment."))
 
 (* checks an entire function. 
@@ -198,8 +198,7 @@ and check_array map e b = let (typ, e', data) = expr map e in match typ with
   out is a sstmt list containing the semanting checked stmts
   data is a (typ, e', sstmt) tuple containing return information for the function
   local_vars is a list of sbinds containing the local variables
-  stack is a TypeMap containing the function call stack 
-*)
+  stack is a TypeMap containing the function call stack *)
 
 and check_func globals locals out data local_vars stack flag = (function  
   | [] -> ((List.rev out), data, locals, List.sort_uniq compare (List.rev local_vars))
@@ -276,7 +275,7 @@ and func_stmt globals locals stack flag = function
         let (m', x', d, out) = func_stmt globals m stack flag c in 
         let (typ, e', _) = func_expr globals m' stack flag b in 
         if equals locals m' then (m', SFor(x, e', x'), d, out) else 
-        let merged = merge locals m' in (merged, SFor(x, e', x'), Some (Dyn, SNoexpr, None), out)
+        let merged = merge locals m' in (merged, SFor(x, e', x'), Some (Dyn, SNoexpr, None), x :: out)
 
   | While(a, b) -> let (typ, e, data) = func_expr globals locals stack flag a in 
         let (m', x', d, out) = func_stmt globals locals stack flag b in 
@@ -327,8 +326,12 @@ and stmt map = function (* evaluates statements, can pass it a func *)
   | If(a, b, c) -> let (typ, e', _) = expr map a in let (map', value, out) = stmt map b in let (map'', value', out') = stmt map c in if equals map' map'' then (map', SIf(e', value, value'), out') else 
          let merged = merge map' map'' in (merged, SIf(e', value, value'), out @ out')
 
-  | For(a, b, c) -> let (m, x) = check_array map b a in let (m', x', out) = stmt m c in let (typ, e', _) = expr m' b in if equals map m' then (m', SFor(x, e', x'), out) else 
-        let merged = merge m m' in (merged, SFor(x, e', x'), out)
+  | For(a, b, c) ->
+      let (m, x) = check_array map b a in
+      let (m', x', out) = stmt m c in
+      let (typ, e', _) = expr m' b in
+      if equals map m' then (m', SFor(x, e', x'), out)
+      else let merged = merge m m' in (merged, SFor(x, e', x'), x :: out)
 
   | While(a, b) -> let (_, e, _) = expr map a in let (m', x', out) = stmt map b in if equals map m' then (m', SWhile(e, x'), out) else
     let merged = merge map m' in (merged, SWhile(e, x'), out)
