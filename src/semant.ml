@@ -265,8 +265,7 @@ and check_array map e b =
   out is a sstmt list containing the semanting checked stmts
   data is a (typ, e', sstmt) tuple containing return information for the function
   local_vars is a list of sbinds containing the local variables
-  stack is a TypeMap containing the function call stack 
-*)
+  stack is a TypeMap containing the function call stack *)
 
 and check_func globals locals out data local_vars stack flag = (function  
   | [] -> ((List.rev out), data, locals, List.sort_uniq compare (List.rev local_vars))
@@ -359,7 +358,8 @@ and func_stmt globals locals stack flag = function
         let (m', x', d, out) = func_stmt globals m stack flag c in 
         let (typ, e', _) = func_expr globals m' stack flag b in 
         if equals locals m' then (m', SFor(x, e', x'), d, out) else 
-        let merged = merge locals m' in (merged, SFor(x, e', x'), Some (Dyn, (SNoexpr, Dyn), None), out)
+        let merged = merge locals m' in (merged, SFor(x, e', x'), Some (Dyn, (SNoexpr, Dyn), None), x :: out)
+        (*let merged = merge locals m' in (merged, SFor(x, e', x'), Some (Dyn, (SNoexpr, Dyn), None), out)*)
 
   | While(a, b) -> let (typ, e, data) = func_expr globals locals stack flag a in 
         let (m', x', d, out) = func_stmt globals locals stack flag b in 
@@ -433,8 +433,7 @@ and stmt map = function (* evaluates statements, can pass it a func *)
     let (m', x', out) = stmt m c in 
     let (typ, e', _) = expr m' b in 
     if equals map m' then (m', SFor(x, e', x'), out) 
-    else let merged = merge m m' in 
-    (merged, SFor(x, e', x'), out)
+    else let merged = merge m m' in (merged, SFor(x, e', x'), x :: out)
 
   | While(a, b) -> 
     let (_, e, _) = expr map a in 
@@ -442,7 +441,7 @@ and stmt map = function (* evaluates statements, can pass it a func *)
     if equals map m' then (m', SWhile(e, x'), out) 
     else let merged = merge map m' in 
     (merged, SWhile(e, x'), out)
-  
+
   | Nop -> (map, SNop, [])
   | Print(e) -> let (t, e', _) = expr map e in (map, SPrint(e'), [])
   | TypeInfo(a) -> 
