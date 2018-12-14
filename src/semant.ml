@@ -250,7 +250,7 @@ and check_array map e b =
   match typ with
   | IntArr | FloatArr | BoolArr | StringArr -> assign map (array_to_type typ, e', data) b
   | Dyn -> let Bind (n, t) = b in 
-    let map' = assign map (t, e', data) b in (map, Bind(n, t))
+    let (map', b) = assign map (t, e', data) b in (map', b)
   | _ -> raise (Failure ("STypeError: invalid types for assignment."))
 
 (* checks an entire function. 
@@ -353,7 +353,7 @@ and func_stmt globals locals stack flag = function
         let (m', x', d, out) = func_stmt globals m stack flag c in 
         let (typ, e', _) = func_expr globals m' stack flag b in 
         if equals locals m' then (m', SFor(x, e', x'), d, out) else 
-        let merged = merge locals m' in (merged, SFor(x, e', x'), Some (Dyn, SNoexpr, None), out)
+        let merged = merge locals m' in (merged, SFor(x, e', x'), Some (Dyn, SNoexpr, None), x :: out)
 
   | While(a, b) -> let (typ, e, data) = func_expr globals locals stack flag a in 
         let (m', x', d, out) = func_stmt globals locals stack flag b in 
@@ -425,7 +425,7 @@ and stmt map = function (* evaluates statements, can pass it a func *)
     let (m, x) = check_array map b a in 
     let (m', x', out) = stmt m c in 
     let (typ, e', _) = expr m' b in 
-    if equals map m' then (m', SFor(x, e', x'), out) 
+    if equals map m' then (m', SFor(x, e', x'), x :: out) 
     else let merged = merge m m' in 
     (merged, SFor(x, e', x'), out)
 
