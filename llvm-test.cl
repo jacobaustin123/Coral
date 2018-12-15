@@ -5,6 +5,12 @@ y=x
 z=x-y+x*y
 print(z)
 
+
+if x*x==x:
+	print(1)
+
+
+
 #if True:
 #	d=1
 #else:

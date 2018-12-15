@@ -861,10 +861,15 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
       (*|SReturn  (* later *)*)
       |SNop -> the_state
-      | SPrint e -> match (expr the_state e) with
-            |Raw(v) -> ignore(L.build_call printf_func [| int_format_str ; v |] "printf" b);  the_state
-      (*|SIf (predicate, then_stmt, else_stmt) ->
-         let bool_val = build_getdata_cobj bool_t (expr the_state predicate) b in
+      | SPrint e -> (match (expr the_state e) with
+            |Raw(v) -> ignore(L.build_call printf_func [| int_format_str ; v |] "printf" b);  the_state)
+      |SIf (predicate, then_stmt, else_stmt) ->
+        let e = expr the_state predicate in 
+        let bool_val = (match e with
+          |Raw(v) -> v
+          (*|Dyn(v -> *)
+        ) in
+         (*let bool_val = build_getdata_cobj bool_t (expr the_state predicate) b in*)
          (*let bool_val = (L.const_bool bool_t 1) in*)
            let merge_bb = L.append_block context "merge" the_function in  
              let build_br_merge = L.build_br merge_bb in 
@@ -876,6 +881,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                  add_terminal (stmt new_state else_stmt) build_br_merge;  (* same deal as with 'then' BB *)
                    ignore(L.build_cond_br bool_val then_bb else_bb b);  
                    let new_state = change_builder_state the_state (L.builder_at_end context merge_bb ) in new_state
+    (*
       | SWhile (predicate, body) ->
         let pred_bb = L.append_block context "while" the_function in
           ignore(L.build_br pred_bb b);
