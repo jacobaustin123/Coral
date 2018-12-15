@@ -360,7 +360,7 @@ and func_stmt globals locals stack flag = function
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in 
 
     let Bind(name, btype) = a in 
-    let (map', _, _) = assign locals (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) a in (* Dyn *)
+    let (map', _, _) = assign locals (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in (* Dyn *)
     let (semantmap, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in (* empty map for semantic checking *)
 
     let (map'', bind) = List.fold_left 
@@ -446,7 +446,7 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
       | _ :: t -> dups t
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(name, btype) = a in 
     
-    let (map', _, _) = assign map (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) a in
+    let (map', _, _) = assign map (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in
     let (semantmap, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in (* empty map for semantic checking *)
 
     let (map'', binds) = List.fold_left (fun (map, out) (Bind(x, t)) -> let (map', bind, _) = assign map (t, (SNoexpr, t), None) (Bind(x, t)) in (map', bind :: out)) (semantmap, []) b in
