@@ -818,7 +818,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
            ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
          let new_state = change_builder_state the_state (L.builder_at_end context merge_bb) in
            new_state
-    | SPrint e -> ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t (expr the_state e) b) |] "printf" b); (*build_new_cobj_init int_t (L.const_int int_t 0) b;*) the_state
+    | SPrint e -> (* TODO make this depend on runtime for dynamic types, implement strings *)
+      let (_, ty) = e in (match ty with
+        | Int -> ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t (expr the_state e) b) |] "printf" b); the_state
+        | Float -> ignore(L.build_call printf_func [| float_format_str ; (build_getdata_cobj float_t (expr the_state e) b) |] "printf" b); the_state
+        | _ -> ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t (expr the_state e) b) |] "printf" b); the_state (* TODO: replace this *)
+      )
+
     | SFunc sfdecl ->
         (* outer scope work: point binding to new cfuncobj *)
         let fname = sfdecl.sfname in
@@ -868,7 +874,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         in
 
         let int_format_str = L.build_global_stringptr "%d\n" "fmt" fn_b
-        and float_format_str = L.build_global_stringptr "%g\n" "fmt" fn_b in
+        and float_format_str = L.build_global_stringptr "%f\n" "fmt" fn_b in
 
         (* build function body by calling stmt! *)
         let build_return some_b = L.build_ret (build_new_cobj_init int_t (L.const_int int_t 69) some_b) some_b in

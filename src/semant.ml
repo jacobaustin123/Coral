@@ -28,6 +28,7 @@ let binop t1 t2 op =
     | Mul when t1 = String && t2 = Int -> String
     | Mul when t2 = String && t1 = Int -> String
     | Add when same && is_arr t1 -> t1
+    | Div when same && t1 = Int -> Int
     | _ -> raise except
   )
 
@@ -191,7 +192,7 @@ and func_exp globals locals stack flag = function (* evaluate expressions, retur
             (raise (Failure ("STypeError: cannot call variable"))) else
             let param_length = List.length args in
             if List.length formals <> param_length 
-            then raise (Failure ("SyntaxError: unexpected number of arguments in function call"))
+            then raise (Failure ("SSyntaxError: unexpected number of arguments in function call"))
 
             else let rec aux (globals, locals, bindout, exprout) v1 v2 = match v1, v2 with 
               | b, e -> let data = func_expr globals locals stack flag e in let (t', e', _) = data in 
@@ -354,13 +355,13 @@ and func_stmt globals locals stack flag = function
   | Func(a, b, c) ->
     let rec dups = function (* check duplicate argument names *)
       | [] -> ()
-      | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
+      | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SSyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
       | _ :: t -> dups t
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in 
 
     let Bind(name, btype) = a in 
     let (map', _, _) = assign locals (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) a in (* Dyn *)
-    let (semantmap, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in (* empty map for semantic checking *)
+    let (semantmap, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) a in (* empty map for semantic checking *)
 
     let (map'', bind) = List.fold_left 
         (fun (map, out) (Bind (x, t)) -> 
@@ -438,17 +439,21 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
 
   | Expr(e) -> let (t, e', _) = expr map e in (map, SExpr(e'), [])
   | Block(s) -> let ((value, globals), map') = check map [] [] flag s in (map', SBlock(value), globals)
-  | Return(e) -> raise (Failure ("SyntaxError: return statement outside of function"))
+  | Return(e) -> raise (Failure ("SSyntaxError: return statement outside of function"))
   | Func(a, b, c) -> let rec dups = function (* check duplicate argument names *)
       | [] -> ()
-      | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
+      | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SSyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
       | _ :: t -> dups t
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(name, btype) = a in 
     
     let (map', _, _) = assign map (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) a in
-    let (semantmap, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in (* empty map for semantic checking *)
+    let (semantmap, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) a in (* empty map for semantic checking *)
 
-    let (map'', binds) = List.fold_left (fun (map, out) (Bind(x, t)) -> let (map', bind, _) = assign map (t, (SNoexpr, t), None) (Bind(x, t)) in (map', bind :: out)) (semantmap, []) b in
+    let (map'', binds) = List.fold_left 
+      (fun (map, out) (Bind(x, t)) -> 
+        let (map', bind, _) = assign map (t, (SNoexpr, t), None) (Bind(x, t)) in 
+        (map', bind :: out)
+      ) (semantmap, []) b in
     let bindout = List.rev binds in
     let (map2, block, data, locals) = (func_stmt map'' map'' TypeMap.empty {flag with noeval = true; forloop = false; cond = false; } c) in
       (match data with

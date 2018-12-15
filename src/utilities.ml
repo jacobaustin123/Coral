@@ -85,6 +85,7 @@ let print = function
   | Parser.TIMESEQ -> "TIMESEQ"
   | Parser.DIVIDEEQ -> "DIVIDEEQ"
   | Parser.EXPEQ -> "EXPEQ"
+  | Parser.PRINT -> "PRINT"
   | _ -> "Token not supported by print utility"
 ;;
 
