@@ -18,6 +18,7 @@ open Ast
 open Sast
 
 module StringMap = Map.Make(String)
+module BindMap = Map.Make(struct type t = Ast.bind let compare = Pervasives.compare end)
 let pt some_lltype = Printf.eprintf "pt: %s%s\n" "---->" (L.string_of_lltype some_lltype)
 let pv some_llvalue = Printf.eprintf "pv: %s%s\n" "---->" (L.string_of_llvalue some_llvalue)
 let tst() = Printf.eprintf "!!!!!!!!!!";()
@@ -26,11 +27,20 @@ let tstp str = Printf.eprintf "%s\n" str;()
 
 
 (*type state = (L.llvalue StringMap.t) * L.llvalue * L.llbuilder*)
+
+(* the fundamental datatype returned by expr() *)
+type dataunit =
+    |Raw of L.llvalue     (* where llvalue = i32 or other prim *)
+    |Box of L.llvalue     (* where llvalue = cobj_t *)
+type dataunit_addr = 
+    |RawAddr of L.llvalue (* where llvalue = i32_pt, like what alloca returned *)
+    |BoxAddr of L.llvalue
 type state = {
-    namespace: L.llvalue StringMap.t;
+    namespace: dataunit_addr BindMap.t;
     func: L.llvalue;
     b: L.llbuilder
 }
+
 
 let seq len =
   let rec aux len acc =
@@ -581,25 +591,64 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
           
         
 
-  (** allocate for all the bindings and put them in a map **)
-  let build_binding_list_global coral_names =   (* coral_names: string list *)  (* returns a stringmap coral_name -> llvalue *)
-        List.fold_left (fun map name -> StringMap.add name (L.define_global name (L.const_pointer_null cobj_pt) the_module) map) StringMap.empty coral_names
-  and build_binding_list_local coral_names builder =   (* coral_names: string list *)  (* returns a stringmap coral_name -> llvalue *)
-        List.fold_left (fun map name -> StringMap.add name (L.build_malloc cobj_pt name builder) map) StringMap.empty coral_names
-  (*let example_binding = L.declare_global cobj_ppt "example_binding" the_module in*)
-  in
-
   let name_of_bind = function
       |Bind(name,_) -> name
   in
-  
-  let globals_map =
-      let globals_list = List.map name_of_bind (snd prgm)  (* snd prgrm is the bind list of globals *) in
-  (*let globals_map = build_binding_list_global ["a";"b";"c"] in*)
-      build_binding_list_global globals_list
+  let type_of_bind = function
+      |Bind(_,ty) -> ty
   in
-  let lookup_global_binding coral_name = 
-    StringMap.find coral_name globals_map
+
+  (** allocate for all the bindings and put them in a map **)
+
+  (* pass in Some(builder) to do local vars alloca() or None to do globals non-alloca *)
+  let build_binding_list local_builder_opt binds =   (* returns a stringmap Bind -> Addr *) 
+      (** the commented code adds a Dyn version of every var. i wont use it for pure immutable phase-1 testing tho! **)
+      (**let dynify bind =   (* turns a bind into dynamic. a helper fn *)
+         Bind(name,_) = bind in
+           Bind(name,Dyn)
+      in
+      let dyns_list =   (* redundant list where every bind is dynamic *)
+          List.map dynify (names_of_bindlist binds)
+      in
+      binds = List.sort_uniq Pervasives.compare (binds @ dyns_list) 
+      in   (* now binds has a dyn() version of each variable *) **)
+      let ltyp_of_typ = function
+          |Int -> int_t
+          |Float -> float_t
+          |Bool -> bool_t
+          |Dyn -> cobj_t
+          (** todo lists and stuff **)
+      in
+      let get_const bind = match (type_of_bind bind) with
+        |Int -> L.const_null int_t
+        |Float -> L.const_null float_t
+        |Bool -> L.const_null bool_t
+        |Dyn -> L.const_null cobj_t
+        (** TODO impl lists and everything! and strings. idk how these will work **)
+      in
+      let prettyname_of_bind bind = (name_of_bind bind)^"_"^(string_of_typ (type_of_bind bind))
+      in
+      let allocate bind = 
+        let alloc_result = 
+          (match local_builder_opt with
+            |None -> L.define_global (prettyname_of_bind bind) (get_const bind) the_module
+            |Some(builder) -> L.build_alloca (ltyp_of_typ (type_of_bind bind)) (prettyname_of_bind bind) builder
+          )
+        in
+        match (type_of_bind bind) with
+          |Int|Float|Bool -> RawAddr(alloc_result)
+          |Dyn -> BoxAddr(alloc_result)
+      in
+        List.fold_left (fun map bind -> BindMap.add bind (allocate bind) map) BindMap.empty binds
+  in
+  
+
+  let globals_map =
+      let globals_list = snd prgm  (* snd prgrm is the bind list of globals *) in
+        build_binding_list None globals_list
+  in
+  let lookup_global_binding bind = 
+    BindMap.find bind globals_map
   in
 
   (* define printf *)
@@ -614,7 +663,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   let main_builder = L.builder_at_end context (L.entry_block main_function) in
   let int_format_str = L.build_global_stringptr "%d\n" "fmt" main_builder
   and float_format_str = L.build_global_stringptr "%g\n" "fmt" main_builder in 
-  let init_state:state = {namespace=StringMap.empty; func=main_function; b=main_builder} in
+  let init_state:state = {namespace=BindMap.empty; func=main_function; b=main_builder} in
 
   (*
   (* basic object creation test *)
@@ -646,9 +695,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     in aux (len-1) []
   in
 
-  let lookup coral_name namespace =
-      try StringMap.find coral_name namespace
-        with Not_found -> lookup_global_binding coral_name
+  let lookup namespace bind =
+      try BindMap.find bind namespace
+        with Not_found -> lookup_global_binding bind
   in
 
   
@@ -657,19 +706,19 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       let (e,ty) = typed_e in
       match e with
     | SLit lit -> (match lit with
-        | IntLit i -> build_new_cobj_init int_t (L.const_int int_t i) b
-        | BoolLit i -> build_new_cobj_init bool_t (L.const_int bool_t (if i then 1 else 0)) b
-        | FloatLit i -> build_new_cobj_init float_t (L.const_float float_t i) b
-        | StringLit i -> let elements = List.rev (Seq.fold_left (fun l ch ->
-            let cobj_of_char_ptr = build_new_cobj_init char_t (L.const_int char_t (Char.code ch)) b in
-            cobj_of_char_ptr::l) [] (String.to_seq i)) in
-          let (objptr, dataptr) = build_new_cobj clist_t b in
-          let _ = build_new_clist dataptr elements b in
-          objptr
-    )
-    | SVar bind -> let coral_name = name_of_bind bind in
-        L.build_load (lookup coral_name namespace) coral_name b
-    | SCall(fexpr, arg_expr_list, sfdecl) ->
+        | IntLit i -> Raw(L.const_int int_t i)
+        | BoolLit i -> Raw(L.const_int bool_t (if i then 1 else 0))
+        | FloatLit i -> Raw((L.const_float float_t i))
+        (** todo string lit **)
+        )
+
+    | SVar bind -> let Bind(name,ty) = bind in
+        (match (lookup namespace bind) with
+          |RawAddr(addr) -> Raw(L.build_load addr name b)
+          |BoxAddr(addr) -> Box(L.build_load addr name b)
+        )
+        
+    (*| SCall(fexpr, arg_expr_list, sfdecl) ->
             tstp "entering SCALL";
         let argc = List.length arg_expr_list
         (* eval the arg exprs *)
@@ -734,6 +783,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       let _ = build_new_clist dataptr elements b in
       objptr
     (* | Snoexper *)
+    *)
   in
 
     let add_terminal the_state instr = 
@@ -752,13 +802,29 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       |SBlock s -> List.fold_left stmt the_state s
       |SExpr e ->  ignore(expr the_state e); the_state
       |SAsn (sexpr_list,e) -> (*L.dump_module the_module;*) tstp "entering asn";
+        let get_ = (fun (SVar(Bind(name,_)),_) -> name) in
+        let binds = List.map (fun (SVar(bind),_) -> bind) sexpr_list in
+        let addrs = List.map (lookup namespace) binds in
         let e' = expr the_state e in tstp "passing checkpoint";
-        let get_name = (fun (SVar(Bind(name,explicit_t)),inferred_t) -> name) in
-        let names = List.map get_name sexpr_list in
-        List.iter (fun name -> ignore (L.build_store e' (lookup name namespace) b)) names ; tstp "leaving asn"; the_state
+        let do_store rhs lhs =
+            (match rhs with
+                |Raw(v) -> (match lhs with
+                    |RawAddr(addr) -> ignore(L.build_store v addr b)
+                    |BoxAddr(_) -> tstp "ERROR, assinging Raw to BoxAddr" (** shd crash in future **)
+                    )
+                |Box(v) -> (match lhs with
+                    |RawAddr(_) -> tstp "ERROR, assigning Box to RawAddr"
+                    |BoxAddr(addr) -> ignore(L.build_store v addr b)
+                    )
+            )
+        in
+        List.iter (do_store e') addrs; the_state
+
       (*|SReturn  (* later *)*)
       |SNop -> the_state
-      |SIf (predicate, then_stmt, else_stmt) ->
+      | SPrint e -> match (expr the_state e) with
+            |Raw(v) -> ignore(L.build_call printf_func [| int_format_str ; v |] "printf" b);  the_state
+      (*|SIf (predicate, then_stmt, else_stmt) ->
          let bool_val = build_getdata_cobj bool_t (expr the_state predicate) b in
          (*let bool_val = (L.const_bool bool_t 1) in*)
            let merge_bb = L.append_block context "merge" the_function in  
@@ -857,10 +923,10 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
               L.set_value_name name cobj_p;  (* cosmetic *)
               let alloca = L.build_alloca cobj_pt name fn_b in
               ignore(L.build_store cobj_p alloca fn_b);
-              StringMap.add name alloca namespace_wip
+              BindMap.add name alloca namespace_wip
           and add_local namespace_wip name =  (* alloc a local *)
               let alloca = L.build_alloca cobj_pt name fn_b in
-              StringMap.add name alloca namespace_wip
+              BindMap.add name alloca namespace_wip
           in   (* pull in add_formal and add_local *)
           let added_locals = List.fold_left add_local namespace local_names in
           let added_formals = List.fold_left2 add_formal added_locals formal_names formal_vals
@@ -877,12 +943,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     | SReturn e ->
             L.build_ret (expr the_state e) b; the_state
         
+    *)
 
   in
 
   (*
   let ex = SIf(SLit(BoolLit(true)),SAsn([WeakBind("a",Dyn)],SLit(boolLit(42))),SNop) in
-  let main_builder = stmt StringMap.empty main_builder ex in
+  let main_builder = stmt BindMap.empty main_builder ex in
 *)
 
   let final_state = stmt init_state (SBlock(fst prgm)) in
@@ -890,7 +957,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   let f = (L.define_function "myfn" (L.function_type (L.void_type context) [||]) the_module) in
   let myb = L.builder_at_end context (L.entry_block f) in
   ignore(L.build_ret_void myb);
-  let main_builder = stmt StringMap.empty main_builder (SBlock(fst prgm)) in
+  let main_builder = stmt BindMap.empty main_builder (SBlock(fst prgm)) in
   let f = (L.define_function "myfn" (L.function_type (L.void_type context) [||]) the_module) in
   let myb = L.builder_at_end context (L.entry_block f) in
   ignore(L.build_ret_void myb);
@@ -899,7 +966,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
   (*
   let ex = SAsn([WeakBind("a",Dyn)],SLit(BoolLit(42))) in
-  ignore(stmt StringMap.empty main_builder ex);
+  ignore(stmt BindMap.empty main_builder ex);
   *)
 
   (*
