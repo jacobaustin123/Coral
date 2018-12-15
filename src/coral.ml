@@ -53,11 +53,15 @@ let process_output_to_list = fun command ->
 let cmd_to_list command =
   let (l, _) = process_output_to_list command in l
 
-let strip_stmt = function
+let rec strip_stmt = function
   | Type(x) | Print(x) -> Nop
+  | If(a, b, c) -> If(a, strip_stmt b, strip_stmt c)
+  | While(a, b) -> While(a, strip_stmt b)
+  | For(a, b, c) -> For(a, b, strip_stmt c)
+  | Block(x) -> Block(strip_print x)
   | _ as x -> x
 
-let strip_print ast = List.rev (List.fold_left (fun acc x -> (strip_stmt x) :: acc) [] ast)
+and strip_print ast = List.rev (List.fold_left (fun acc x -> (strip_stmt x) :: acc) [] ast)
 
 (* this is the main function loop for the interpreter. We lex the input from stdin,
 convert it to a list of Parser.token, apply the appropriate indentation corrections,
@@ -86,25 +90,26 @@ let rec loop map smap past run =
       | []     -> Parser.EOF 
       | h :: t -> formatted := t ; h in
 
-    let program = if run then (strip_print past) @ (Parser.program token (Lexing.from_string ""))
+    let program = if run then (Parser.program token (Lexing.from_string ""))
     else (Parser.program token (Lexing.from_string "")) in
 
     (* let _ = (List.iter (Printf.printf "%s ") (List.map print program); print_endline "") in (* print debug messages *) *)
 
     let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } program) in (* temporarily here to check validity of SAST *)
-    
-    if run then 
-      let m = Codegen.translate sast in
+
+    if run then
+      (let m = Codegen.translate sast in
       Llvm_analysis.assert_valid_module m;
       let oc = open_out "source.ll" in
       (* (Llvm.string_of_llmodule m); *)
       (* Printf.printf "%s\n" (Llvm.string_of_llmodule m); *)
       Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc;
       let output = cmd_to_list "./inter.sh source.ll" in
-      List.iter print_endline output; flush stdout; loop map smap program run
-    else
-    let _ = if !debug = 1 then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
+      List.iter print_endline output; flush stdout; loop map smap program run)
+
+    else let _ = if !debug = 1 then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
       flush stdout; loop map smap' [] false
+
     (* let m = Codegen.translate sast in *)
     (* Llvm_analysis.assert_valid_module m; *)
     (* print_string (Llvm.string_of_llmodule m) *)
@@ -112,7 +117,7 @@ let rec loop map smap past run =
     (* flush stdout; loop map smap' *)
 
   with
-    | Not_found -> loop map smap past run
+    | Not_found -> Printf.printf "NotFoundError: unknown lexing error\n"; loop map smap past run
     | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; loop map smap past run
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map smap past run
     | Runtime explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map smap past run
@@ -148,10 +153,9 @@ let rec file map smap fname run = (* todo combine with loop *)
       let m = Codegen.translate sast in
       Llvm_analysis.assert_valid_module m;
       print_string (Llvm.string_of_llmodule m);
-    else if !debug = 1 then print_endline ("Semantically Checked SAST:\n" ^ (string_of_sprogram sast)) (* print debug messages *)
+    if !debug = 1 then print_endline ("Semantically Checked SAST:\n" ^ (string_of_sprogram sast)) (* print debug messages *)
   with
     | Not_found -> Printf.printf "NotFoundError: possibly caused by lexer!\n"; flush stdout
-
     | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout
 ;;
@@ -159,8 +163,9 @@ let rec file map smap fname run = (* todo combine with loop *)
 (* main loop *)
 let _ =
   parse_cmdline specs print_endline; (* parse command line arguments *)
-  if !debug = 1 && !run = 1 then raise (Failure "CompilerError: cannot run file and view debug information at the same time. Use either -d or -r flags.")
-  else let emptymap = StringMap.empty in let semptymap = StringMap.empty in
+  (* if !debug = 1 && !run = 1 then raise (Failure "CompilerError: cannot run file and view debug information at the same time. Use either -d or -r flags.") *)
+  let emptymap = StringMap.empty in 
+  let semptymap = StringMap.empty in
   if String.length !fpath = 0 then 
       (Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
       try loop emptymap semptymap [] (!run = 1) with Scanner.Eof -> exit 0)
