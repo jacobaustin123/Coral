@@ -861,8 +861,15 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
       (*|SReturn  (* later *)*)
       |SNop -> the_state
-      | SPrint e -> (match (expr the_state e) with
-            |Raw(v) -> ignore(L.build_call printf_func [| int_format_str ; v |] "printf" b);  the_state)
+      | SPrint e -> 
+        let (_,t) = e in
+            (match (expr the_state e) with
+                |Raw(v) -> match t with
+                    | Int -> ignore(L.build_call printf_func [| int_format_str ; v |] "printf" b);  the_state
+                    | Float -> ignore(L.build_call printf_func [| float_format_str ; v |] "printf" b);  the_state
+            )
+              
+    
       |SIf (predicate, then_stmt, else_stmt) ->
         let e = expr the_state predicate in 
         let bool_val = (match e with

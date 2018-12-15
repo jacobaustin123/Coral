@@ -6,8 +6,8 @@ z=x-y+x*y
 print(z)
 
 
-if x*x==x:
-	print(1)
+if x < x*x:
+	print(1.2)
 
 
 
