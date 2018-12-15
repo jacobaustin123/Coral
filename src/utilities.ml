@@ -82,6 +82,7 @@ let array_to_type = function
 (* checks if a given type is an array type *)
 let is_arr = function
   | StringArr | BoolArr | IntArr | FloatArr -> true
+  | String -> true
   | _ -> false
 
 (* splits a list of sbinds into a list of strings and a list of types, uses for TypeMap/recursion *)
