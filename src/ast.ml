@@ -1,3 +1,9 @@
+
+(* The Abstract Syntax Tree (AST) for the Coral Programming Language *)
+
+(* This AST supports many of the features of modern Python, with the exception of 
+exceptions, and some built-in data-structures supported by Python. *)
+
 type operator = Add | Sub | Mul | Div | Exp | Eq | Neq | Less | Leq | Greater | Geq | And | Or | ListAccess
 
 type uop = Neg | Not
@@ -90,6 +96,8 @@ let rec string_of_expr = function
   | Method(obj, m, el) -> string_of_expr obj ^ "." ^ m ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
   | Field(obj, s) -> string_of_expr obj ^ "." ^ s
   | List(el) -> String.concat ", " (List.map string_of_expr el)
+  | ListAccess(e1, e2) -> string_of_expr e1 ^ "[" ^ string_of_expr e2 ^ "]"
+  | ListSlice(e1, e2, e3) -> string_of_expr e1 ^ "[" ^ string_of_expr e2 ^ ":" ^ string_of_expr e3 ^ "]"
 
 let rec string_of_stmt = function
   | Func(b, bl, s) -> "def " ^ string_of_bind b ^ "(" ^ String.concat ", " (List.map string_of_bind bl) ^ ")\n" ^ string_of_stmt s

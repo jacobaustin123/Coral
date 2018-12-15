@@ -2,7 +2,15 @@
 	open Ast
 %}
 
-%token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE EXP NOT NEG SEP AND OR ARROW NOP TYPE PRINT
+/* A simple LR parser in OcamlYacc implementing a minimal Python syntax with some
+limitations on exceptions, generators, importing modules, and some other features.
+
+The first parsing target, tokenize, is a helper marser used to simply parse the
+lexing stream into a list that can be used to extract indentation/tabs for the
+Python-style indentation based parsing scheme. The second is the full parser */
+
+%token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE PLUSEQ MINUSEQ TIMESEQ DIVIDEEQ EXPEQ
+%token EXP NOT NEG SEP AND OR ARROW NOP TYPE PRINT
 %token TAB COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE DOT
 %token BOOL INT FLOAT STRING BOOLARR INTARR FLOATARR STRINGARR
 %token CLASS 
@@ -17,16 +25,13 @@
 %token <int> INT_LITERAL
 %token <bool> BOOL_LITERAL
 
-/* this is done to eliminate shift/reduce conflicts in the first lexing stage. 
-none of these tokens need precedence declarations. be careful about this if rules won't reduce */
-
-%nonassoc NOFIELD
+%nonassoc NOFIELD /* handles shift-reduce error for fields and methods in classes */
 %nonassoc FIELD
 
-%nonassoc NOELSE
+%nonassoc NOELSE /* handles shift-reduce error for else and noelse clauses */
 %nonassoc ELSE
 
-%right ASN
+%right ASN PLUSEQ MINUSEQ DIVIDEEQ TIMESEQ
 %left DOT
 %left OR
 %left AND 
@@ -34,26 +39,34 @@ none of these tokens need precedence declarations. be careful about this if rule
 %left LT GT LEQ GEQ
 %left PLUS MINUS
 %left TIMES DIVIDE
-%right EXP
+%right EXP EXPEQ
 %right NOT NEG
 %left SEP
 
 %nonassoc LPAREN LBRACK LBRACE
 %nonassoc RPAREN RBRACK RBRACE
 
+/* this tokenize target is simply used to take the input lexbuf stream and produce
+a list of Parser.tokens for use by the indentation method in Coral.ml */
+
 %start tokenize
-%type <token list> tokenize /* used to handle indentation */
+%type <token list> tokenize 
+
+
+/* this program target is the main target used to parse the entire program */
 
 %start program
 %type <Ast.stmt list> program
 
 %%
 
-tokenize: /* used by the parser to read the input into the indentation function */
+tokenize:
   | seq EOL { $1 @ [EOL] }
   | EOL { NOP :: [EOL] }
 
-seq: /* used by the parser to read the input into the indentation function. generated from scanner.mll with an awk script */
+/* seq: an auxillary target used to handle shift reduce errors in tokenize */
+
+seq:
   | token { [$1] }
   | token seq { $1 :: $2 }
 
@@ -85,6 +98,11 @@ token:
   | TIMES { TIMES }
   | DIVIDE { DIVIDE }
   | EXP { EXP }
+  | PLUSEQ { PLUSEQ }
+  | MINUSEQ { MINUSEQ }
+  | TIMESEQ { TIMESEQ }
+  | DIVIDEEQ { DIVIDEEQ }
+  | EXPEQ { EXPEQ }
   | LPAREN { LPAREN }
   | RPAREN { RPAREN }
   | LBRACK { LBRACK }
@@ -116,11 +134,34 @@ token:
   | TYPE { TYPE }
   | PRINT { PRINT }
 
-program: stmt_list EOF { List.rev $1 } /* the main program function */
+/* program: the main program parser target. read a list of statements until EOF is reached.
+constructed backwards per the usual OCaml functional list syntax. */
 
-stmt_list: /* lists of statements in a function body. modified from Micro C */
+program: stmt_list EOF { List.rev $1 }
+
+/* stmt_list: a list of statements in the global scope or a function body. modified from Micro C. */
+
+stmt_list:
   | { [] }
   | stmt_list stmt { $2 :: $1 }
+
+/* stmt: this defines all possible statements in the Coral language. Those possible statements are:
+
+a) an expression
+b) another statement (in case of unusual behavior in the parser
+c) a class with a name and block of statements
+d) a function with optional typed arguments
+e) a function with explicit return type
+f) a for loop
+g) a while loop
+e) a list of names or other valid lvalue expressions. will be expanded as more lvalues are supported
+f) hard-coded type statements
+g) hard-coded print statements
+h) no operation statements
+
+Other statements can be added by defining the appropriate syntax, and adding a new class of statements
+to the ast.ml stmt type.
+*/
 
 stmt:
   | expr SEP { Expr $1 }
@@ -134,41 +175,74 @@ stmt:
   | FOR bind_opt IN expr COLON stmt_block { For($2, $4, $6) }
   | WHILE expr COLON stmt_block { While($2, $4) }
   | formal_asn_list ASN expr { Asn(List.rev $1, $3) }
+  | lvalue PLUSEQ expr { Asn([$1], Binop($1, Add, $3)) }
+  | lvalue MINUSEQ expr { Asn([$1], Binop($1, Sub, $3)) }
+  | lvalue TIMESEQ expr { Asn([$1], Binop($1, Mul, $3)) }
+  | lvalue DIVIDEEQ expr { Asn([$1], Binop($1, Div, $3)) }
+  | lvalue EXPEQ expr { Asn([$1], Binop($1, Exp, $3)) }
   | TYPE LPAREN expr RPAREN { Type($3) }
   | PRINT LPAREN expr RPAREN { Print($3) }
   | NOP { Nop }
 
 formal_asn_list:
-  | bind_opt { [Var $1] }
-  | list_access { [$1] }
-  | formal_asn_list ASN bind_opt { Var $3 :: $1 }
+  | lvalue { [$1] }
+  | formal_asn_list ASN lvalue { $3 :: $1 }
+
+lvalue:
+  | bind_opt { Var $1 }
+  | list_access { $1 }
+
+/* inplace_op:
+  | lvalue PLUSEQ expr { Asn([$1], Binop($1, Add, $3)) }
+  | lvalue MINUSEQ expr { Asn([$1], Binop($1, Sub, $3)) }
+  | lvalue TIMESEQ expr { Asn([$1], Binop($1, Mul, $3)) }
+  | lvalue DIVIDEEQ expr { Asn([$1], Binop($1, Div, $3)) }
+  | lvalue EXPEQ expr { Asn([$1], Binop($1, Exp, $3)) } */
+
+/* bind_opt: optional type target, for variables of the form x or x : type */
 
 bind_opt:
   | VARIABLE { Bind($1, Dyn) }
   | VARIABLE COLON typ { Bind($1, $3) }
 
+/* list_access: list access of the form name[expr] or name[expr : expr]. 
+this permits invalid access and needs to be checked in semant and at runtime. */
+
 list_access:
   | expr LBRACK expr RBRACK { ListAccess($1, $3) }
   | expr LBRACK expr COLON expr RBRACK { ListSlice($1, $3, $5) }
 
+/* stmt_block: a statement block contained within a function, class, loop, or conditional.
+delimited by an indent and dedent block introduced by the indentation parser in coral.ml */
+
 stmt_block: 
   | INDENT SEP stmt_list DEDENT { Block(List.rev $3) }
 
-formals_opt: /* used for parsing argument lists in function declarations */
+/* formals_opt: an optional formal name in a function declaration */
+
+formals_opt:
   | { [] }
   | formal_list { List.rev $1 }
+
+/* formal_list: a list of optional formal names in a function declaration */
 
 formal_list: 
   | bind_opt { [$1] }
   | formal_list COMMA bind_opt { $3 :: $1 }
 
-actuals_opt: /* used for parsing argument lists in function calls and normal [1, 2, 3, 4] lists */
+/* actuals_opt: an optional expression in a function call */
+
+actuals_opt: 
   | { [] }
   | actuals_list { List.rev $1 }
+
+/* actuals_list: an optional list of expressions in a function call */
 
 actuals_list:
   | expr { [$1] }
   | actuals_list COMMA expr { $3 :: $1 }
+
+/* typ: the possible type attributes that can be attached to an optionally typed variable. */
 
 typ:
   | FLOAT { Float }
@@ -179,6 +253,11 @@ typ:
   | INTARR { IntArr }
   | BOOLARR { BoolArr }
   | STRINGARR { StringArr }
+
+/* expr: these are all possible expressions allowed in the Coral language. each
+expression corresponds to an expr object in the ast.ml file. Expressions are anything
+that return a value, i.e. can be assigned to a variable. These include lists, list access
+and list slice, methods and fields, function calls, binary and unary operations, and literals. */
 
 expr:
 | list_access { $1 }

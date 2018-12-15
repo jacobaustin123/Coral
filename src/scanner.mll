@@ -8,6 +8,10 @@
   | len -> String.sub str 1 (len - 2)
 }
 
+(* a simple lexer implemented in ocamllex for lexing a Coral/Python program, with a few minor limitations.
+several Python features have not yet been implemented and will throw errors in the lexing stage if 
+encountered. Coral generally follows the K&R C model for floats and string literals *)
+
 let letter = ['a'-'z''A'-'Z''_''0'-'9']
 let number = ['0'-'9']+('.')?['0'-'9']*
 let stringliteral = ('"'[^'"''\\']*('\\'_[^'"''\\']*)*'"')
@@ -60,6 +64,11 @@ rule token = parse
   | '*' { TIMES }
   | '/' { DIVIDE }
   | "**" { EXP }
+  | "+=" { PLUSEQ }
+  | "-=" { MINUSEQ }
+  | "*=" { TIMESEQ }
+  | "/=" { DIVIDEEQ}
+  | "**=" { EXPEQ }
   | '(' { LPAREN }
   | ')' { RPAREN }
   | '{' { LBRACE }
@@ -73,15 +82,11 @@ rule token = parse
   | "type" { TYPE }
   | "print" { PRINT }
   | ("global"|"await"|"import"|"from"|"as"|"nonlocal"|"async"|"yield"|"raise"|"except"|"finally"|"is"|"lambda"|"try"|"with") { raise (Failure("NotImplementedError: these Python 3.7 features are not currently being implemented in the Coral language." )) }
-
-(* to do capture groups for string literal to extract everything but the quotes *)
-
   | stringliteral as id { STRING_LITERAL(strip_quotes id) } 
   | ("True"|"False") as id { if id = "True" then BOOL_LITERAL(true) else BOOL_LITERAL(false) }
   | cstylefloat as lit { FLOAT_LITERAL(float_of_string lit) } 
   | ['0'-'9']+ as id { INT_LITERAL(int_of_string id) }
   | letter+ as id { VARIABLE(id) }
-
   | eof { raise Eof }
   | _ as char { raise (Failure("SyntaxError: invalid character in identifier " ^ Char.escaped char)) }
 
