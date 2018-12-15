@@ -1,0 +1,351 @@
+
+###### Testing test-add1
+./coral.native -r -c tests/test-add1.cl > .ll
+entering asn
+passing checkpoint
+leaving asn
+entering asn
+passing checkpoint
+leaving asn
+llc .ll -o source.s
+gcc -no-pie source.s -o main
+clang: warning: argument unused during compilation: '-nopie' [-Wunused-command-line-argument]
+./main
+diff -b test-add1.out tests/test-add1.out > test-add1.diff
+###### SUCCESS
+
+###### Testing test-bool
+./coral.native -r -c tests/test-bool.cl > .ll
+entering asn
+passing checkpoint
+leaving asn
+llc .ll -o source.s
+gcc -no-pie source.s -o main
+clang: warning: argument unused during compilation: '-nopie' [-Wunused-command-line-argument]
+./main
+diff -b test-bool.out tests/test-bool.out > test-bool.diff
+###### SUCCESS
+
+###### Testing test-forloops
+./coral.native -r -c tests/test-forloops.cl > .ll
+entering asn
+passing checkpoint
+leaving asn
+entering asn
+passing checkpoint
+leaving asn
+entering asn
+passing checkpoint
+leaving asn
+entering asn
+passing checkpoint
+leaving asn
+llc .ll -o source.s
+gcc -no-pie source.s -o main
+clang: warning: argument unused during compilation: '-nopie' [-Wunused-command-line-argument]
+./main
+diff -b test-forloops.out tests/test-forloops.out > test-forloops.diff
+###### SUCCESS
+
+###### Testing test-func1
+./coral.native -r -c tests/test-func1.cl > .ll
+entering SCALL
+llc .ll -o source.s
+gcc -no-pie source.s -o main
+clang: warning: argument unused during compilation: '-nopie' [-Wunused-command-line-argument]
+./main
+diff -b test-func1.out tests/test-func1.out > test-func1.diff
+###### SUCCESS
+
+###### Testing test-func2
+./coral.native -r -c tests/test-func2.cl > .ll
+entering SCALL
+entering asn
+entering SCALL
+passing checkpoint
+leaving asn
+llc .ll -o source.s
+gcc -no-pie source.s -o main
+clang: warning: argument unused during compilation: '-nopie' [-Wunused-command-line-argument]
+./main
+diff -b test-func2.out tests/test-func2.out > test-func2.diff
+###### SUCCESS
+
+###### Testing test-func3
+./coral.native -r -c tests/test-func3.cl > .ll
+entering SCALL
+entering SCALL
+llc .ll -o source.s
+gcc -no-pie source.s -o main
+clang: warning: argument unused during compilation: '-nopie' [-Wunused-command-line-argument]
+./main
+diff -b test-func3.out tests/test-func3.out > test-func3.diff
+###### SUCCESS
+
+###### Testing test-func4
+./coral.native -r -c tests/test-func4.cl > .ll
+entering SCALL
+llc .ll -o source.s
+gcc -no-pie source.s -o main
+clang: warning: argument unused during compilation: '-nopie' [-Wunused-command-line-argument]
+./main
+diff -b test-func4.out tests/test-func4.out > test-func4.diff
+###### SUCCESS
+
+###### Testing test-func5
+./coral.native -r -c tests/test-func5.cl > .ll
+entering asn
+entering SCALL
+passing checkpoint
+leaving asn
+entering asn
+entering SCALL
+passing checkpoint
+leaving asn
+llc .ll -o source.s
+gcc -no-pie source.s -o main
+clang: warning: argument unused during compilation: '-nopie' [-Wunused-command-line-argument]
+./main
+diff -b test-func5.out tests/test-func5.out > test-func5.diff
+###### SUCCESS
+
+###### Testing test-func6
+./coral.native -r -c tests/test-func6.cl > .ll
+entering SCALL
+entering SCALL
+entering SCALL
+entering asn
+entering SCALL
+entering SCALL
+passing checkpoint
+leaving asn
+llc .ll -o source.s
+gcc -no-pie source.s -o main
+clang: warning: argument unused during compilation: '-nopie' [-Wunused-command-line-argument]
+./main
+diff -b test-func6.out tests/test-func6.out > test-func6.diff
+###### SUCCESS
+
+###### Testing test-func7
+./coral.native -r -c tests/test-func7.cl > .ll
+entering asn
+passing checkpoint
+leaving asn
+entering SCALL
+llc .ll -o source.s
+gcc -no-pie source.s -o main
+clang: warning: argument unused during compilation: '-nopie' [-Wunused-command-line-argument]
+./main
+diff -b test-func7.out tests/test-func7.out > test-func7.diff
+###### SUCCESS
+
+###### Testing test-gcd
+./coral.native -r -c tests/test-gcd.cl > .ll
+entering asn
+passing checkpoint
+leaving asn
+entering asn
+passing checkpoint
+leaving asn
+entering asn
+passing checkpoint
+leaving asn
+entering asn
+passing checkpoint
+leaving asn
+llc .ll -o source.s
+gcc -no-pie source.s -o main
+clang: warning: argument unused during compilation: '-nopie' [-Wunused-command-line-argument]
+./main
+diff -b test-gcd.out tests/test-gcd.out > test-gcd.diff
+###### SUCCESS
+
+###### Testing test-idx
+./coral.native -r -c tests/test-idx.cl > .ll
+entering asn
+passing checkpoint
+leaving asn
+entering asn
+passing checkpoint
+leaving asn
+llc .ll -o source.s
+gcc -no-pie source.s -o main
+clang: warning: argument unused during compilation: '-nopie' [-Wunused-command-line-argument]
+./main
+diff -b test-idx.out tests/test-idx.out > test-idx.diff
+###### SUCCESS
+
+###### Testing test-str
+./coral.native -r -c tests/test-str.cl > .ll
+entering asn
+passing checkpoint
+leaving asn
+entering asn
+passing checkpoint
+leaving asn
+llc .ll -o source.s
+gcc -no-pie source.s -o main
+clang: warning: argument unused during compilation: '-nopie' [-Wunused-command-line-argument]
+./main
+diff -b test-str.out tests/test-str.out > test-str.diff
+###### SUCCESS
+
+###### Testing sfail-func1
+./coral.native -c tests/sfail-func1.cl > sfail-func1.out
+diff -b sfail-func1.out tests/sfail-func1.out > sfail-func1.diff
+###### SUCCESS
+
+###### Testing sfail-func2
+./coral.native -c tests/sfail-func2.cl > sfail-func2.out
+diff -b sfail-func2.out tests/sfail-func2.out > sfail-func2.diff
+###### SUCCESS
+
+###### Testing sfail-func3
+./coral.native -c tests/sfail-func3.cl > sfail-func3.out
+diff -b sfail-func3.out tests/sfail-func3.out > sfail-func3.diff
+###### SUCCESS
+
+###### Testing sfail-func4
+./coral.native -c tests/sfail-func4.cl > sfail-func4.out
+diff -b sfail-func4.out tests/sfail-func4.out > sfail-func4.diff
+###### SUCCESS
+
+###### Testing sfail-func5
+./coral.native -c tests/sfail-func5.cl > sfail-func5.out
+diff -b sfail-func5.out tests/sfail-func5.out > sfail-func5.diff
+###### SUCCESS
+
+###### Testing sfail-list3
+./coral.native -c tests/sfail-list3.cl > sfail-list3.out
+diff -b sfail-list3.out tests/sfail-list3.out > sfail-list3.diff
+###### SUCCESS
+
+###### Testing sfail-type1
+./coral.native -c tests/sfail-type1.cl > sfail-type1.out
+diff -b sfail-type1.out tests/sfail-type1.out > sfail-type1.diff
+###### SUCCESS
+
+###### Testing sfail-type2
+./coral.native -c tests/sfail-type2.cl > sfail-type2.out
+diff -b sfail-type2.out tests/sfail-type2.out > sfail-type2.diff
+###### SUCCESS
+
+###### Testing sfail-type3
+./coral.native -c tests/sfail-type3.cl > sfail-type3.out
+diff -b sfail-type3.out tests/sfail-type3.out > sfail-type3.diff
+###### SUCCESS
+
+###### Testing stest-add1
+./coral.native -c tests/stest-add1.cl > stest-add1.out
+diff -b stest-add1.out tests/stest-add1.out > stest-add1.diff
+###### SUCCESS
+
+###### Testing stest-exper1
+./coral.native -c tests/stest-exper1.cl > stest-exper1.out
+diff -b stest-exper1.out tests/stest-exper1.out > stest-exper1.diff
+###### SUCCESS
+
+###### Testing stest-exper2
+./coral.native -c tests/stest-exper2.cl > stest-exper2.out
+diff -b stest-exper2.out tests/stest-exper2.out > stest-exper2.diff
+###### SUCCESS
+
+###### Testing stest-func
+./coral.native -c tests/stest-func.cl > stest-func.out
+diff -b stest-func.out tests/stest-func.out > stest-func.diff
+###### SUCCESS
+
+###### Testing stest-func2
+./coral.native -c tests/stest-func2.cl > stest-func2.out
+diff -b stest-func2.out tests/stest-func2.out > stest-func2.diff
+###### SUCCESS
+
+###### Testing stest-func3
+./coral.native -c tests/stest-func3.cl > stest-func3.out
+diff -b stest-func3.out tests/stest-func3.out > stest-func3.diff
+###### SUCCESS
+
+###### Testing stest-func4
+./coral.native -c tests/stest-func4.cl > stest-func4.out
+diff -b stest-func4.out tests/stest-func4.out > stest-func4.diff
+###### SUCCESS
+
+###### Testing stest-func5
+./coral.native -c tests/stest-func5.cl > stest-func5.out
+diff -b stest-func5.out tests/stest-func5.out > stest-func5.diff
+###### SUCCESS
+
+###### Testing stest-func6
+./coral.native -c tests/stest-func6.cl > stest-func6.out
+diff -b stest-func6.out tests/stest-func6.out > stest-func6.diff
+###### SUCCESS
+
+###### Testing stest-func7
+./coral.native -c tests/stest-func7.cl > stest-func7.out
+diff -b stest-func7.out tests/stest-func7.out > stest-func7.diff
+###### SUCCESS
+
+###### Testing stest-func8
+./coral.native -c tests/stest-func8.cl > stest-func8.out
+diff -b stest-func8.out tests/stest-func8.out > stest-func8.diff
+###### SUCCESS
+
+###### Testing stest-gcd
+./coral.native -c tests/stest-gcd.cl > stest-gcd.out
+diff -b stest-gcd.out tests/stest-gcd.out > stest-gcd.diff
+###### SUCCESS
+
+###### Testing stest-globals1
+./coral.native -c tests/stest-globals1.cl > stest-globals1.out
+diff -b stest-globals1.out tests/stest-globals1.out > stest-globals1.diff
+###### SUCCESS
+
+###### Testing stest-globals2
+./coral.native -c tests/stest-globals2.cl > stest-globals2.out
+diff -b stest-globals2.out tests/stest-globals2.out > stest-globals2.diff
+###### SUCCESS
+
+###### Testing stest-list1
+./coral.native -c tests/stest-list1.cl > stest-list1.out
+diff -b stest-list1.out tests/stest-list1.out > stest-list1.diff
+###### SUCCESS
+
+###### Testing stest-list2
+./coral.native -c tests/stest-list2.cl > stest-list2.out
+diff -b stest-list2.out tests/stest-list2.out > stest-list2.diff
+###### SUCCESS
+
+###### Testing stest-name1
+./coral.native -c tests/stest-name1.cl > stest-name1.out
+diff -b stest-name1.out tests/stest-name1.out > stest-name1.diff
+###### SUCCESS
+
+###### Testing stest-recurse1
+./coral.native -c tests/stest-recurse1.cl > stest-recurse1.out
+diff -b stest-recurse1.out tests/stest-recurse1.out > stest-recurse1.diff
+###### SUCCESS
+
+###### Testing stest-recurse2
+./coral.native -c tests/stest-recurse2.cl > stest-recurse2.out
+diff -b stest-recurse2.out tests/stest-recurse2.out > stest-recurse2.diff
+###### SUCCESS
+
+###### Testing stest-type1
+./coral.native -c tests/stest-type1.cl > stest-type1.out
+diff -b stest-type1.out tests/stest-type1.out > stest-type1.diff
+###### SUCCESS
+
+###### Testing stest-type2
+./coral.native -c tests/stest-type2.cl > stest-type2.out
+diff -b stest-type2.out tests/stest-type2.out > stest-type2.diff
+###### SUCCESS
+
+###### Testing stest-type3
+./coral.native -c tests/stest-type3.cl > stest-type3.out
+diff -b stest-type3.out tests/stest-type3.out > stest-type3.diff
+###### SUCCESS
+
+###### Testing stest-type4
+./coral.native -c tests/stest-type4.cl > stest-type4.out
+diff -b stest-type4.out tests/stest-type4.out > stest-type4.diff
+###### SUCCESS
