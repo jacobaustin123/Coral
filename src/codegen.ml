@@ -712,8 +712,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         (** todo string lit **)
         )
 
-    | SVar bind -> let Bind(name,ty) = bind in
-        (match (lookup namespace bind) with
+    | SVar name ->
+        (match (lookup namespace (Bind(name, ty))) with
           |RawAddr(addr) -> Raw(L.build_load addr name b)
           |BoxAddr(addr) -> Box(L.build_load addr name b)
         )
@@ -801,11 +801,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       match s with
       |SBlock s -> List.fold_left stmt the_state s
       |SExpr e ->  ignore(expr the_state e); the_state
-      |SAsn (sexpr_list,e) -> (*L.dump_module the_module;*) tstp "entering asn";
-        let get_ = (fun (SVar(Bind(name,_)),_) -> name) in
-        let binds = List.map (fun (SVar(bind),_) -> bind) sexpr_list in
-        let addrs = List.map (lookup namespace) binds in
+      |SAsn (bind_list,e) -> (*L.dump_module the_module;*) tstp "entering asn";
+        let (_, ty) = e in
         let e' = expr the_state e in tstp "passing checkpoint";
+        let binds = List.map (fun (Bind(name, explicit_type)) -> Bind(name, ty)) bind_list in
+        let addrs = List.map (lookup namespace) binds in
         let do_store rhs lhs =
             (match rhs with
                 |Raw(v) -> (match lhs with

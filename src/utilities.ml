@@ -12,7 +12,8 @@ let stmt_to_string = function
   | Return(_) -> "return"
   | Class(_, _) -> "class"
   | Asn(_, _) -> "asn"
-  | TypeInfo(_) -> "typeinfo"
+  | Type(_) -> "type"
+  | Print(_) -> "print"
   | Nop -> "nop"
 
 (* converts expr to string for error handling *)
@@ -82,6 +83,7 @@ let array_to_type = function
 (* checks if a given type is an array type *)
 let is_arr = function
   | StringArr | BoolArr | IntArr | FloatArr -> true
+  | String -> true
   | _ -> false
 
 (* splits a list of sbinds into a list of strings and a list of types, uses for TypeMap/recursion *)
@@ -108,24 +110,23 @@ let comp x y =  match List.length x, List.length y with
 ;;
 
 (* compares the TypeMap (string, typ list) objects used as map keys *)
-let comp_tuple (a, b) (c, d) = if a = c then comp b d else compare a c
-;;
 
 (* merge function used to compare and combine two maps for type inference. handles scoping and undefined objects *)
 
 let compare_types a b = if a = b then a else Dyn
 let compare_decl a b = if a = b then a else false
+let compare_data a b = if a = b then a else None
 
-module TypeMap = Map.Make(struct type t = stmt * typ list let compare = comp_tuple end);;
+module TypeMap = Map.Make(struct type t = stmt * typ list let compare = Pervasives.compare end);;
 
 (* map with string keys, used for variable lookup *)
 
 module StringMap = Map.Make(String)
 
 let merge m1 m2 = StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge two lists while keeping type inference intact *)
-    | Some (a, b, c, d), Some (e, f, g, h) -> Some (compare_types a e, compare_types b f, compare_decl c g, None)
-    | Some (a, b, c, d), None -> Some(a, b, false, d)
-    | None, Some(a, b, c, d) -> Some(a, b, false, d)
+    | Some (a, b, c), Some (d, e, f) -> Some (compare_types a d, compare_types b e, compare_data c f)
+    | Some (a, b, c), None -> Some(Dyn, Dyn, c)
+    | None, Some(a, b, c) -> Some(Dyn, Dyn, c)
     | None, None -> None
   ) m1 m2
 

@@ -97,7 +97,7 @@ and eval_stmt map = function
   | While(a, b) -> let rec recurse map = let (x, m1) = eval_expr map a in if x = 1.0 then let (x1, m2) = eval_stmt m1  b in recurse m2 else (0.0, map) in recurse map                                          (*raise (Failure "NotImplementedError: While loops have not yet been implemented"); *)      (* expr * stmt *)
   | Return(a) ->  eval_expr map a;       (* expr *)
   | Asn(names, v) -> let (v1, m1) = eval_expr map v in let m2 = List.fold_left (fun m (Var(Bind(name, _))) -> StringMap.add name (Expr(Lit(FloatLit(v1)))) m) m1 names in (v1, m2)
-  | TypeInfo(_) -> (0.0, map)
+  | Type(_) -> (0.0, map)
   | Print(_) -> (0.0, map)
   | Nop -> (0.0, map)
 
@@ -224,7 +224,7 @@ let cmd_to_list command =
   let (l, _) = process_output_to_list command in l
 
 let strip_stmt = function
-  | TypeInfo(x) | Print(x) -> Nop
+  | Type(x) | Print(x) -> Nop
   | _ as x -> x
 
 let strip_print ast = List.rev (List.fold_left (fun acc x -> (strip_stmt x) :: acc) [] ast)
@@ -248,7 +248,7 @@ let rec loop map smap past run =
         formatted @ (read curr stack))
 
     in let formatted = ref (read 0 base) in
-    let _ = if !debug = 1 then (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "") in (* print debug messages *)
+    let _ = if !debug = 1 then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
 
     let token lexbuf = (* hack I found online to convert lexbuf list to a map from lexbuf to Parser.token, needed for Ocamlyacc *)
     match !formatted with 
@@ -260,7 +260,7 @@ let rec loop map smap past run =
 
     (* let _ = (List.iter (Printf.printf "%s ") (List.map print program); print_endline "") in (* print debug messages *) *)
 
-    let (sast, smap') = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
+    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } program) in (* temporarily here to check validity of SAST *)
     
     if run then 
       let m = Codegen.translate sast in
@@ -272,13 +272,14 @@ let rec loop map smap past run =
       let output = cmd_to_list "./inter.sh source.ll" in
       List.iter print_endline output; flush stdout; loop map smap program run
     else
-      let _ = if !debug = 1 then print_endline (string_of_sprogram sast) in (* print debug messages *)
+    let _ = if !debug = 1 then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
       flush stdout; loop map smap' [] false
     (* let m = Codegen.translate sast in *)
     (* Llvm_analysis.assert_valid_module m; *)
     (* print_string (Llvm.string_of_llmodule m) *)
     (* let (result, mymap) = main map 0.0 program *)
     (* flush stdout; loop map smap' *)
+
   with
     | Not_found -> loop map smap past run
     | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; loop map smap past run
@@ -299,7 +300,7 @@ let rec file map smap fname run = (* todo combine with loop *)
        formatted @ (read curr stack)
      with End_of_file -> close_in chan; Array.make (Stack.length stack - 1) Parser.DEDENT |> Array.to_list
     in let formatted = ref (read 0 base) in
-    let _ = if !debug = 1 then (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "") in (* print debug messages *)
+    let _ = if !debug = 1 then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
 
     let token lexbuf = (* hack I found online to convert lexbuf list to a map from lexbuf to Parser.token, needed for Ocamlyacc *)
     match !formatted with 
@@ -307,14 +308,13 @@ let rec file map smap fname run = (* todo combine with loop *)
       | h :: t -> formatted := t ; h in
 
     let program = Parser.program token (Lexing.from_string "") in
-    let (sast, smap') = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
+    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } program) in (* temporarily here to check validity of SAST *)
     
     if run then 
       let m = Codegen.translate sast in
       Llvm_analysis.assert_valid_module m;
       print_string (Llvm.string_of_llmodule m);
     else if !debug = 1 then print_endline ("Semantically Checked SAST:\n" ^ (string_of_sprogram sast)) (* print debug messages *)
-
   with
     | Not_found -> Printf.printf "NotFoundError: possibly caused by lexer!\n"; flush stdout
     | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout
