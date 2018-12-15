@@ -667,7 +667,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
           let _ = build_new_clist dataptr elements b in
           objptr
     )
-    | SVar bind -> let coral_name = name_of_bind bind in
+    | SVar x -> let coral_name = x in
         L.build_load (lookup coral_name namespace) coral_name b
     | SCall(fexpr, arg_expr_list, sfdecl) ->
             tstp "entering SCALL";
@@ -751,10 +751,10 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       match s with
       |SBlock s -> List.fold_left stmt the_state s
       |SExpr e ->  ignore(expr the_state e); the_state
-      |SAsn (sexpr_list,e) -> (*L.dump_module the_module;*) tstp "entering asn";
+      |SAsn (bind_list,e) -> (*L.dump_module the_module;*) tstp "entering asn";
         let e' = expr the_state e in tstp "passing checkpoint";
-        let get_name = (fun (SVar(Bind(name,explicit_t)),inferred_t) -> name) in
-        let names = List.map get_name sexpr_list in
+        let get_name = (fun (Bind(name,explicit_t)) -> name) in
+        let names = List.map get_name bind_list in
         List.iter (fun name -> ignore (L.build_store e' (lookup name namespace) b)) names ; tstp "leaving asn"; the_state
       (*|SReturn  (* later *)*)
       |SNop -> the_state

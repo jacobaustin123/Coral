@@ -34,9 +34,10 @@ type stmt =
   | Return of expr
   | Class of string * stmt
   | Asn of expr list * expr
-  | TypeInfo of expr
+  | Type of expr
   | Print of expr
   | Nop
+
 
 let rec string_of_op = function
   | Add -> "+"
@@ -100,7 +101,7 @@ let rec string_of_stmt = function
   | Return(e) -> "return " ^ string_of_expr e ^ "\n"
   | Class(str, s) -> "class " ^ str ^ ":\n" ^ string_of_stmt s
   | Asn(el, e) -> String.concat ", " (List.map string_of_expr el) ^ " = "  ^ string_of_expr e
-  | TypeInfo(e) -> string_of_expr e
+  | Type(e) -> string_of_expr e
   | Print(e) -> string_of_expr e
   | Nop -> ""
 
