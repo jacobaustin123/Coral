@@ -1,4 +1,4 @@
-def foo(x : float, y : int):
+def foo(x : float, y : float):
 	return x + y
 
 x = 4

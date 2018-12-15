@@ -94,7 +94,8 @@ and eval_stmt map = function
   | While(a, b) -> let rec recurse map = let (x, m1) = eval_expr map a in if x = 1.0 then let (x1, m2) = eval_stmt m1  b in recurse m2 else (0.0, map) in recurse map                                          (*raise (Failure "NotImplementedError: While loops have not yet been implemented"); *)      (* expr * stmt *)
   | Return(a) ->  eval_expr map a;       (* expr *)
   | Asn(names, v) -> let (v1, m1) = eval_expr map v in let m2 = List.fold_left (fun m (Var(Bind(name, _))) -> StringMap.add name (Expr(Lit(FloatLit(v1)))) m) m1 names in (v1, m2)
-  | TypeInfo(_) -> (0.0, map)
+  | Type(_) -> (0.0, map)
+  | Print(_) -> (0.0, map)
   | Nop -> (0.0, map)
 
 
@@ -223,7 +224,7 @@ let rec loop map smap =
         formatted @ (read curr stack))
 
     in let formatted = ref (read 0 base) in
-    let _ = if !debug = 1 then (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "") in (* print debug messages *)
+    let _ = if !debug = 1 then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
 
     let token lexbuf = (* hack I found online to convert lexbuf list to a map from lexbuf to Parser.token, needed for Ocamlyacc *)
     match !formatted with 
@@ -232,8 +233,8 @@ let rec loop map smap =
 
     let program = Parser.program token (Lexing.from_string "") in
     (* let _ = if !debug = 1 then print_endline ("PROGRAM:\n" ^ (string_of_program program)) in (* print debug messages *) *)
-    let (sast, smap') = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
-    let _ = if !debug = 1 then print_endline ("SPROGRAM:\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
+    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } program) in (* temporarily here to check validity of SAST *)
+    let _ = if !debug = 1 then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
     (* let (result, mymap) = main map 0.0 program in print_endline (string_of_float result); flush stdout; loop mymap smap' *)
     flush stdout; loop map smap'
   with
@@ -256,7 +257,7 @@ let rec file map smap fname run = (* todo combine with loop *)
        formatted @ (read curr stack)
      with End_of_file -> close_in chan; Array.make (Stack.length stack - 1) Parser.DEDENT |> Array.to_list
     in let formatted = ref (read 0 base) in
-    let _ = if !debug = 1 then (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "") in (* print debug messages *)
+    let _ = if !debug = 1 then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
 
     let token lexbuf = (* hack I found online to convert lexbuf list to a map from lexbuf to Parser.token, needed for Ocamlyacc *)
     match !formatted with 
@@ -264,8 +265,8 @@ let rec file map smap fname run = (* todo combine with loop *)
       | h :: t -> formatted := t ; h in
 
     let program = Parser.program token (Lexing.from_string "") in
-    let (sast, smap') = (Semant.check smap [] [] program) in (* temporarily here to check validity of SAST *)
-    let _ = if !debug = 1 then print_endline ("SPROGRAM:\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
+    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } program) in (* temporarily here to check validity of SAST *)
+    let _ = if !debug = 1 then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
     if run then let (result, mymap) = main map 0.0 program in print_endline (string_of_float result); flush stdout;
   with
     | Not_found -> loop map smap

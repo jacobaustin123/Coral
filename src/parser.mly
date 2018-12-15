@@ -2,7 +2,7 @@
 	open Ast
 %}
 
-%token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE EXP NOT NEG SEP AND OR ARROW NOP TYPE
+%token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE EXP NOT NEG SEP AND OR ARROW NOP TYPE PRINT
 %token TAB COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE DOT
 %token BOOL INT FLOAT STRING BOOLARR INTARR FLOATARR STRINGARR
 %token CLASS 
@@ -114,6 +114,7 @@ token:
   | NONE { NONE }
   | DOT { DOT }
   | TYPE { TYPE }
+  | PRINT { PRINT }
 
 program: stmt_list EOF { List.rev $1 } /* the main program function */
 
@@ -133,7 +134,8 @@ stmt:
   | FOR bind_opt IN expr COLON stmt_block { For($2, $4, $6) }
   | WHILE expr COLON stmt_block { While($2, $4) }
   | formal_asn_list ASN expr { Asn(List.rev $1, $3) }
-  | TYPE LPAREN expr RPAREN { TypeInfo($3) }
+  | TYPE LPAREN expr RPAREN { Type($3) }
+  | PRINT LPAREN expr RPAREN { Print($3) }
   | NOP { Nop }
 
 formal_asn_list:

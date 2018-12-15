@@ -1,4 +1,4 @@
-type operator = Add | Sub | Mul | Div | Exp | Eq | Neq | Less | Leq | Greater | Geq | And | Or
+type operator = Add | Sub | Mul | Div | Exp | Eq | Neq | Less | Leq | Greater | Geq | And | Or | ListAccess
 
 type uop = Neg | Not
 
@@ -34,8 +34,10 @@ type stmt =
   | Return of expr
   | Class of string * stmt
   | Asn of expr list * expr
-  | TypeInfo of expr
+  | Type of expr
+  | Print of expr
   | Nop
+
 
 let rec string_of_op = function
   | Add -> "+"
@@ -51,6 +53,7 @@ let rec string_of_op = function
   | Geq -> ">="
   | And -> "and"
   | Or -> "or"
+  | ListAccess -> "at index"
 
 let rec string_of_uop = function
   | Neg -> "-"
@@ -98,7 +101,8 @@ let rec string_of_stmt = function
   | Return(e) -> "return " ^ string_of_expr e ^ "\n"
   | Class(str, s) -> "class " ^ str ^ ":\n" ^ string_of_stmt s
   | Asn(el, e) -> String.concat ", " (List.map string_of_expr el) ^ " = "  ^ string_of_expr e
-  | TypeInfo(e) -> string_of_expr e
+  | Type(e) -> string_of_expr e
+  | Print(e) -> string_of_expr e
   | Nop -> ""
 
 and string_of_program l = String.concat "" (List.map string_of_stmt l) ^ "\n\n"
