@@ -13,9 +13,6 @@ let fpath = ref ""
 (* boolean flag used to check if program should be run by interpreter *)
 let run = ref 0
 
-let sem = ref 0
-;;
-
 (* function used to handle command line arguments *)
 let specs =
 [
