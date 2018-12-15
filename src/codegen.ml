@@ -717,6 +717,45 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
           |RawAddr(addr) -> Raw(L.build_load addr name b)
           |BoxAddr(addr) -> Box(L.build_load addr name b)
         )
+    | SBinop(e1, op, e2) ->
+      let e1' = expr the_state e1
+      and e2' = expr the_state e2 in
+      match (e1',e2') with  (* note: if both Raw then MUST be same type since passed semant *)
+          |(Raw(v1),Raw(v2)) -> 
+              let binop_instruction = (match ty with  (* both will have typ=ty *)
+                |Int|Bool -> (match op with
+                  | Add     -> L.build_add
+                  | Sub     -> L.build_sub
+                  | Mul    -> L.build_mul
+                  | Div     -> L.build_sdiv
+                  | And     -> L.build_and
+                  | Or      -> L.build_or
+                  | Eq   -> L.build_icmp L.Icmp.Eq
+                  | Neq     -> L.build_icmp L.Icmp.Ne
+                  | Less    -> L.build_icmp L.Icmp.Slt
+                  | Leq     -> L.build_icmp L.Icmp.Sle
+                  | Greater -> L.build_icmp L.Icmp.Sgt
+                  | Geq     -> L.build_icmp L.Icmp.Sge
+                )
+                |Float -> (match op with
+                  | Add     -> L.build_fadd
+                  | Sub     -> L.build_fsub
+                  | Mul    -> L.build_fmul
+                  | Div     -> L.build_fdiv 
+                  | Eq   -> L.build_fcmp L.Fcmp.Oeq
+                  | Neq     -> L.build_fcmp L.Fcmp.One
+                  | Less    -> L.build_fcmp L.Fcmp.Olt
+                  | Leq     -> L.build_fcmp L.Fcmp.Ole
+                  | Greater -> L.build_fcmp L.Fcmp.Ogt
+                  | Geq     -> L.build_fcmp L.Fcmp.Oge
+                  | And | Or ->
+                      raise (Failure "internal error: semant should have rejected and/or on float")
+                )
+            ) in
+              Raw(binop_instruction v1 v2 "binop_result" b)
+          (*|(Dyn(v1),Raw(v2)) ->  (**TODO**)
+          |(Raw(v1),Dyn(v2)) -> 
+          |(Dyn(v1),Dyn(v2)) -> *)
         
     (*| SCall(fexpr, arg_expr_list, sfdecl) ->
             tstp "entering SCALL";
