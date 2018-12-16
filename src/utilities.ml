@@ -216,6 +216,29 @@ let merge m1 m2 = StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge t
     | None, None -> None
   ) m1 m2
 
+let rec1 = ref [] (* these are used to extract Transform objects for use in codegen from merge *)
+let rec2 = ref []
+
+(* transform: merge function used to reconcile the global lookup map after a conditional branch.
+extracts objects with transformed type for use in codegen. *)
+
+let transform m1 m2 = rec1 := []; rec2 := []; StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge two lists while keeping type inference intact *)
+    | Some (a, b, c), Some (d, e, f) -> 
+        let t = compare_types a d in
+        if b <> t then rec1 := (Transform(key, b, t) :: !rec1);
+        if e <> t then rec2 := (Transform(key, e, t) :: !rec2);
+        Some (compare_types a d, compare_types b e, compare_data c f)
+
+    | Some (a, b, c), None -> if a <> Dyn then rec1 := (Transform(key, b, Dyn) :: !rec1); Some(Dyn, Dyn, c)
+    | None, Some(a, b, c) -> if a <> Dyn then rec2 := (Transform(key, b, Dyn) :: !rec2); Some(Dyn, Dyn, c)
+    | None, None -> None
+  ) m1 m2
+
+(* from_block: used to extract the slist from an SBlock in codegen *)
+let from_block block = match block with
+  | SBlock(x) -> x
+  | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in conditional branch evaluation"))
+
 (* check if two maps are equal *)
 let equals m1 m2 = (StringMap.equal (fun x y -> (compare x y) = 0) m1 m2) (* check if two maps are equal *)
 

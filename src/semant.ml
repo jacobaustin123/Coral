@@ -392,20 +392,25 @@ and func_stmt globals locals stack flag = function
         else let (map', value, data, out) = func_stmt globals locals stack {flag with cond = true;} b in 
         let (map'', value', data', out') = func_stmt globals locals stack {flag with cond = true;} c in 
         if equals map' map'' then (map', SIf(e', value, value'), match_data data data', out) 
-        else let merged = merge map' map'' in (merged, SIf(e', value, value'), match_data data data', out @ out')
+        else let merged = transform map' map'' in 
+        let slist = from_block value in let slist' = from_block value' in
+        (merged, SIf(e', SBlock(slist @ !rec1), SBlock(slist' @ !rec2)), match_data data data', out @ out')
 
   | For(a, b, c) -> let (m, b1, b2) = check_array locals b a in 
         let (m', x', d, out) = func_stmt globals m stack {flag with cond = true; forloop = true;} c in 
         let (typ, e', _) = func_expr globals m' stack flag b in 
         if equals locals m' then (m', SFor(b2, e', x'), d, b1 :: out)
         else let merged = merge locals m' in 
-        (merged, SFor(b2, e', x'), match_data d None, b1 :: out)
+        let slist = from_block x' in 
+        (merged, SFor(b2, e', SBlock(slist @ !rec2)), match_data d None, b1 :: out)
 
   | While(a, b) -> let (typ, e, data) = func_expr globals locals stack flag a in 
         if typ <> Bool && typ <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
         else let (m', x', d, out) = func_stmt globals locals stack {flag with cond = true;} b in 
         if equals locals m' then (m', SWhile(e, x'), d, out) else
-        let merged = merge locals m' in (merged, SWhile(e, x'), match_data d None, out)
+        let merged = merge locals m' in 
+        let slist = from_block x' in
+        (merged, SWhile(e, SBlock(slist @ !rec2)), match_data d None, out)
 
   | Nop -> let (a, b, out) = stmt locals flag (Nop) in (a, b, None, out)
   | Type(a) -> let (a, b, out) = stmt locals flag (Type a) in (a, b, None, out)
@@ -473,24 +478,27 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
     else let (map', value, out) = stmt map {flag with cond = true;} b in 
     let (map'', value', out') = stmt map {flag with cond = true;} c in 
     if equals map' map'' then (map', SIf(e', value, value'), out') 
-    else let merged = merge map' map'' in 
-    (merged, SIf(e', value, value'), out @ out')
+    else let merged = transform map' map'' in 
+    let slist = from_block value in let slist' = from_block value' in
+    (merged, SIf(e', SBlock(slist @ !rec1), SBlock(slist' @ !rec2)), out @ out')
 
   | For(a, b, c) -> 
     let (m, b1, b2) = check_array map b a in 
     let (m', x', out) = stmt m {flag with cond = true; forloop = true; } c in 
     let (typ, e', _) = expr m' b in 
     if equals map m' then (m', SFor(b2, e', x'), b1 :: out) 
-    else let merged = merge m m' in 
-    (merged, SFor(b2, e', x'), b1 :: out)
+    else let merged = transform m m' in 
+    let slist = from_block x' in
+    (merged, SFor(b2, e', SBlock(slist @ !rec2)), b1 :: out)
 
   | While(a, b) -> 
     let (t, e, _) = expr map a in 
     if t <> Bool && t <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
     else let (m', x', out) = stmt map {flag with cond = true; }b in 
     if equals map m' then (m', SWhile(e, x'), out) 
-    else let merged = merge map m' in 
-    (merged, SWhile(e, x'), out)
+    else let merged = transform map m' in 
+    let slist = from_block x' in
+    (merged, SWhile(e, SBlock(slist @ !rec2)), out)
   
   | Nop -> (map, SNop, [])
   
