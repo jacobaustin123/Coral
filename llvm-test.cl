@@ -6,8 +6,9 @@ z=x-y+x*y
 print(z)
 
 
-if x < x*x:
-	print(1.2)
+while x<10:
+	x += 1
+	print(x)
 
 
 

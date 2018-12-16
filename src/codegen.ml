@@ -888,20 +888,26 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                  add_terminal (stmt new_state else_stmt) build_br_merge;  (* same deal as with 'then' BB *)
                    ignore(L.build_cond_br bool_val then_bb else_bb b);  
                    let new_state = change_builder_state the_state (L.builder_at_end context merge_bb ) in new_state
-    (*
       | SWhile (predicate, body) ->
         let pred_bb = L.append_block context "while" the_function in
-          ignore(L.build_br pred_bb b);
+            ignore(L.build_br pred_bb b);
         let body_bb = L.append_block context "while_body" the_function in
         let new_state = change_builder_state the_state (L.builder_at_end context body_bb) in
           add_terminal (stmt new_state body) (L.build_br pred_bb);
         let pred_builder = L.builder_at_end context pred_bb in
+        (* eval the boolean predicate *)
         let new_state = change_builder_state the_state (L.builder_at_end context pred_bb) in
-        let bool_val = build_getdata_cobj bool_t (expr new_state predicate) pred_builder in
+        let e = expr new_state predicate in 
+        let bool_val = (match e with
+          |Raw(v) -> v
+          (*|Dyn(v -> *)
+        ) in
+        (*let bool_val = build_getdata_cobj bool_t (expr new_state predicate) pred_builder in*)
+        
         let merge_bb = L.append_block context "merge" the_function in
           ignore(L.build_cond_br bool_val body_bb merge_bb pred_builder);
-        let new_state = change_builder_state the_state (L.builder_at_end context merge_bb) in
-          new_state
+        let new_state = change_builder_state the_state (L.builder_at_end context merge_bb) in new_state
+      (*
       | SFor(var, lst, body) ->
          (* initialize list index variable and list length *)
          let objptr = expr the_state lst in
@@ -1043,5 +1049,6 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 *)
 
   ignore(L.build_ret (L.const_int int_t 0) final_state.b);
+  pm();
   (* pm(); *)(* prints module *)
   the_module  (* return the resulting llvm module with all code!! *)
