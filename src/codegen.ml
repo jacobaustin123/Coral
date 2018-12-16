@@ -610,7 +610,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   (* pass in Some(builder) to do local vars alloca() or None to do globals non-alloca *)
   let build_binding_list local_builder_opt binds =   (* returns a stringmap Bind -> Addr *) 
   (* strip out all the FuncTypes from binds *)
-      let binds = List.rev (List.fold_left (fun binds bind -> if ((type_of_bind bind) = FuncType) then binds else (bind::binds)) [] binds) in
+      (*let binds = List.rev (List.fold_left (fun binds bind -> if ((type_of_bind bind) = FuncType) then binds else (bind::binds)) [] binds) in*)
       (** the commented code adds a Dyn version of every var. i wont use it for pure immutable phase-1 testing tho! **)
       (**let dynify bind =   (* turns a bind into dynamic. a helper fn *)
          Bind(name,_) = bind in
@@ -625,7 +625,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         |Int -> L.const_null int_t
         |Float -> L.const_null float_t
         |Bool -> L.const_null bool_t
-        |Dyn -> L.const_null cobj_t
+        |_ -> L.const_null cobj_t
         (** TODO impl lists and everything! and strings. idk how these will work **)
       in
       let prettyname_of_bind bind = (name_of_bind bind)^"_"^(string_of_typ (type_of_bind bind))
@@ -639,7 +639,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         in
         match (type_of_bind bind) with
           |Int|Float|Bool -> RawAddr(alloc_result)
-          |Dyn -> BoxAddr(alloc_result)
+          |_ -> BoxAddr(alloc_result)
       in
         List.fold_left (fun map bind -> BindMap.add bind (allocate bind) map) BindMap.empty binds
   in
