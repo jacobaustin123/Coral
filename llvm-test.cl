@@ -12,6 +12,6 @@ def foo():
 	else:
 		return 4.0
 
-x = 5.0
+x = 5
 
 print(foo())

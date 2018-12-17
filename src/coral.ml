@@ -1,9 +1,7 @@
 open Ast
 open Sast
-open Getopt (* package used to handle command line arguments *)
 open Utilities
 open Interpret
-
 
 (* boolean flags used to handle command line arguments *)
 let debug = ref false
@@ -15,6 +13,7 @@ let set = ref false
 
 (* usage: usage message for function calls *)
 let usage = "usage: " ^ Sys.argv.(0) ^ " [file] [-d] [-r]"
+
 
 (* function used to handle command line arguments *)
 let speclist =
@@ -171,7 +170,8 @@ compute the correct value and repeat.
 
 map is used only if the interpreter is enabled. otherwise it is unecessary, and can be removed. *)
 
-let rec from_console map smap past run = 
+
+let rec from_console map past run = 
   try 
     Printf.printf ">>> "; flush stdout;
     let base = Stack.create() in let _ = Stack.push 0 base in
@@ -198,32 +198,33 @@ let rec from_console map smap past run =
 
     let imported_program = parse_imports program in
 
-    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } imported_program) in (* temporarily here to check validity of SAST *)
+    let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } imported_program) in (* temporarily here to check validity of SAST *)
     let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
     
     if run then
       let output = codegen sast in
       List.iter print_endline output; flush stdout; 
-      from_console map smap imported_program run
+      from_console map imported_program run
 
-    else flush stdout; from_console map smap' [] false
+    else flush stdout; from_console map' [] false
 
   with
-    | Not_found -> Printf.printf "NotFoundError: unknown error\n"; from_console map smap past run
-    | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; from_console map smap past run
-    | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map smap past run
-    | Runtime explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map smap past run
+    | Not_found -> Printf.printf "NotFoundError: unknown error\n"; from_console map past run
+    | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; from_console map past run
+    | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map past run
+    | Runtime explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map past run
 
 (* this is the main function loop for the file parser. We lex the input from a given file,
 convert it to a list of Parser.token, apply the appropriate indentation corrections,
 dedent to the zero level as needed, and then compute the correct value *)
 
-let rec from_file map smap fname run = (* todo combine with loop *)
+let rec from_file map fname run = (* todo combine with loop *)
   try
     let original_path = Sys.getcwd () in
     let program = Sys.chdir (Filename.dirname fname); ast_from_path (Filename.basename fname) in
     let imported_program = parse_imports program in
-    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } imported_program) in (* temporarily here to check validity of SAST *)
+
+    let (sast, map) = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } imported_program) in (* temporarily here to check validity of SAST *)
     let () = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)
     let () = Sys.chdir original_path in
 
@@ -242,13 +243,13 @@ anonymous argument (file path) and runs either the interpreter or the from_file 
 let () =
   Arg.parse speclist (fun path -> if not !set then fpath := path; set := true; ) usage; (* parse command line arguments *)
   let emptymap = StringMap.empty in 
-  let semptymap = StringMap.empty in
-  if not !set then
+  if !set then from_file emptymap !fpath !run
+  else
   ( 
     Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
     try 
-      from_console emptymap semptymap [] !run 
+      from_console emptymap [] !run 
     with Scanner.Eof -> exit 0
   )
 
-  else from_file emptymap semptymap !fpath !run
+
