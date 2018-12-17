@@ -86,6 +86,7 @@ let print = function
   | Parser.DIVIDEEQ -> "DIVIDEEQ"
   | Parser.EXPEQ -> "EXPEQ"
   | Parser.PRINT -> "PRINT"
+  | Parser.IMPORT -> "IMPORT"
   | _ -> "Token not supported by print utility"
 ;;
 
@@ -102,6 +103,7 @@ let stmt_to_string = function
   | Asn(_, _) -> "asn"
   | Type(_) -> "type"
   | Print(_) -> "print"
+  | Import(_) -> "import"
   | Nop -> "nop"
 
 (* expr_to_string: converts expr to string for error handling *)
@@ -216,6 +218,35 @@ let merge m1 m2 = StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge t
     | None, Some(a, b, c) -> Some(Dyn, Dyn, c)
     | None, None -> None
   ) m1 m2
+
+let rec1 = ref [] (* these are used to extract Transform objects for use in codegen from merge *)
+let rec2 = ref []
+
+(* transform: merge function used to reconcile the global lookup map after a conditional branch.
+extracts objects with transformed type for use in codegen. *)
+
+let transform m1 m2 = rec1 := []; rec2 := []; StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge two lists while keeping type inference intact *)
+    | Some (a, b, c), Some (d, e, f) -> 
+        let t = compare_types a d in
+        if b <> t then rec1 := (STransform(key, b, t) :: !rec1);
+        if e <> t then rec2 := (STransform(key, e, t) :: !rec2);
+        Some (compare_types a d, compare_types b e, compare_data c f)
+
+    | Some (a, b, c), None -> if a <> Dyn then rec1 := (STransform(key, b, Dyn) :: !rec1); Some(Dyn, Dyn, c)
+    | None, Some(a, b, c) -> if a <> Dyn then rec2 := (STransform(key, b, Dyn) :: !rec2); Some(Dyn, Dyn, c)
+    | None, None -> None
+  ) m1 m2
+
+(* from_block: used to extract the slist from an SBlock in codegen *)
+let from_block block = match block with
+  | Block(x) -> x
+  | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in branch evaluation"))
+
+(* from_sblock: used to extract the slist from an SBlock in codegen *)
+let from_sblock block = match block with
+  | SBlock(x) -> x
+  | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in branch evaluation"))
+
 
 (* check if two maps are equal *)
 let equals m1 m2 = (StringMap.equal (fun x y -> (compare x y) = 0) m1 m2) (* check if two maps are equal *)

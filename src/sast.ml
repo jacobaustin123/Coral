@@ -46,6 +46,7 @@ and sstmt = (* this can be refactored using Blocks, but I haven't quite figured 
   | SReturn of sexpr (* return statement *)
   | SClass of bind * sstmt (* not implemented *)
   | SAsn of bind list * sexpr (* x : int = sexpr, (Bind(x, int), sexpr) *)
+  | STransform of string * typ * typ 
   | SPrint of sexpr
   | SNop
 
@@ -81,7 +82,8 @@ and string_of_sstmt depth = function
   | SReturn(e) -> "return " ^ string_of_sexpr e
   | SClass(b, s) -> "class " ^ string_of_sbind b ^ ":\n" ^ string_of_sstmt depth s
   | SAsn(bl, e) -> String.concat ", " (List.map string_of_sbind bl) ^ " = "  ^ string_of_sexpr e
-  | SPrint(e) -> "print (" ^ string_of_sexpr e ^ ")"
+  | STransform(s, t1, t2) -> "transform " ^ s ^ ": " ^ string_of_typ t1 ^ " -> " ^ string_of_typ t2
+  | SPrint(e) -> "print(" ^ string_of_sexpr e ^ ")"
   | SNop -> ""
 
 and string_of_sprogram (sl, bl) = String.concat "\n" (List.map (string_of_sstmt 1) sl) ^ "\n\nGlobals: [" ^ String.concat " " (List.map string_of_sbind bl) ^ "]"
