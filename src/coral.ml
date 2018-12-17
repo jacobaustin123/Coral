@@ -194,6 +194,7 @@ dedent to the zero level as needed, and then compute the correct value *)
 
 let rec from_file map smap fname run = (* todo combine with loop *)
   try
+    let original_path = Sys.getcwd () in
     let program = Sys.chdir (Filename.dirname fname); ast_from_path (Filename.basename fname) in
     let program_with_imports = replace_import program in
     let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } program_with_imports) in (* temporarily here to check validity of SAST *)
@@ -202,7 +203,12 @@ let rec from_file map smap fname run = (* todo combine with loop *)
     if run then 
       let m = Codegen.translate sast in
       Llvm_analysis.assert_valid_module m;
-      print_string (Llvm.string_of_llmodule m);
+      Sys.chdir original_path;
+      let oc = open_out "source.ll" in
+      let _ = Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc; in
+      let output = cmd_to_list "./inter.sh source.ll" in
+      List.iter print_endline output; flush stdout;
+
   with
     | Not_found -> Printf.printf "NotFoundError: possibly caused by lexer!\n"; flush stdout
     | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout
