@@ -19,6 +19,7 @@ open Sast
 
 module StringMap = Map.Make(String)
 module BindMap = Map.Make(struct type t = Ast.bind let compare = Pervasives.compare end)
+module SfdeclMap = Map.Make(struct type t = Sast.sfunc_decl let compare = Pervasives.compare end)
 let pt some_lltype = Printf.eprintf "pt: %s%s\n" "---->" (L.string_of_lltype some_lltype)
 let pv some_llvalue = Printf.eprintf "pv: %s%s\n" "---->" (L.string_of_llvalue some_llvalue)
 let tst() = Printf.eprintf "!!!!!!!!!!";()
@@ -34,7 +35,7 @@ type dataunit =
     |Box of L.llvalue     (* where llvalue = cobj_t *)
 type dataunit_addr = 
     |RawAddr of L.llvalue (* where llvalue = i32_pt, like what alloca returned *)
-    |BoxAddr of L.llvalue
+    |BoxAddr of L.llvalue * bool  (* bool is needs_update: a flag to tell you if the box contents need to be updated by a heapify() call before the next usage *)
 type state = {
     namespace: dataunit_addr BindMap.t;
     func: L.llvalue;
@@ -144,7 +145,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   and ctype_not_idx = 14
   and ctype_idx_idx = 15
   and ctype_call_idx = 16
-  and num_ctype_idxs = 17 in (**must update when adding idxs! (tho not used anywhere yet)**)
+  and ctype_heapify_idx = 17
+  and num_ctype_idxs = 18 in (**must update when adding idxs! (tho not used anywhere yet)**)
 
   (* type sigs for fns in ctype *)
   let ctype_add_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
@@ -163,7 +165,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   and ctype_neg_t = L.function_type cobj_pt [| cobj_pt |]
   and ctype_not_t = L.function_type cobj_pt [| cobj_pt |]
   and ctype_idx_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
-  and ctype_call_t = L.function_type cobj_pt [| cobj_pt ; cobj_ppt |] in
+  and ctype_call_t = L.function_type cobj_pt [| cobj_pt ; cobj_ppt |]
+  and ctype_heapify_t = L.function_type int_t [| cobj_pt |] in
 
   (* type sigs for ptrs to fns in ctype *)
   let ctype_add_pt = L.pointer_type ctype_add_t
@@ -182,7 +185,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   and ctype_neg_pt = L.pointer_type ctype_neg_t
   and ctype_not_pt = L.pointer_type ctype_not_t
   and ctype_idx_pt = L.pointer_type ctype_idx_t
-  and ctype_call_pt = L.pointer_type ctype_call_t in
+  and ctype_call_pt = L.pointer_type ctype_call_t 
+  and ctype_heapify_pt = L.pointer_type ctype_heapify_t in
 
   let ctype_t = L.named_struct_type context "CType" in (*define a named struct*)
   let ctype_pt = L.pointer_type ctype_t in
@@ -207,7 +211,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   	ctype_neg_pt;
     ctype_not_pt;
   	ctype_idx_pt;
-  	ctype_call_pt |] false);
+    ctype_call_pt;
+  	ctype_heapify_pt |] false);
 
    let get_t = function
      | "int" -> int_t
@@ -374,13 +379,29 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         L.const_pointer_null ctype_not_pt; (* ctype_not_pt *)
         L.const_pointer_null ctype_idx_pt; (* ctype_not_pt *)
         func_call_fn; (* ctype_call_pt *)
+        L.const_pointer_null ctype_heapify_pt; (* ctype_not_pt *)
     |]) the_module in
+
+
 
   let build_fnptr_of_cfo cobj_p b = 
     let x2 = L.build_struct_gep cobj_p cobj_data_idx "x2" b in
     let x3 = L.build_load x2 "x3" b in
     let fnptr = L.build_bitcast x3 userdef_fn_pt "fnptr" b in
     fnptr
+  in
+
+
+
+  (* Heapify *)
+  let (int_heapify_fn,int_heapify_b) = build_ctype_fn "int_heapify" ctype_heapify_t in
+  let (float_heapify_fn,float_heapify_b) = build_ctype_fn "float_heapify" ctype_heapify_t in
+  let (bool_heapify_fn,bool_heapify_b) = build_ctype_fn "bool_heapify" ctype_heapify_t in
+  let get_heapify_fn_lval = function
+    |"int" -> int_heapify_fn
+    |"float" -> float_heapify_fn
+    |"bool" -> bool_heapify_fn
+    | _ -> L.const_pointer_null ctype_heapify_pt
   in
 
   (* define the default CTypes *)
@@ -394,7 +415,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   	    | None -> L.const_pointer_null ctype_neg_pt)
   	  | BLoprt(o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
-  	    | None -> L.const_pointer_null ctype_idx_pt)) bops) @ ([L.const_pointer_null ctype_call_pt])))) the_module) built_ops
+        | None -> L.const_pointer_null ctype_idx_pt)) bops) @ ([L.const_pointer_null ctype_call_pt; get_heapify_fn_lval t])))) the_module) built_ops
   	    in
 
   let ctype_of_datatype = function
@@ -403,6 +424,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     | dt when dt = bool_t -> ctype_bool
     | dt when dt = char_t -> ctype_char
     | dt when dt = clist_t -> ctype_list
+  in
+  let ctype_of_typ = function  (* only for optimized Raws hence limited matching *)
+      |Int -> ctype_int
+      |Float -> ctype_float
+      |Bool -> ctype_bool
   in
 
   let build_getctypefn_cobj ctype_fn_idx cobj_p b =
@@ -590,6 +616,29 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
           ignore(L.build_ret result b);
           
         
+  (* heapify(self_p) modifies self by copying its data to the heap and pointing to the new heap data *)
+  let build_heapify data_type fn b =   (* data_type = int_t etc *)
+      let formals_llvalues = (Array.to_list (L.params fn)) in
+      let [remote_self_p] = formals_llvalues in
+      let box_addr = boilerplate_till_load remote_self_p "self_p" b in
+      (* the box dataptr_addr points to the raw data we want to copy *)
+      let dataptr_addr = L.build_struct_gep box_addr cobj_data_idx "dat" b in
+      let dataptr_addr = L.build_bitcast dataptr_addr (L.pointer_type data_type) "dat" b in
+      let raw_data = L.build_load dataptr_addr "raw_data" b in
+      let heap_data_p = L.build_malloc data_type "heap_data_p" b in
+      ignore(L.build_store raw_data heap_data_p);
+      ignore(L.build_ret (L.const_int int_t 0) b);  (* or can ret void? *)
+      ()
+  in
+
+  (* build the heapify functions *)
+  let get_heapify_builder_of_t = function
+    |"int" -> int_heapify_b
+    |"float" -> float_heapify_b
+    |"bool" -> bool_heapify_b
+  in
+  ignore(List.iter (fun t -> build_heapify (get_t t) (get_heapify_fn_lval t) (get_heapify_builder_of_t t)) ["int";"float";"bool"]);
+  
 
   let name_of_bind = function
       |Bind(name,_) -> name
@@ -639,7 +688,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         in
         match (type_of_bind bind) with
           |Int|Float|Bool -> RawAddr(alloc_result)
-          |_ -> BoxAddr(alloc_result)
+          |_ -> BoxAddr(alloc_result,false)
       in
         List.fold_left (fun map bind -> BindMap.add bind (allocate bind) map) BindMap.empty binds
   in
@@ -649,7 +698,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       let globals_list = snd prgm  (* snd prgrm is the bind list of globals *) in
         build_binding_list None globals_list
   in
-  let lookup_global_binding bind = 
+  let lookup_global_binding bind = tst(); 
     BindMap.find bind globals_map
   in
 
@@ -697,7 +746,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     in aux (len-1) []
   in
 
-  let lookup namespace bind =
+  let lookup namespace bind = tstp (string_of_sbind bind);
       try BindMap.find bind namespace
         with Not_found -> lookup_global_binding bind
   in
@@ -717,7 +766,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     | SVar name ->
         (match (lookup namespace (Bind(name, ty))) with
           |RawAddr(addr) -> Raw(L.build_load addr name b)
-          |BoxAddr(addr) -> Box(L.build_load addr name b)
+          |BoxAddr(addr,needs_update) -> (match needs_update with
+            |true -> 
+              let fn_p = build_getctypefn_cobj ctype_heapify_idx addr b in
+              ignore(L.build_call fn_p [|addr|] "heapify_result" b);()
+            |false -> ()
+            );
+          Box(L.build_load addr name b)
         )
     | SBinop(e1, op, e2) ->
       let e1' = expr the_state e1
@@ -870,6 +925,10 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       | None -> ignore (instr the_state.b)
   and change_builder_state old_state b =
       {namespace=old_state.namespace;func=old_state.func;b=b}
+  and set_needs_reboxing old_state name boolval =
+      let BoxAddr(addr,_) = lookup (old_state.namespace) (Bind(name,Dyn)) in
+      let new_namespace = BindMap.add (Bind(name,Dyn)) (BoxAddr(addr,boolval)) old_state.namespace in
+      {namespace=new_namespace;func=old_state.func;b=old_state.b}
   and stmt the_state s =   (* namespace comes first bc never gets modified unless descending so it works better for fold_left in SBlock *)
       let (namespace,the_function,b) = (the_state.namespace,the_state.func,the_state.b) in
       match s with
@@ -884,11 +943,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             (match rhs with
                 |Raw(v) -> (match lhs with
                     |RawAddr(addr) -> ignore(L.build_store v addr b)
-                    |BoxAddr(_) -> tstp "ERROR, assinging Raw to BoxAddr" (** shd crash in future **)
+                    |BoxAddr(_,_) -> tstp "ERROR, assinging Raw to BoxAddr" (** shd crash in future **)
                     )
                 |Box(v) -> (match lhs with
                     |RawAddr(_) -> tstp "ERROR, assigning Box to RawAddr"
-                    |BoxAddr(addr) -> ignore(L.build_store v addr b)
+                    |BoxAddr(addr,_) -> ignore(L.build_store v addr b)
                     )
             )
         in
@@ -949,7 +1008,18 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                 |Raw(v) -> v) b
             );the_state
     | SFunc sfdecl -> the_state;
-
+    | STransform (name,raw_ty,_) ->
+        (* get addresses for raw and boxed versions *)
+        let BoxAddr(box_addr,_) = lookup namespace (Bind(name,Dyn))
+        and RawAddr(raw_addr) = lookup namespace (Bind(name,raw_ty)) in
+        (* gep for direct pointers to the type and data fields of box *)
+        let dataptr_addr = L.build_struct_gep box_addr cobj_data_idx "dat" b in
+        let typeptr_addr = L.build_struct_gep box_addr cobj_type_idx "ty" b in
+        (* store raw_addr in the box's dataptr field and update the typeptr *)
+        ignore(L.build_store raw_addr dataptr_addr b);
+        ignore(L.build_store (ctype_of_typ raw_ty) dataptr_addr b);
+        let the_state = set_needs_reboxing the_state name true in
+        the_state
     (*
       
       | SFor(var, lst, body) ->
