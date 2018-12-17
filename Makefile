@@ -1,6 +1,6 @@
 .PHONY: all clean byte native 
 
-OCB_FLAGS = -tag bin_annot -I src/getopt -I src
+OCB_FLAGS = -tag bin_annot -I src  -use-ocamlfind -lib unix 
 OCB = ocamlbuild $(OCB_FLAGS)
 
 all: native 

@@ -1,24 +1,24 @@
 open Ast
 open Sast
-open Getopt (* package used to handle command line arguments *)
 open Utilities
 open Interpret
 
-(* boolean flag used to handle debug flag from command line *)
-let debug = ref 0
+(* boolean flags used to handle command line arguments *)
+let debug = ref false
+let run = ref false
 
-(* string containing path to input file *)
+(* file path flags to handle compilation from a file *)
 let fpath = ref ""
+let set = ref false
 
-(* boolean flag used to check if program should be run by interpreter *)
-let run = ref 0
+(* usage: usage message for function calls *)
+let usage = "usage: " ^ Sys.argv.(0) ^ " [file] [-d]"
 
 (* function used to handle command line arguments *)
-let specs =
+let speclist =
 [
-  ( 'd', "debug", (incr debug), None);
-  ( 'c', "check", None, ((atmost_once fpath (Error "ArgumentError: can only checked one file with -c flag."))));
-  ( 'r', "run", (incr run), None);
+  ( "[file]", Arg.String (fun foo -> ()), ": compile from a file instead of the default interpreter");
+  ( "-d", Arg.Set debug, ": print debugging information at compile time");
 ]
 
 (* this is a complicated function. it takes the lexed buffer, runs it through the tokenize parser in order to 
@@ -55,8 +55,8 @@ let search_env_opt env name =
             | None -> if Sys.file_exists name then Some name else None
             | Some path -> Some (Filename.concat path name)
 
-(* get_ast: loads the ast from a given path if possible, lexing and
-parsing the file found at that path *)
+(* get_ast: loads the ast from a given path if possible, lexing and parsing the file found 
+at that path. used for the file-based compiler, not the interpreter, which requires different behavior *)
 
 let get_ast path = 
   let chan = open_in path
@@ -70,7 +70,7 @@ let get_ast path =
      formatted @ (read curr stack)
    with End_of_file -> close_in chan; Array.make (Stack.length stack - 1) Parser.DEDENT |> Array.to_list
   in let formatted = ref (read 0 base) in
-  let _ = if !debug = 1 then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
+  let _ = if !debug then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
 
   let token lexbuf = (* hack I found online to convert lexbuf list to a map from lexbuf to Parser.token, needed for Ocamlyacc *)
   match !formatted with 
@@ -79,6 +79,10 @@ let get_ast path =
 
   let program = Parser.program token (Lexing.from_string "") in program
 
+(* ast_from_path: takes a given filename and searches for files with that name in any 
+directory contained in the $PATH env variable. This calls search_env_opt on "PATH" internally.
+Raises an error if the path is not found, unlike search_env_opt which returns None *)
+
 let ast_from_path fname = 
   let path = search_env_opt "PATH" fname in
   let name = match path with
@@ -86,11 +90,20 @@ let ast_from_path fname =
     | Some x -> x
   in get_ast name
 
+(* fix_extension: checks if a given file ends with the .cl extension. If so, return
+the original path. If not, append .cl to it. *)
+
+
 let fix_extension file = match Filename.check_suffix file ".cl" with
   | true -> file
   | false -> file ^ ".cl"
 
-let replace_import li =
+(* parse_imports: this function takes an ast and traverses it, replacing import statements with
+the full ast of the specified file. The behavior of this function follows Python. First the $PATH
+directories are searched, and then the local directory is searched. If the file is found in neither
+of these places, it throws an error. *)
+
+let parse_imports li =
   let rec aux out = function
     | [] -> List.rev out
     | Import(name) :: t -> 
@@ -104,12 +117,46 @@ let replace_import li =
     | a :: t -> aux (a :: out) t 
   in aux [] li
 
+(* process_output_to_list: [copied from a Stack Overflow forum post. Runs a Unix command in a subprocess,
+captures the output, and stores earch result in a list to be printed or used further. Used for running
+bash scripts to compile the program *)
+
+let process_output_to_list = fun command -> 
+  let chan = Unix.open_process_in command in
+  let res = ref ([] : string list) in
+  let rec process_otl_aux () =  
+    let e = input_line chan in
+    res := e :: !res;
+    process_otl_aux() in
+  try process_otl_aux ()
+  with End_of_file ->
+    let stat = Unix.close_process_in chan in (List.rev !res,stat)
+
+let cmd_to_list command =
+  let (l, _) = process_output_to_list command in l
+
+(* strip_stmt: this function strips Type(x) and Print(x) stmts from the ast of past 
+function calls when used with the interpreter. The interpreter currently works by appending
+past parsed asts to the current one, and by default past print statements will be called each time
+the interpreter is run on any input statement. Note that this excludes functions because they may
+contain desired function calls. There is no good way around this with the current model. *)
+
+let rec strip_stmt = function 
+  | Type(x) | Print(x) -> Nop
+  | If(a, b, c) -> If(a, strip_stmt b, strip_stmt c)
+  | While(a, b) -> While(a, strip_stmt b)
+  | For(a, b, c) -> For(a, b, strip_stmt c)
+  | Block(x) -> Block(strip_print x)
+  | _ as x -> x
+
+and strip_print ast = List.rev (List.fold_left (fun acc x -> (strip_stmt x) :: acc) [] ast)
+
 (* this is the main function loop for the interpreter. We lex the input from stdin,
 convert it to a list of Parser.token, apply the appropriate indentation corrections,
 check to make sure we are at 0 indentation level, print more dots otherwise, and then
-compute the correct value and repeat *)
+compute the correct value and repeat. *)
 
-let rec from_console map smap = 
+let rec from_console map = 
   try 
     Printf.printf ">>> "; flush stdout;
     let base = Stack.create() in let _ = Stack.push 0 base in
@@ -118,13 +165,12 @@ let rec from_console map smap =
         let lexbuf = (Lexing.from_channel stdin) in
         let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
         let (curr, stack, formatted) = indent temp stack current in 
-        (* let _ = List.iter (Printf.printf "%s ") (List.map print formatted) in *)
         if Stack.top stack = 0 then formatted else
         (Printf.printf "... "; flush stdout;
         formatted @ (read curr stack))
 
     in let formatted = ref (read 0 base) in
-    let _ = if !debug = 1 then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
+    let _ = if !debug then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
 
     let token lexbuf = (* hack I found online to convert lexbuf list to a map from lexbuf to Parser.token, needed for Ocamlyacc *)
     match !formatted with 
@@ -132,46 +178,48 @@ let rec from_console map smap =
       | h :: t -> formatted := t ; h in
 
     let program = Parser.program token (Lexing.from_string "") in
-    let program_with_imports = replace_import program in
-    (* let _ = if !debug = 1 then print_endline ("PROGRAM:\n" ^ (string_of_program program)) in (* print debug messages *) *)
-    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } program_with_imports) in (* temporarily here to check validity of SAST *)
-    let _ = if !debug = 1 then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
-    (* let (result, mymap) = main map 0.0 program in print_endline (string_of_float result); flush stdout; loop mymap smap' *)
-    flush stdout; from_console map smap'
+    let imported_program = parse_imports program in
+
+    let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } imported_program) in (* temporarily here to check validity of SAST *)
+    let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
+    
+    flush stdout; from_console map'
+
   with
-    | Not_found -> Printf.printf "NotFoundError: unknown error!\n"; from_console map smap
-    | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; from_console map smap
-    | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map smap
-    | Runtime explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map smap
+    | Not_found -> Printf.printf "NotFoundError: unknown error\n"; from_console map
+    | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; from_console map
+    | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map
+    | Runtime explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map
 
 (* this is the main function loop for the file parser. We lex the input from a given file,
 convert it to a list of Parser.token, apply the appropriate indentation corrections,
 dedent to the zero level as needed, and then compute the correct value *)
 
-let rec from_file map smap fname run = (* todo combine with loop *)
+let rec from_file map fname = (* todo combine with loop *)
   try
+    let original_path = Sys.getcwd () in
     let program = Sys.chdir (Filename.dirname fname); ast_from_path (Filename.basename fname) in
-    let program_with_imports = replace_import program in
-    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } program_with_imports) in (* temporarily here to check validity of SAST *)
-    let _ = if !debug = 1 then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
-    (* if run then let (result, mymap) = main map 0.0 program in print_endline (string_of_float result); *)
+    let imported_program = parse_imports program in
+    let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } imported_program) in (* temporarily here to check validity of SAST *)
+    let () = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)
+    let () = Sys.chdir original_path in
     flush stdout;
+
   with
     | Not_found -> Printf.printf "NotFoundError: unknown error!\n"; flush stdout
     | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout
-;;
 
-(* main function for the entire. parser the command line arguments, check and call
-the appropriate compiler or interpreter command *)
+(* Coral main interpreter loop. Parses command line arguments, including a single
+anonymous argument (file path) and runs either the interpreter or the from_file compiler *)
 
-let _ = 
-  parse_cmdline specs print_endline; (* parse command line arguments *)
+let () =
+  Arg.parse speclist (fun path -> if not !set then fpath := path; set := true; ) usage; (* parse command line arguments *)
   let emptymap = StringMap.empty in 
-  let semptymap = StringMap.empty in
-  if String.length !fpath = 0 then 
-    (Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
-    try from_console emptymap semptymap with Scanner.Eof -> exit 0)
-  else if !run = 1 then from_file emptymap semptymap !fpath true 
-  else from_file emptymap semptymap !fpath false
-;;
+  if !set then from_file emptymap !fpath
+
+  else ( 
+    Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
+    try from_console emptymap
+    with Scanner.Eof -> exit 0
+  )
