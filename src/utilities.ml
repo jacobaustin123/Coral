@@ -230,12 +230,12 @@ extracts objects with transformed type for use in codegen. *)
 let transform m1 m2 = rec1 := []; rec2 := []; binds := []; StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge two lists while keeping type inference intact *)
     | Some (a, b, c), Some (d, e, f) -> 
         let t = compare_types b e in
-        if b <> t then rec1 := (STransform(key, b, Dyn) :: !rec1); binds := (Bind(key, Dyn) :: !binds);
-        if e <> t then rec2 := (STransform(key, e, Dyn) :: !rec2); binds := (Bind(key, Dyn) :: !binds);
+        let () = if b <> t then (rec1 := ((STransform(key, b, Dyn) :: !rec1)); binds := ((Bind(key, Dyn) :: !binds))) in
+        let () = if e <> t then (rec2 := ((STransform(key, e, Dyn)) :: !rec2); binds := ((Bind(key, Dyn) :: !binds))) in
         Some (compare_types a d, compare_types b e, compare_data c f)
 
-    | Some (a, b, c), None -> if a <> Dyn then rec1 := (STransform(key, b, Dyn) :: !rec1); binds := (Bind(key, Dyn) :: !binds); Some(Dyn, Dyn, c)
-    | None, Some(a, b, c) -> if a <> Dyn then rec2 := (STransform(key, b, Dyn) :: !rec2); binds := (Bind(key, Dyn) :: !binds); Some(Dyn, Dyn, c)
+    | Some (a, b, c), None -> let () = if b <> Dyn then (rec1 := (STransform(key, b, Dyn) :: !rec1); binds := (Bind(key, Dyn) :: !binds)) in Some(Dyn, Dyn, c)
+    | None, Some(a, b, c) -> let () = if b <> Dyn then (rec2 := (STransform(key, b, Dyn) :: !rec2); binds := (Bind(key, Dyn) :: !binds)) in Some(Dyn, Dyn, c)
     | None, None -> None
   ) m1 m2
 
