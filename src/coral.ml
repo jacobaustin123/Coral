@@ -224,7 +224,7 @@ let rec from_file map fname run = (* todo combine with loop *)
     let program = Sys.chdir (Filename.dirname fname); ast_from_path (Filename.basename fname) in
     let imported_program = parse_imports program in
 
-    let (sast, map) = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } imported_program) in (* temporarily here to check validity of SAST *)
+    let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } imported_program) in (* temporarily here to check validity of SAST *)
     let () = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)
     let () = Sys.chdir original_path in
 
