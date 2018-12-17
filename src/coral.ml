@@ -29,6 +29,7 @@ above methods *)
 let indent tokens base current =
     let rec aux curr s out stack = match s with
     | [] -> (curr, stack, List.rev out)
+    | Parser.CEND :: (Parser.EOL :: t) -> aux 0 t out stack;
     | Parser.TAB :: t -> aux (curr + 1) t out stack;
     | Parser.COLON :: (Parser.EOL :: t) -> (Stack.push (curr + 1) stack; aux curr (Parser.EOL :: t) (Parser.INDENT :: (Parser.COLON :: out)) stack)
     | Parser.EOL :: t -> aux 0 t (Parser.SEP :: out) stack 
