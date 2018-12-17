@@ -168,10 +168,8 @@ let rec from_console map smap past run =
       (let m = Codegen.translate sast in
       Llvm_analysis.assert_valid_module m;
       let oc = open_out "source.ll" in
-      (* (Llvm.string_of_llmodule m); *)
-      (* Printf.printf "%s\n" (Llvm.string_of_llmodule m); *)
       Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc;
-      let output = cmd_to_list "./inter.sh source.ll" in
+      let output = cmd_to_list "llc source.ll -o source.s && gcc source.s -o main && ./main" in
       List.iter print_endline output; flush stdout; from_console map smap program_with_imports run)
 
     else flush stdout; from_console map smap' [] false
@@ -207,7 +205,7 @@ let rec from_file map smap fname run = (* todo combine with loop *)
       Sys.chdir original_path;
       let oc = open_out "source.ll" in
       let _ = Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc; in
-      let output = cmd_to_list "./inter.sh source.ll" in
+      let output = cmd_to_list "llc source.ll -o source.s && gcc source.s -o main && ./main" in
       List.iter print_endline output; flush stdout;
 
   with
