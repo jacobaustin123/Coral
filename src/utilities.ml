@@ -227,12 +227,12 @@ extracts objects with transformed type for use in codegen. *)
 let transform m1 m2 = rec1 := []; rec2 := []; StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge two lists while keeping type inference intact *)
     | Some (a, b, c), Some (d, e, f) -> 
         let t = compare_types a d in
-        if b <> t then rec1 := (Transform(key, b, t) :: !rec1);
-        if e <> t then rec2 := (Transform(key, e, t) :: !rec2);
+        if b <> t then rec1 := (STransform(key, b, t) :: !rec1);
+        if e <> t then rec2 := (STransform(key, e, t) :: !rec2);
         Some (compare_types a d, compare_types b e, compare_data c f)
 
-    | Some (a, b, c), None -> if a <> Dyn then rec1 := (Transform(key, b, Dyn) :: !rec1); Some(Dyn, Dyn, c)
-    | None, Some(a, b, c) -> if a <> Dyn then rec2 := (Transform(key, b, Dyn) :: !rec2); Some(Dyn, Dyn, c)
+    | Some (a, b, c), None -> if a <> Dyn then rec1 := (STransform(key, b, Dyn) :: !rec1); Some(Dyn, Dyn, c)
+    | None, Some(a, b, c) -> if a <> Dyn then rec2 := (STransform(key, b, Dyn) :: !rec2); Some(Dyn, Dyn, c)
     | None, None -> None
   ) m1 m2
 
