@@ -40,6 +40,7 @@ rule token = parse
   | "float" { FLOAT }
   | "str" { STRING }
   | "bool" { BOOL }
+  | "func" { FUNC }
   | "int[]" { INTARR }
   | "float[]" { FLOATARR }
   | "str[]" { STRINGARR }
@@ -99,6 +100,7 @@ and comment = parse
   | "\"\"\"" { multiline lexbuf }
 
 and multiline = parse
+
   | "\"\"\"" { EOL }
   | _ { multiline lexbuf }
 

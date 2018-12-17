@@ -10,7 +10,7 @@ lexing stream into a list that can be used to extract indentation/tabs for the
 Python-style indentation based parsing scheme. The second is the full parser */
 
 %token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE PLUSEQ MINUSEQ TIMESEQ DIVIDEEQ EXPEQ
-%token EXP NOT NEG SEP AND OR ARROW NOP TYPE PRINT
+%token EXP NOT NEG SEP AND OR ARROW NOP TYPE PRINT FUNC
 %token TAB COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE DOT
 %token BOOL INT FLOAT STRING BOOLARR INTARR FLOATARR STRINGARR
 %token CLASS IMPORT CEND
@@ -117,6 +117,7 @@ token:
   | BOOL { BOOL }
   | INT { INT }
   | FLOAT { FLOAT }
+  | FUNC { FUNC }
   | STRING { STRING }
   | INTARR { INTARR }
   | FLOATARR { FLOATARR }
@@ -257,6 +258,7 @@ typ:
   | INTARR { IntArr }
   | BOOLARR { BoolArr }
   | STRINGARR { StringArr }
+  | FUNC { FuncType }
 
 /* expr: these are all possible expressions allowed in the Coral language. each
 expression corresponds to an expr object in the ast.ml file. Expressions are anything
