@@ -798,7 +798,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
       (* print message and exit *)
       let err_message =
-        let info = "invalid argument types for " ^ (Utilities.binop_to_string op) ^ " operator" in
+        let info = "RuntimeError: unsupported operand type(s) for binary " ^ (Utilities.binop_to_string op) in
           L.build_global_string info "error message" bad_arg_bd in
       let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_arg_bd in
         ignore(L.build_call printf_func [| str_format_str1 ; err_message |] "printf" bad_arg_bd);
@@ -829,7 +829,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
       (* print message and exit *)
       let err_message =
-        let info = "invalid use of " ^ (Utilities.unop_to_string op) ^ " operator" in
+        let info = "RuntimeError: unsupported operand type for unary " ^ (Utilities.unop_to_string op) in
           L.build_global_string info "error message" bad_op_bd in
       let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_op_bd in
         ignore(L.build_call printf_func [| str_format_str1 ; err_message |] "printf" bad_op_bd);

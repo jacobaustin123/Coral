@@ -93,12 +93,7 @@ CheckLLVM() {
 
     generatedfiles="$generatedfiles ${basename}.ll ${basename}.s ${basename}.exe ${basename}.out" &&
     
-    Run "$CORAL" "-r -c" "$1" ">" "$source.ll" &&
-    Run "$LLC" "$source.ll" "-o" "source.s" &&
-    Run "gcc" "-no-pie" "source.s" "-o" "main" && 
-    #prints out llvm 
-    # Run "cat" "source.ll" && 
-    Run "./main" > "${basename}.out" &&
+    Run "$CORAL" "-r -c" "$1" > "${basename}.out"
     Compare ${basename}.out ${reffile}.out ${basename}.diff
 
     # Report the status and clean up the generated files
