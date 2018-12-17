@@ -94,7 +94,7 @@ CheckLLVM() {
     generatedfiles="$generatedfiles ${basename}.ll ${basename}.s ${basename}.exe ${basename}.out" &&
     
 
-    Run "$CORAL" "-r -c" "$1" ">" "${basename}.out" &&
+    Run "$CORAL" "-r" "$1" ">" "${basename}.out" &&
     Compare ${basename}.out ${reffile}.out ${basename}.diff
 
     # Report the status and clean up the generated files
@@ -127,7 +127,7 @@ CheckSemant() {
 
     generatedfiles="$generatedfiles ${basename}.out" &&
     
-    Run "$CORAL" "-c" "$1" ">" "${basename}.out" &&
+    Run "$CORAL" "$1" ">" "${basename}.out" &&
     Compare ${basename}.out ${reffile}.out ${basename}.diff
 
     # Report the status and clean up the generated files

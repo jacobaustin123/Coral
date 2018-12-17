@@ -4,21 +4,24 @@ open Getopt (* package used to handle command line arguments *)
 open Utilities
 open Interpret
 
-(* boolean flag used to handle debug flag from command line *)
-let debug = ref 0
 
-(* string containing path to input file *)
+(* boolean flags used to handle command line arguments *)
+let debug = ref false
+let run = ref false
+
+(* file path flags to handle compilation from a file *)
 let fpath = ref ""
+let set = ref false
 
-(* boolean flag used to check if program should be run by interpreter *)
-let run = ref 0
+(* usage: usage message for function calls *)
+let usage = "usage: " ^ Sys.argv.(0) ^ " [file] [-d] [-r]"
 
 (* function used to handle command line arguments *)
-let specs =
+let speclist =
 [
-  ( 'd', "debug", (incr debug), None);
-  ( 'c', "check", None, ((atmost_once fpath (Error "ArgumentError: can only checked one file with -c flag."))));
-  ( 'r', "run", (incr run), None);
+  ( "[file]", Arg.String (fun foo -> ()), ": compile from a file instead of the default interpreter");
+  ( "-d", Arg.Set debug, ": print debugging information at compile time");
+  ( "-r", Arg.Set run, ": run commands or files instead of merely parsing them");
 ]
 
 (* this is a complicated function. it takes the lexed buffer, runs it through the tokenize parser in order to 
@@ -55,8 +58,8 @@ let search_env_opt env name =
             | None -> if Sys.file_exists name then Some name else None
             | Some path -> Some (Filename.concat path name)
 
-(* get_ast: loads the ast from a given path if possible, lexing and
-parsing the file found at that path *)
+(* get_ast: loads the ast from a given path if possible, lexing and parsing the file found 
+at that path. used for the file-based compiler, not the interpreter, which requires different behavior *)
 
 let get_ast path = 
   let chan = open_in path
@@ -70,7 +73,7 @@ let get_ast path =
      formatted @ (read curr stack)
    with End_of_file -> close_in chan; Array.make (Stack.length stack - 1) Parser.DEDENT |> Array.to_list
   in let formatted = ref (read 0 base) in
-  let _ = if !debug = 1 then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
+  let _ = if !debug then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
 
   let token lexbuf = (* hack I found online to convert lexbuf list to a map from lexbuf to Parser.token, needed for Ocamlyacc *)
   match !formatted with 
@@ -98,12 +101,12 @@ let fix_extension file = match Filename.check_suffix file ".cl" with
   | true -> file
   | false -> file ^ ".cl"
 
-(* replace_import: this function takes an ast and traverses it, replacing import statements with
+(* parse_imports: this function takes an ast and traverses it, replacing import statements with
 the full ast of the specified file. The behavior of this function follows Python. First the $PATH
 directories are searched, and then the local directory is searched. If the file is found in neither
 of these places, it throws an error. *)
 
-let replace_import li =
+let parse_imports li =
   let rec aux out = function
     | [] -> List.rev out
     | Import(name) :: t -> 
@@ -151,10 +154,22 @@ let rec strip_stmt = function
 
 and strip_print ast = List.rev (List.fold_left (fun acc x -> (strip_stmt x) :: acc) [] ast)
 
+(* codegen: command to run codegen to a generated sast, save it to a file (source.ll), compile and
+evaluate it, and return the output *)
+
+let codegen sast = 
+  let m = Codegen.translate sast in
+  Llvm_analysis.assert_valid_module m;
+  let oc = open_out "source.ll" in
+  Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc;
+  let output = cmd_to_list "llc source.ll -o source.s && gcc source.s -o main && ./main" in output
+
 (* this is the main function loop for the interpreter. We lex the input from stdin,
 convert it to a list of Parser.token, apply the appropriate indentation corrections,
 check to make sure we are at 0 indentation level, print more dots otherwise, and then
-compute the correct value and repeat *)
+compute the correct value and repeat. 
+
+map is used only if the interpreter is enabled. otherwise it is unecessary, and can be removed. *)
 
 let rec from_console map smap past run = 
   try 
@@ -165,13 +180,12 @@ let rec from_console map smap past run =
         let lexbuf = (Lexing.from_channel stdin) in
         let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
         let (curr, stack, formatted) = indent temp stack current in 
-        (* let _ = List.iter (Printf.printf "%s ") (List.map print formatted) in *)
         if Stack.top stack = 0 then formatted else
         (Printf.printf "... "; flush stdout;
         formatted @ (read curr stack))
 
     in let formatted = ref (read 0 base) in
-    let _ = if !debug = 1 then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
+    let _ = if !debug then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
 
     let token lexbuf = (* hack I found online to convert lexbuf list to a map from lexbuf to Parser.token, needed for Ocamlyacc *)
     match !formatted with 
@@ -182,26 +196,17 @@ let rec from_console map smap past run =
       if run then ((strip_print past) @ (Parser.program token (Lexing.from_string "")))
       else (Parser.program token (Lexing.from_string "")) in
 
-    let program_with_imports = replace_import program in
+    let imported_program = parse_imports program in
 
-    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } program_with_imports) in (* temporarily here to check validity of SAST *)
-    let _ = if !debug = 1 then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
+    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } imported_program) in (* temporarily here to check validity of SAST *)
+    let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
     
     if run then
-      (let m = Codegen.translate sast in
-      Llvm_analysis.assert_valid_module m;
-      let oc = open_out "source.ll" in
-      Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc;
-      let output = cmd_to_list "llc source.ll -o source.s && gcc source.s -o main && ./main" in
-      List.iter print_endline output; flush stdout; from_console map smap program_with_imports run)
+      let output = codegen sast in
+      List.iter print_endline output; flush stdout; 
+      from_console map smap imported_program run
 
     else flush stdout; from_console map smap' [] false
-
-    (* let m = Codegen.translate sast in *)
-    (* Llvm_analysis.assert_valid_module m; *)
-    (* print_string (Llvm.string_of_llmodule m) *)
-    (* let (result, mymap) = main map 0.0 program *)
-    (* flush stdout; loop map smap' *)
 
   with
     | Not_found -> Printf.printf "NotFoundError: unknown error\n"; from_console map smap past run
@@ -217,17 +222,13 @@ let rec from_file map smap fname run = (* todo combine with loop *)
   try
     let original_path = Sys.getcwd () in
     let program = Sys.chdir (Filename.dirname fname); ast_from_path (Filename.basename fname) in
-    let program_with_imports = replace_import program in
-    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } program_with_imports) in (* temporarily here to check validity of SAST *)
-    let _ = if !debug = 1 then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)
-    
+    let imported_program = parse_imports program in
+    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } imported_program) in (* temporarily here to check validity of SAST *)
+    let () = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)
+    let () = Sys.chdir original_path in
+
     if run then 
-      let m = Codegen.translate sast in
-      Llvm_analysis.assert_valid_module m;
-      Sys.chdir original_path;
-      let oc = open_out "source.ll" in
-      let _ = Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc; in
-      let output = cmd_to_list "llc source.ll -o source.s && gcc source.s -o main && ./main" in
+      let output = codegen sast in
       List.iter print_endline output; flush stdout;
 
   with
@@ -235,14 +236,19 @@ let rec from_file map smap fname run = (* todo combine with loop *)
     | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout
 
-(* main loop *)
-let _ =
-  parse_cmdline specs print_endline; (* parse command line arguments *)
-  (* if !debug = 1 && !run = 1 then raise (Failure "CompilerError: cannot run file and view debug information at the same time. Use either -d or -r flags.") *)
+(* Coral main interpreter loop. Parses command line arguments, including a single
+anonymous argument (file path) and runs either the interpreter or the from_file compiler *)
+
+let () =
+  Arg.parse speclist (fun path -> if not !set then fpath := path; set := true; ) usage; (* parse command line arguments *)
   let emptymap = StringMap.empty in 
   let semptymap = StringMap.empty in
-  if String.length !fpath = 0 then 
-    (Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
-    try from_console emptymap semptymap [] ( !run = 1) with Scanner.Eof -> exit 0)
-  else if !run = 1 then from_file emptymap semptymap !fpath true 
-  else from_file emptymap semptymap !fpath false
+  if not !set then
+  ( 
+    Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
+    try 
+      from_console emptymap semptymap [] !run 
+    with Scanner.Eof -> exit 0
+  )
+
+  else from_file emptymap semptymap !fpath !run
