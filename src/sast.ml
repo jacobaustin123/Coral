@@ -56,7 +56,6 @@ let append_list v = List.map (fun c -> c ^ v)
 let rec string_of_sexpr (e, t) = "(" ^ string_of_sexp e ^ ": " ^ string_of_typ t ^ ")"
 
 and string_of_sbind = function
-  | Bind(s, t) when t = Dyn -> s
   | Bind(s, t) -> s ^ ": " ^ string_of_typ t
 
 and string_of_sexp = function
