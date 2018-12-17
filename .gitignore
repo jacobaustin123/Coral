@@ -25,6 +25,8 @@ setup.log
 # for testing, not source code
 gcd.coral
 testall.log
+source.*
+main
 
 # IntelliJ nonsense
 .idea/*

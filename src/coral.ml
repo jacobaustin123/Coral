@@ -79,6 +79,10 @@ let get_ast path =
 
   let program = Parser.program token (Lexing.from_string "") in program
 
+(* ast_from_path: takes a given filename and searches for files with that name in any 
+directory contained in the $PATH env variable. This calls search_env_opt on "PATH" internally.
+Raises an error if the path is not found, unlike search_env_opt which returns None *)
+
 let ast_from_path fname = 
   let path = search_env_opt "PATH" fname in
   let name = match path with
@@ -86,9 +90,18 @@ let ast_from_path fname =
     | Some x -> x
   in get_ast name
 
+(* fix_extension: checks if a given file ends with the .cl extension. If so, return
+the original path. If not, append .cl to it. *)
+
+
 let fix_extension file = match Filename.check_suffix file ".cl" with
   | true -> file
   | false -> file ^ ".cl"
+
+(* replace_import: this function takes an ast and traverses it, replacing import statements with
+the full ast of the specified file. The behavior of this function follows Python. First the $PATH
+directories are searched, and then the local directory is searched. If the file is found in neither
+of these places, it throws an error. *)
 
 let replace_import li =
   let rec aux out = function
@@ -104,12 +117,16 @@ let replace_import li =
     | a :: t -> aux (a :: out) t 
   in aux [] li
 
+(* process_output_to_list: [copied from a Stack Overflow forum post. Runs a Unix command in a subprocess,
+captures the output, and stores earch result in a list to be printed or used further. Used for running
+bash scripts to compile the program *)
+
 let process_output_to_list = fun command -> 
   let chan = Unix.open_process_in command in
   let res = ref ([] : string list) in
   let rec process_otl_aux () =  
     let e = input_line chan in
-    res := e::!res;
+    res := e :: !res;
     process_otl_aux() in
   try process_otl_aux ()
   with End_of_file ->
@@ -118,7 +135,13 @@ let process_output_to_list = fun command ->
 let cmd_to_list command =
   let (l, _) = process_output_to_list command in l
 
-let rec strip_stmt = function
+(* strip_stmt: this function strips Type(x) and Print(x) stmts from the ast of past 
+function calls when used with the interpreter. The interpreter currently works by appending
+past parsed asts to the current one, and by default past print statements will be called each time
+the interpreter is run on any input statement. Note that this excludes functions because they may
+contain desired function calls. There is no good way around this with the current model. *)
+
+let rec strip_stmt = function 
   | Type(x) | Print(x) -> Nop
   | If(a, b, c) -> If(a, strip_stmt b, strip_stmt c)
   | While(a, b) -> While(a, strip_stmt b)
@@ -185,7 +208,6 @@ let rec from_console map smap past run =
     | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; from_console map smap past run
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map smap past run
     | Runtime explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map smap past run
-
 
 (* this is the main function loop for the file parser. We lex the input from a given file,
 convert it to a list of Parser.token, apply the appropriate indentation corrections,
