@@ -413,17 +413,17 @@ and func_stmt globals locals stack flag = function
         let (m', x', d, out) = func_stmt globals m stack {flag with cond = true; forloop = true;} c in 
         let (typ, e', _) = func_expr globals m' stack flag b in 
         if equals locals m' then (m', SFor(b2, e', x'), d, b1 :: out)
-        else let merged = merge locals m' in 
+        else let merged = transform locals m' in 
         let slist = from_sblock x' in 
-        (merged, SFor(b2, e', SBlock(slist @ !rec2)), match_data d None, b1 :: out)
+        (merged, SFor(b2, e', SBlock(slist @ !rec2)), match_data d None, b1 :: out @ !binds)
 
   | While(a, b) -> let (typ, e, data) = func_expr globals locals stack flag a in 
         if typ <> Bool && typ <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
         else let (m', x', d, out) = func_stmt globals locals stack {flag with cond = true;} b in 
         if equals locals m' then (m', SWhile(e, x'), d, out) else
-        let merged = merge locals m' in 
+        let merged = transform locals m' in 
         let slist = from_sblock x' in
-        (merged, SWhile(e, SBlock(slist @ !rec2)), match_data d None, out)
+        (merged, SWhile(e, SBlock(slist @ !rec2)), match_data d None, out @ !binds)
 
   | Nop -> (locals, SNop, None, [])
 
@@ -504,7 +504,7 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
     if equals map' map'' then (map', SIf(e', value, value'), out') 
     else let merged = transform map' map'' in 
     let slist = from_sblock value in let slist' = from_sblock value' in
-    (merged, SIf(e', SBlock(slist @ !rec1), SBlock(slist' @ !rec2)), out @ out')
+    (merged, SIf(e', SBlock(slist @ !rec1), SBlock(slist' @ !rec2)), out @ out' @ !binds)
 
   | For(a, b, c) -> 
     let (m, b1, b2) = check_array map b a in 
@@ -513,7 +513,7 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
     if equals map m' then (m', SFor(b2, e', x'), b1 :: out) 
     else let merged = transform m m' in 
     let slist = from_sblock x' in
-    (merged, SFor(b2, e', SBlock(slist @ !rec2)), b1 :: out)
+    (merged, SFor(b2, e', SBlock(slist @ !rec2)), b1 :: out @ !binds)
 
   | While(a, b) -> 
     let (t, e, _) = expr map a in 
@@ -522,7 +522,7 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
     if equals map m' then (m', SWhile(e, x'), out) 
     else let merged = transform map m' in 
     let slist = from_sblock x' in
-    (merged, SWhile(e, SBlock(slist @ !rec2)), out)
+    (merged, SWhile(e, SBlock(slist @ !rec2)), out @ !binds)
   
   | Nop -> (map, SNop, [])
   | Print(e) -> let (t, e', _) = expr map e in (map, SPrint(e'), [])
