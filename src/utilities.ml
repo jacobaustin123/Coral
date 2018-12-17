@@ -229,7 +229,7 @@ extracts objects with transformed type for use in codegen. *)
 
 let transform m1 m2 = rec1 := []; rec2 := []; binds := []; StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge two lists while keeping type inference intact *)
     | Some (a, b, c), Some (d, e, f) -> 
-        let t = compare_types a d in
+        let t = compare_types b e in
         if b <> t then rec1 := (STransform(key, b, Dyn) :: !rec1); binds := (Bind(key, Dyn) :: !binds);
         if e <> t then rec2 := (STransform(key, e, Dyn) :: !rec2); binds := (Bind(key, Dyn) :: !binds);
         Some (compare_types a d, compare_types b e, compare_data c f)
