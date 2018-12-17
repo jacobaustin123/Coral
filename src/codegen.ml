@@ -223,6 +223,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     data
   in
 
+  (* here's how you go from a cobj to the data value: *)
+  let build_gettype_cobj cobj_p b =  (* data_type = int_t etc *)
+    (*let x1 = L.build_load (lookup_global_binding "a") "x1" b in*)
+    let x2 = L.build_struct_gep cobj_p cobj_type_idx "x2" b in
+    let x3 = L.build_load x2 "x3" b in
+    let x4 = L.build_bitcast x3 (L.pointer_type ctype_t) "x4" b in
+    (* let data = L.build_load x4 "data" b in *)
+    x4
+  in
+
   let build_getlist_cobj cobj_p b =
     let gep_addr = L.build_struct_gep cobj_p cobj_data_idx "__gep_addr" b in
     let objptr = L.build_load gep_addr "__objptr" b in
@@ -512,6 +522,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     let formals_llvalues = (Array.to_list (L.params fn)) in
     let [ remote_self_p ] = formals_llvalues in
 
+
+    let _ = build_gettype_cobj remote_self_p b in
+
     (* boilerplate *)
     let self_p = boilerplate_till_load remote_self_p "self_p" b in
 
@@ -603,10 +616,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   in
 
   (* define printf *)
-  let printf_t : L.lltype =   (* define the type that the printf function shd be *)
+  let printf_t : L.lltype =   (* define the type that the printf function should be *)
       L.var_arg_function_type int_t [| char_pt |] in
   let printf_func : L.llvalue =   (* now use that type to declare printf (dont fill out the body just declare it in the context) *)
       L.declare_function "printf" printf_t the_module in
+
+  (* define exit *)
+  let exit_t : L.lltype =   (* define the type that the printf function should be *)
+    L.function_type (int_t) [| int_t |] in
+  let exit_func : L.llvalue =   (* now use that type to declare printf (dont fill out the body just declare it in the context) *)
+      L.declare_function "exit" exit_t the_module in
 
   (** setup main() where all the code will go **)
   let main_ftype = L.function_type int_t [||] in   (* ftype is the full llvm function signature *)
@@ -651,58 +670,66 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         with Not_found -> lookup_global_binding coral_name
   in
 
-  
+  let change_builder_state old_state b =
+      {namespace=old_state.namespace;func=old_state.func;b=b}
+  in
+
   let rec expr the_state typed_e = 
       let (namespace,the_function,b) = (the_state.namespace,the_state.func,the_state.b) in
       let (e,ty) = typed_e in
       match e with
     | SLit lit -> (match lit with
-        | IntLit i -> build_new_cobj_init int_t (L.const_int int_t i) b
-        | BoolLit i -> build_new_cobj_init bool_t (L.const_int bool_t (if i then 1 else 0)) b
-        | FloatLit i -> build_new_cobj_init float_t (L.const_float float_t i) b
+        | IntLit i -> let objptr = build_new_cobj_init int_t (L.const_int int_t i) the_state.b in
+          (objptr, the_state)
+        | BoolLit i -> let objptr = build_new_cobj_init bool_t (L.const_int bool_t (if i then 1 else 0)) the_state.b in
+          (objptr, the_state)
+        | FloatLit i -> let objptr = build_new_cobj_init float_t (L.const_float float_t i) the_state.b
+          in (objptr, the_state)
         | StringLit i -> let elements = List.rev (Seq.fold_left (fun l ch ->
-            let cobj_of_char_ptr = build_new_cobj_init char_t (L.const_int char_t (Char.code ch)) b in
+            let cobj_of_char_ptr = build_new_cobj_init char_t (L.const_int char_t (Char.code ch)) the_state.b in
             cobj_of_char_ptr::l) [] (String.to_seq i)) in
-          let (objptr, dataptr) = build_new_cobj clist_t b in
-          let _ = build_new_clist dataptr elements b in
-          objptr
+          let (objptr, dataptr) = build_new_cobj clist_t the_state.b in
+          let _ = build_new_clist dataptr elements the_state.b in
+            (objptr, the_state)
     )
     | SVar x -> let coral_name = x in
-        L.build_load (lookup coral_name namespace) coral_name b
+        let objptr = L.build_load (lookup coral_name namespace) coral_name the_state.b in
+        (objptr, the_state)
     | SCall(fexpr, arg_expr_list, sfdecl) ->
-            tstp "entering SCALL";
         let argc = List.length arg_expr_list
         (* eval the arg exprs *)
-        and llargs = List.map (expr the_state) (List.rev arg_expr_list) in
+        and (llargs, the_state) = List.fold_left (fun (l, the_state) e ->
+          let (element, the_state) = expr the_state e in
+            (element::l, the_state)) ([], the_state) (List.rev arg_expr_list) in
         let cobj_p_arr_t = L.array_type cobj_pt argc in
         (* allocate stack space for argv *)
-        let argv_as_arr = L.build_alloca cobj_p_arr_t "argv_arr" b in
+        let argv_as_arr = L.build_alloca cobj_p_arr_t "argv_arr" the_state.b in
         (* store llargs values in argv *)
 
         let store_arg llarg idx =
-          let gep_addr = L.build_gep argv_as_arr [|L.const_int int_t 0; L.const_int int_t idx|] "arg" b in
-          ignore(L.build_store llarg gep_addr b);()
+          let gep_addr = L.build_gep argv_as_arr [|L.const_int int_t 0; L.const_int int_t idx|] "arg" the_state.b in
+          ignore(L.build_store llarg gep_addr the_state.b);()
         in
 
         ignore(List.iter2 store_arg llargs (seq argc));
         (*let argv_as_arr_filled = List.fold_left2 (fun arr llarg idx -> L.build_insertvalue arr llarg idx ("arg"^(string_of_int idx)) b ) argv_as_arr llargs (seq argc) in
         *)
         (*ignore(L.build_store (L.const_array cobj_pt (Array.of_list llargs)) argv_as_arr b);*)
-        let argv = L.build_bitcast argv_as_arr cobj_ppt "argv" b in
+        let argv = L.build_bitcast argv_as_arr cobj_ppt "argv" the_state.b in
 
         (* now we have argv! so we just need to get the fn ptr and call it *)
         (*let fname = name_of_bind fname_sbind in
             tstp ("SCALL of "^fname);
         let caller_cobj_p = L.build_load (lookup fname namespace) fname b in
   *)
-        let caller_cobj_p = expr the_state fexpr in
-        let call_ptr = build_getctypefn_cobj ctype_call_idx caller_cobj_p b in
-        let result = L.build_call call_ptr [|caller_cobj_p;argv|] "result" b in
-        result
-    | SListAccess(e1,e2)  -> expr the_state (SBinop(e1,ListAccess,e2),ty)
+        let (caller_cobj_p, the_state) = expr the_state fexpr in
+        let call_ptr = build_getctypefn_cobj ctype_call_idx caller_cobj_p the_state.b in
+        let result = L.build_call call_ptr [|caller_cobj_p; argv|] "result" the_state.b in
+          (result, the_state)
+    | SListAccess(e1,e2)  -> expr the_state (SBinop(e1,ListAccess,e2), ty)
     | SBinop(e1, op, e2) ->
-      let e1' = expr the_state e1
-      and e2' = expr the_state e2 in
+      let (e1', the_state) = expr the_state e1 in
+      let (e2', the_state) = expr the_state e2 in
       let fn_idx = match op with
         | Add      -> ctype_add_idx
         | Sub      -> ctype_sub_idx
@@ -718,22 +745,109 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         | And      -> ctype_and_idx
         | Or       -> ctype_or_idx
         | ListAccess -> ctype_idx_idx in
-      let fn_p = build_getctypefn_cobj fn_idx e1' b in
-        L.build_call fn_p [| e1'; e2' |] "binop_result" b
+      let fn_p = build_getctypefn_cobj fn_idx e1' the_state.b in
+
+      (* exception handling: invalid_op *)
+      let bad_op_bb = L.append_block context "bad_op" the_state.func in
+      let bad_op_bd = L.builder_at_end context bad_op_bb in
+
+      let proceed_bb = L.append_block context "proceed" the_state.func in
+
+      (* check for op exception *)
+      let invalid_op = L.build_is_null fn_p "invalid_op" the_state.b in
+        ignore(L.build_cond_br invalid_op bad_op_bb proceed_bb the_state.b);
+
+      (* print message and exit *)
+      let err_message =
+        let info = "invalid use of " ^ (Utilities.binop_to_string op) ^ " operator" in
+          L.build_global_string info "error message" bad_op_bd in
+      let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_op_bd in
+        ignore(L.build_call printf_func [| str_format_str1 ; err_message |] "printf" bad_op_bd);
+        ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_op_bd);
+
+      (* return to normal control flow *)
+      let the_state = change_builder_state the_state (L.builder_at_end context proceed_bb) in
+        ignore(L.build_br proceed_bb bad_op_bd);
+
+      (* exception handling: invalid_arg *)
+      let bad_arg_bb = L.append_block context "bad_arg" the_state.func in
+      let bad_arg_bd = L.builder_at_end context bad_arg_bb in
+
+      let proceed_bb = L.append_block context "proceed" the_state.func in
+
+      (* check for arg exception *)
+
+      let _ = match op with
+        | ListAccess ->
+          let typ1 = ctype_int in
+          let typ2 = build_gettype_cobj e2' the_state.b in
+          let typ1_as_int = L.build_ptrtoint typ1 int_t "typ1_as_int" the_state.b in
+          let typ2_as_int = L.build_ptrtoint typ2 int_t "typ2_as_int" the_state.b in
+          let diff = L.build_sub typ1_as_int typ2_as_int "diff" the_state.b in
+          let invalid_arg = L.build_icmp L.Icmp.Ne diff (L.const_int int_t 0) "invalid_arg" the_state.b in
+            ignore(L.build_cond_br invalid_arg bad_arg_bb proceed_bb the_state.b);
+        | _ ->
+          let typ1 = build_gettype_cobj e1' the_state.b in
+          let typ2 = build_gettype_cobj e2' the_state.b in
+          let typ1_as_int = L.build_ptrtoint typ1 int_t "typ1_as_int" the_state.b in
+          let typ2_as_int = L.build_ptrtoint typ2 int_t "typ2_as_int" the_state.b in
+          let diff = L.build_sub typ1_as_int typ2_as_int "diff" the_state.b in
+          let invalid_arg = L.build_icmp L.Icmp.Ne diff (L.const_int int_t 0) "invalid_arg" the_state.b in
+            ignore(L.build_cond_br invalid_arg bad_arg_bb proceed_bb the_state.b);
+      in
+
+      (* print message and exit *)
+      let err_message =
+        let info = "invalid argument types for " ^ (Utilities.binop_to_string op) ^ " operator" in
+          L.build_global_string info "error message" bad_arg_bd in
+      let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_arg_bd in
+        ignore(L.build_call printf_func [| str_format_str1 ; err_message |] "printf" bad_arg_bd);
+        ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_arg_bd);
+
+      (* return to normal control flow *)
+      let the_state = change_builder_state the_state (L.builder_at_end context proceed_bb) in
+        ignore(L.build_br proceed_bb bad_arg_bd);
+
+      let result = L.build_call fn_p [| e1'; e2' |] "binop_result" the_state.b in
+        (result, the_state)
     | SUnop(op, e) ->
-      let e' = expr the_state e in
+      let (e', the_state) = expr the_state e in
       let fn_idx = match op with
         | Neg         -> ctype_neg_idx
         | Not         -> ctype_not_idx in
-      let fn_p = build_getctypefn_cobj fn_idx e' b in
-        L.build_call fn_p [| e' |] "uop_result" b
+      let fn_p = build_getctypefn_cobj fn_idx e' the_state.b in
+
+      (* exception handling: invalid_op *)
+      let bad_op_bb = L.append_block context "bad_op" the_state.func in
+      let bad_op_bd = L.builder_at_end context bad_op_bb in
+
+      let proceed_bb = L.append_block context "proceed" the_state.func in
+
+      (* check for op exception *)
+      let invalid_op = L.build_is_null fn_p "invalid_op" the_state.b in
+        ignore(L.build_cond_br invalid_op bad_op_bb proceed_bb the_state.b);
+
+      (* print message and exit *)
+      let err_message =
+        let info = "invalid use of " ^ (Utilities.unop_to_string op) ^ " operator" in
+          L.build_global_string info "error message" bad_op_bd in
+      let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_op_bd in
+        ignore(L.build_call printf_func [| str_format_str1 ; err_message |] "printf" bad_op_bd);
+        ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_op_bd);
+
+      (* return to normal control flow *)
+      let the_state = change_builder_state the_state (L.builder_at_end context proceed_bb) in
+        ignore(L.build_br proceed_bb bad_op_bd);
+
+      let result = L.build_call fn_p [| e' |] "uop_result" the_state.b in
+      (result, the_state)
     | SList(el, t) ->
-      let elements = List.map (fun e ->
-        expr the_state e) el in
-      let (objptr, dataptr) = build_new_cobj clist_t b in
-      let _ = build_new_clist dataptr elements b in
-      objptr
-    (* | Snoexper *)
+      let (elements, the_state) = List.fold_left (fun (l, the_state) e ->
+        let (element, the_state) = expr the_state e in
+          (element::l, the_state)) ([], the_state) (List.rev el) in
+      let (objptr, dataptr) = build_new_cobj clist_t the_state.b in
+      let _ = build_new_clist dataptr elements the_state.b in
+        (objptr, the_state)
   in
 
     let add_terminal the_state instr = 
@@ -742,60 +856,60 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       | None -> ignore (instr the_state.b)
     in
 
-  let change_builder_state old_state b =
-      {namespace=old_state.namespace;func=old_state.func;b=b}
-  in
-
   let rec stmt the_state s =   (* namespace comes first bc never gets modified unless descending so it works better for fold_left in SBlock *)
       let (namespace,the_function,b) = (the_state.namespace,the_state.func,the_state.b) in
       match s with
       |SBlock s -> List.fold_left stmt the_state s
-      |SExpr e ->  ignore(expr the_state e); the_state
-      |SAsn (bind_list,e) -> (*L.dump_module the_module;*) tstp "entering asn";
-        let e' = expr the_state e in tstp "passing checkpoint";
-        let get_name = (fun (Bind(name,explicit_t)) -> name) in
+      |SExpr e ->  let (_, the_state) = expr the_state e in the_state
+      |SAsn (bind_list,e) ->
+        let (e', the_state) = expr the_state e in
+        let get_name = (fun (Bind(name, explicit_t)) -> name) in
         let names = List.map get_name bind_list in
-        List.iter (fun name -> ignore (L.build_store e' (lookup name namespace) b)) names ; tstp "leaving asn"; the_state
-      (*|SReturn  (* later *)*)
+          List.iter (fun name -> ignore (L.build_store e' (lookup name namespace) the_state.b)) names;
+          the_state
       |SNop -> the_state
       |SIf (predicate, then_stmt, else_stmt) ->
-         let bool_val = build_getdata_cobj bool_t (expr the_state predicate) b in
-         (*let bool_val = (L.const_bool bool_t 1) in*)
-           let merge_bb = L.append_block context "merge" the_function in  
-             let build_br_merge = L.build_br merge_bb in 
-               let then_bb = L.append_block context "then" the_function in
-               let new_state = change_builder_state the_state (L.builder_at_end context then_bb) in
-                 add_terminal (stmt new_state then_stmt) build_br_merge;  
-               let else_bb = L.append_block context "else" the_function in
-               let new_state = change_builder_state the_state (L.builder_at_end context else_bb) in
-                 add_terminal (stmt new_state else_stmt) build_br_merge;  (* same deal as with 'then' BB *)
-                   ignore(L.build_cond_br bool_val then_bb else_bb b);  
-                   let new_state = change_builder_state the_state (L.builder_at_end context merge_bb ) in new_state
+        let (bool_val, the_state) =
+          let (objptr, the_state) = expr the_state predicate in
+          let data = build_getdata_cobj bool_t objptr the_state.b in
+            (data, the_state) in
+        let merge_bb = L.append_block context "merge" the_function in
+        let build_br_merge = L.build_br merge_bb in
+        let then_bb = L.append_block context "then" the_function in
+        let else_bb = L.append_block context "else" the_function in
+          ignore(L.build_cond_br bool_val then_bb else_bb the_state.b);
+        let the_state = change_builder_state the_state (L.builder_at_end context then_bb) in
+          add_terminal (stmt the_state then_stmt) build_br_merge;
+        let the_state = change_builder_state the_state (L.builder_at_end context else_bb) in
+          add_terminal (stmt the_state else_stmt) build_br_merge;  (* same deal as with 'then' BB *)
+        let the_state = change_builder_state the_state (L.builder_at_end context merge_bb) in the_state
       | SWhile (predicate, body) ->
         let pred_bb = L.append_block context "while" the_function in
-          ignore(L.build_br pred_bb b);
+          ignore(L.build_br pred_bb the_state.b);
         let body_bb = L.append_block context "while_body" the_function in
-        let new_state = change_builder_state the_state (L.builder_at_end context body_bb) in
-          add_terminal (stmt new_state body) (L.build_br pred_bb);
-        let pred_builder = L.builder_at_end context pred_bb in
-        let new_state = change_builder_state the_state (L.builder_at_end context pred_bb) in
-        let bool_val = build_getdata_cobj bool_t (expr new_state predicate) pred_builder in
+        let the_state = change_builder_state the_state (L.builder_at_end context body_bb) in
+          add_terminal (stmt the_state body) (L.build_br pred_bb);
+        let the_state = change_builder_state the_state (L.builder_at_end context pred_bb) in
+        let (bool_val, the_state) =
+          let (objptr, the_state) = expr the_state predicate in
+          let data = build_getdata_cobj bool_t objptr the_state.b in
+            (data, the_state) in
         let merge_bb = L.append_block context "merge" the_function in
-          ignore(L.build_cond_br bool_val body_bb merge_bb pred_builder);
-        let new_state = change_builder_state the_state (L.builder_at_end context merge_bb) in
-          new_state
+          ignore(L.build_cond_br bool_val body_bb merge_bb the_state.b);
+        let the_state = change_builder_state the_state (L.builder_at_end context merge_bb) in
+          the_state
       | SFor(var, lst, body) ->
          (* initialize list index variable and list length *)
-         let objptr = expr the_state lst in
-         let listptr = build_getlist_cobj objptr b in
-         let nptr = L.build_alloca int_t "nptr" b in
-           ignore(L.build_store (L.const_int int_t (0)) nptr b);
-         let n = L.build_load nptr "n" b in
-         let ln = build_getlen_clist listptr b in
+         let (objptr, new_state) = expr the_state lst in
+         let listptr = build_getlist_cobj objptr new_state.b in
+         let nptr = L.build_alloca int_t "nptr" new_state.b in
+           ignore(L.build_store (L.const_int int_t (0)) nptr new_state.b);
+         let n = L.build_load nptr "n" new_state.b in
+         let ln = build_getlen_clist listptr new_state.b in
 
          (* iter block *)
          let iter_bb = L.append_block context "iter" the_function in
-           ignore(L.build_br iter_bb b);
+           ignore(L.build_br iter_bb new_state.b);
 
          let iter_builder = L.builder_at_end context iter_bb in
          let n = L.build_load nptr "n" iter_builder in
@@ -816,13 +930,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
          let merge_bb = L.append_block context "merge" the_function in
            ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
-         let new_state = change_builder_state the_state (L.builder_at_end context merge_bb) in
+         let new_state = change_builder_state new_state (L.builder_at_end context merge_bb) in
            new_state
     | SPrint e -> (* TODO make this depend on runtime for dynamic types, implement strings *)
       let (_, ty) = e in (match ty with
-        | Int -> ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t (expr the_state e) b) |] "printf" b); the_state
-        | Float -> ignore(L.build_call printf_func [| float_format_str ; (build_getdata_cobj float_t (expr the_state e) b) |] "printf" b); the_state
-        | _ -> ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t (expr the_state e) b) |] "printf" b); the_state (* TODO: replace this *)
+        | Int -> let (objptr, the_state) = expr the_state e in
+          ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t objptr the_state.b) |] "printf" the_state.b); the_state
+        | Float -> let (objptr, the_state) = expr the_state e in
+          ignore(L.build_call printf_func [| float_format_str ; (build_getdata_cobj float_t objptr the_state.b) |] "printf" the_state.b); the_state
+        | _ -> let (objptr, the_state) = expr the_state e in
+          ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t objptr the_state.b) |] "printf" the_state.b); the_state (* TODO: replace this *)
       )
 
     | SFunc sfdecl ->
@@ -832,12 +949,12 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
         (* manually design the fn object w proper data & type ptrs and put in bind *)
         let _ = 
-          let (fn_obj,datafieldptr,ctypefieldptr) = build_new_cobj_empty b in
-          let dfp_as_fp = L.build_bitcast datafieldptr (L.pointer_type userdef_fn_pt) "dfp_as_fp" b in
-          ignore(L.build_store the_function dfp_as_fp b);  (* store fnptr *)
-          ignore(L.build_store ctype_func ctypefieldptr b);  (* store ctype ptr *)
+          let (fn_obj,datafieldptr,ctypefieldptr) = build_new_cobj_empty the_state.b in
+          let dfp_as_fp = L.build_bitcast datafieldptr (L.pointer_type userdef_fn_pt) "dfp_as_fp" the_state.b in
+          ignore(L.build_store the_function dfp_as_fp the_state.b);  (* store fnptr *)
+          ignore(L.build_store ctype_func ctypefieldptr the_state.b);  (* store ctype ptr *)
           (* store new object in appropriate binding *)
-          ignore(L.build_store fn_obj (lookup fname namespace) b)
+          ignore(L.build_store fn_obj (lookup fname namespace) the_state.b)
         in
 
         let fn_b = L.builder_at_end context (L.entry_block the_function) in
@@ -856,7 +973,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
 
           (* Very important! the actual extraction of the formals from formals_arr *)
-          let formal_vals = List.map (fun idx -> L.build_extractvalue formals_arr idx ("arg"^(string_of_int idx)) fn_b) (seq argc)  in
+          let formal_vals = List.map (fun idx -> L.build_extractvalue formals_arr idx ("arg"^(string_of_int idx)) fn_b) (seq argc) in
             (* now formal_vals is a list of co_ps *)
 
           let add_formal namespace_wip name cobj_p =  (* alloc a formal *)
@@ -874,16 +991,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         in
 
         let int_format_str = L.build_global_stringptr "%d\n" "fmt" fn_b
-        and float_format_str = L.build_global_stringptr "%f\n" "fmt" fn_b in
+        and float_format_str = L.build_global_stringptr "%f\n" "fmt" fn_b
+        and str_format_str = L.build_global_stringptr  "%s\n" "fmt" fn_b in
 
         (* build function body by calling stmt! *)
         let build_return some_b = L.build_ret (build_new_cobj_init int_t (L.const_int int_t 69) some_b) some_b in
         let fn_state:state = {namespace=fn_namespace;func=the_function;b=fn_b} in
-        add_terminal (stmt fn_state sfdecl.sbody) build_return;the_state  (* SFunc() returns the original builder *)
-    | SReturn e ->
-            L.build_ret (expr the_state e) b; the_state
-        
-
+        add_terminal (stmt fn_state sfdecl.sbody) build_return; the_state  (* SFunc() returns the original builder *)
+    | SReturn e -> let (ret_val, the_state) = expr the_state e in
+        ignore(L.build_ret ret_val the_state.b);
+        the_state
   in
 
   (*

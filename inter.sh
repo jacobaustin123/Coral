@@ -1,2 +1,2 @@
 #!/bin/bash
-llc $1 -o source.s && gcc source.s -o main && ./main
+llc source.ll -o source.s && gcc source.s -o main
