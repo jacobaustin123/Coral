@@ -156,13 +156,14 @@ let rec from_console map smap past run =
       | h :: t -> formatted := t ; h in
 
     let program = 
-      if run then (Parser.program token (Lexing.from_string ""))
+      if run then ((strip_print past) @ (Parser.program token (Lexing.from_string "")))
       else (Parser.program token (Lexing.from_string "")) in
 
     let program_with_imports = replace_import program in
 
     let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } program_with_imports) in (* temporarily here to check validity of SAST *)
-
+    let _ = if !debug = 1 then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
+    
     if run then
       (let m = Codegen.translate sast in
       Llvm_analysis.assert_valid_module m;
@@ -173,8 +174,7 @@ let rec from_console map smap past run =
       let output = cmd_to_list "./inter.sh source.ll" in
       List.iter print_endline output; flush stdout; from_console map smap program_with_imports run)
 
-    else let _ = if !debug = 1 then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
-      flush stdout; from_console map smap' [] false
+    else flush stdout; from_console map smap' [] false
 
     (* let m = Codegen.translate sast in *)
     (* Llvm_analysis.assert_valid_module m; *)
