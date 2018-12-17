@@ -157,11 +157,17 @@ and strip_print ast = List.rev (List.fold_left (fun acc x -> (strip_stmt x) :: a
 evaluate it, and return the output *)
 
 let codegen sast = 
-  let m = Codegen.translate sast in
-  Llvm_analysis.assert_valid_module m;
-  let oc = open_out "source.ll" in
-  Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc;
-  let output = cmd_to_list "llc source.ll -o source.s && gcc source.s -o main && ./main" in output
+  let output = 
+  (try 
+    let m = Codegen.translate sast in
+    Llvm_analysis.assert_valid_module m;
+    let oc = open_out "source.ll" in
+    Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc;
+    cmd_to_list "llc source.ll -o source.s && gcc source.s -o main && ./main"
+  with
+    | Not_found -> raise (Failure ("CodegenError: variable not found!"))
+  ) in output
+
 
 (* this is the main function loop for the interpreter. We lex the input from stdin,
 convert it to a list of Parser.token, apply the appropriate indentation corrections,
