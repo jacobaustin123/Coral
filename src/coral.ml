@@ -139,7 +139,7 @@ let rec from_console map smap =
     (* let (result, mymap) = main map 0.0 program in print_endline (string_of_float result); flush stdout; loop mymap smap' *)
     flush stdout; from_console map smap'
   with
-    | Not_found -> from_console map smap
+    | Not_found -> Printf.printf "NotFoundError: unknown error!\n"; from_console map smap
     | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; from_console map smap
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map smap
     | Runtime explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map smap
@@ -157,7 +157,7 @@ let rec from_file map smap fname run = (* todo combine with loop *)
     (* if run then let (result, mymap) = main map 0.0 program in print_endline (string_of_float result); *)
     flush stdout;
   with
-    | Not_found -> Printf.printf "LexingError: Not Found!\n"; flush stdout
+    | Not_found -> Printf.printf "NotFoundError: unknown error!\n"; flush stdout
     | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout
 ;;
