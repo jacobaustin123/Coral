@@ -183,7 +183,7 @@ let rec from_console map smap past run =
     (* flush stdout; loop map smap' *)
 
   with
-    | Not_found -> Printf.printf "NotFoundError: unknown lexing error\n"; from_console map smap past run
+    | Not_found -> Printf.printf "NotFoundError: unknown error\n"; from_console map smap past run
     | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; from_console map smap past run
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map smap past run
     | Runtime explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map smap past run
@@ -210,7 +210,7 @@ let rec from_file map smap fname run = (* todo combine with loop *)
       List.iter print_endline output; flush stdout;
 
   with
-    | Not_found -> Printf.printf "NotFoundError: possibly caused by lexer!\n"; flush stdout
+    | Not_found -> Printf.printf "NotFoundError: unknown error!\n"; flush stdout
     | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout
 
