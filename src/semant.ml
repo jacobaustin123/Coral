@@ -124,7 +124,7 @@ and exp map = function
             in let map' = StringMap.map (fun (a, b, c) -> (Dyn, b, c)) map (* ignore dynamic types when not in same scope *)
             in let (_, map1, bindout, exprout) = (List.fold_left2 aux (map, map', [], []) formals args) in
 
-            let (_, types) = split_sbind bindout in 
+            let (_, types) = split_sbind bindout in
             let stack = TypeMap.empty in
             let stack' = TypeMap.add (x, types) true stack in
             let (map2, block, data, locals) = (func_stmt map map1 stack' {cond = false; forloop = false; noeval = false;} body) in
@@ -188,7 +188,7 @@ and func_exp globals locals stack flag = function (* evaluate expressions, retur
     if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t3 <> Int && t3 <> Dyn then raise (Failure ("STypeError: invalid types for list access"))
     else (array_to_type t1, SListSlice(e1, e2, e3), None)
 
-  | Call(exp, args) -> (* exp should either be a variable or an SCall object *)
+  | Call(exp, args) ->
     let (t, e, data) = func_expr globals locals stack flag exp in 
     if t <> Dyn && t <> FuncType then raise (Failure ("STypeError: cannot call objects of type " ^ type_to_string t)) else
     (match data with (* data is either the Func info *)
@@ -202,15 +202,15 @@ and func_exp globals locals stack flag = function (* evaluate expressions, retur
 
             else let rec aux (globals, locals, bindout, exprout) v1 v2 = match v1, v2 with 
               | b, e -> let data = func_expr globals locals stack flag e in let (t', e', _) = data in 
-              let (map1, _, bind2) = assign globals data b in (map1, locals, (bind2 :: bindout), (e' :: exprout))
+              let (map1, _, bind2) = assign globals data b in (map1, locals, (bind2 :: bindout), (e' :: exprout)) in
 
-            in let map' = StringMap.map (fun (a, b, c) -> (Dyn, b, c)) locals
-            in let (map1, _, bindout, exprout) = (List.fold_left2 aux (globals, map', [], []) formals args)
-            in let (map'', _, _) = assign map1 (Dyn, (SCall (e, [], SNop), Dyn), data) name in
+            let map' = StringMap.map (fun (a, b, c) -> (Dyn, b, c)) locals in
+            let (map1, _, bindout, exprout) = (List.fold_left2 aux (globals, map', [], []) formals args) in
+            let (map'', _, _) = assign map1 (Dyn, (SCall (e, [], SNop), Dyn), data) name in
 
-            let (_, types) = split_sbind bindout in 
-            if TypeMap.mem (x, types) stack then (Dyn, (SCall(e, [], SNop)), data) else (* let func = TypeMap.find (x, types) stack *)
-            let stack' = TypeMap.add (x, types) true stack in (* temporarily a boolean. TODO move this to expr *)
+            let (_, types) = split_sbind bindout in (* avoid recursive calls by checking if the type has already been called. *)
+            if TypeMap.mem (x, types) stack then (Dyn, SCall(e, (List.rev exprout), SNop), None) 
+            else let stack' = TypeMap.add (x, types) true stack in
             
             let (map2, block, data, locals) = (func_stmt globals map'' stack' flag body) in
             (match data with
@@ -228,7 +228,7 @@ and func_exp globals locals stack flag = function (* evaluate expressions, retur
           
           | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation")))
       
-      | None -> if not flag.noeval then print_endline "SWarning: called /undefined function"; 
+      | None -> if not flag.noeval then print_endline "SWarning: called weak/undefined function"; 
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals stack flag e' in e'' :: acc) [] args) in
           (Dyn, (SCall(e, eout, SNop)), None)) (* TODO fix this somehow *)
 
@@ -383,7 +383,7 @@ and func_stmt globals locals stack flag = function
         ) (semantmap, []) b in
 
     let bindout = List.rev bind in
-    let (map2, block, data, locals) = (func_stmt map'' map'' TypeMap.empty {flag with noeval = true;} c) in
+    let (map2, block, data, locals) = (func_stmt StringMap.empty map'' TypeMap.empty {flag with noeval = true;} c) in
     
     (match data with
       | Some (typ2, e', d) ->
@@ -413,21 +413,27 @@ and func_stmt globals locals stack flag = function
         let (m', x', d, out) = func_stmt globals m stack {flag with cond = true; forloop = true;} c in 
         let (typ, e', _) = func_expr globals m' stack flag b in 
         if equals locals m' then (m', SFor(b2, e', x'), d, b1 :: out)
-        else let merged = merge locals m' in 
+        else let merged = transform locals m' in 
         let slist = from_sblock x' in 
-        (merged, SFor(b2, e', SBlock(slist @ !rec2)), match_data d None, b1 :: out)
+        (merged, SFor(b2, e', SBlock(slist @ !rec2)), match_data d None, b1 :: out @ !binds)
 
   | While(a, b) -> let (typ, e, data) = func_expr globals locals stack flag a in 
         if typ <> Bool && typ <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
         else let (m', x', d, out) = func_stmt globals locals stack {flag with cond = true;} b in 
         if equals locals m' then (m', SWhile(e, x'), d, out) else
-        let merged = merge locals m' in 
+        let merged = transform locals m' in 
         let slist = from_sblock x' in
-        (merged, SWhile(e, SBlock(slist @ !rec2)), match_data d None, out)
+        (merged, SWhile(e, SBlock(slist @ !rec2)), match_data d None, out @ !binds)
 
-  | Nop -> let (a, b, out) = stmt locals flag (Nop) in (a, b, None, out)
-  | Type(a) -> let (a, b, out) = stmt locals flag (Type a) in (a, b, None, out)
-  | Print(a) -> let (a, b, out) = stmt locals flag (Print a) in (a, b, None, out)
+  | Nop -> (locals, SNop, None, [])
+
+  | Type(a) ->  let (t, e, _) = func_expr globals locals stack flag a in 
+    print_endline (type_to_string t); 
+    (locals, SNop, None, []) 
+
+  | Print(e) -> let (t, e', _) = func_expr globals locals stack flag e in 
+    (locals, SPrint(e'), None, [])
+
   | _ as s -> let (map', value, out) = stmt locals flag s in (map', value, None, [])
 
 (* stmt: the regular statement function used for evaluating statements outside of functions. *)
@@ -472,8 +478,9 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
         let (map', bind, _) = assign map (t, (SNoexpr, t), None) (Bind(x, t)) in 
         (map', bind :: out)
       ) (semantmap, []) b in
+
     let bindout = List.rev binds in
-    let (map2, block, data, locals) = (func_stmt map'' map'' TypeMap.empty {flag with noeval = true; forloop = false; cond = false; } c) in
+    let (map2, block, data, locals) = (func_stmt StringMap.empty map'' TypeMap.empty {flag with noeval = true; forloop = false; cond = false; } c) in
       (match data with
         | Some (typ2, e', d) ->
             if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
@@ -497,7 +504,7 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
     if equals map' map'' then (map', SIf(e', value, value'), out') 
     else let merged = transform map' map'' in 
     let slist = from_sblock value in let slist' = from_sblock value' in
-    (merged, SIf(e', SBlock(slist @ !rec1), SBlock(slist' @ !rec2)), out @ out')
+    (merged, SIf(e', SBlock(slist @ !rec1), SBlock(slist' @ !rec2)), out @ out' @ !binds)
 
   | For(a, b, c) -> 
     let (m, b1, b2) = check_array map b a in 
@@ -506,7 +513,7 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
     if equals map m' then (m', SFor(b2, e', x'), b1 :: out) 
     else let merged = transform m m' in 
     let slist = from_sblock x' in
-    (merged, SFor(b2, e', SBlock(slist @ !rec2)), b1 :: out)
+    (merged, SFor(b2, e', SBlock(slist @ !rec2)), b1 :: out @ !binds)
 
   | While(a, b) -> 
     let (t, e, _) = expr map a in 
@@ -515,7 +522,7 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
     if equals map m' then (m', SWhile(e, x'), out) 
     else let merged = transform map m' in 
     let slist = from_sblock x' in
-    (merged, SWhile(e, SBlock(slist @ !rec2)), out)
+    (merged, SWhile(e, SBlock(slist @ !rec2)), out @ !binds)
   
   | Nop -> (map, SNop, [])
   | Print(e) -> let (t, e', _) = expr map e in (map, SPrint(e'), [])

@@ -58,7 +58,6 @@ rule token = parse
   | "is" { IS }
   | "None" { NONE }
   | '#' { comment lexbuf }
-  | "\"\"\"" { multiline lexbuf }
   | '+' { PLUS }
   | '-' { MINUS } 
   | '*' { TIMES }
@@ -92,9 +91,16 @@ rule token = parse
   | _ as char { raise (Failure("SyntaxError: invalid character in identifier " ^ Char.escaped char)) }
 
 and comment = parse
-  | '\n' { EOL }
+  | '\n' { CEND }
   | _ { comment lexbuf }
 
+(* 
+
+  | "\"\"\"" { multiline lexbuf }
+
 and multiline = parse
-  | "\"\"\"" { SEP }
+
+  | "\"\"\"" { EOL }
   | _ { multiline lexbuf }
+
+*)
