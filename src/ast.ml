@@ -42,6 +42,7 @@ type stmt =
   | Asn of expr list * expr
   | Type of expr
   | Print of expr
+  | Import of string
   | Nop
 
 
@@ -111,6 +112,7 @@ let rec string_of_stmt = function
   | Asn(el, e) -> String.concat ", " (List.map string_of_expr el) ^ " = "  ^ string_of_expr e
   | Type(e) -> string_of_expr e
   | Print(e) -> string_of_expr e
+  | Import(e) -> "import " ^ e
   | Nop -> ""
 
 and string_of_program l = String.concat "" (List.map string_of_stmt l) ^ "\n\n"

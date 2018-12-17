@@ -85,6 +85,7 @@ let print = function
   | Parser.TIMESEQ -> "TIMESEQ"
   | Parser.DIVIDEEQ -> "DIVIDEEQ"
   | Parser.EXPEQ -> "EXPEQ"
+  | Parser.IMPORT -> "IMPORT"
   | _ -> "Token not supported by print utility"
 ;;
 
@@ -101,6 +102,7 @@ let stmt_to_string = function
   | Asn(_, _) -> "asn"
   | Type(_) -> "type"
   | Print(_) -> "print"
+  | Import(_) -> "import"
   | Nop -> "nop"
 
 (* expr_to_string: converts expr to string for error handling *)
@@ -236,8 +238,14 @@ let transform m1 m2 = rec1 := []; rec2 := []; StringMap.merge (fun key v1 v2 -> 
 
 (* from_block: used to extract the slist from an SBlock in codegen *)
 let from_block block = match block with
+  | Block(x) -> x
+  | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in branch evaluation"))
+
+(* from_sblock: used to extract the slist from an SBlock in codegen *)
+let from_sblock block = match block with
   | SBlock(x) -> x
-  | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in conditional branch evaluation"))
+  | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in branch evaluation"))
+
 
 (* check if two maps are equal *)
 let equals m1 m2 = (StringMap.equal (fun x y -> (compare x y) = 0) m1 m2) (* check if two maps are equal *)

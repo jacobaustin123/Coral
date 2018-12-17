@@ -81,7 +81,8 @@ rule token = parse
   | "->" { ARROW }
   | "type" { TYPE }
   | "print" { PRINT }
-  | ("global"|"await"|"import"|"from"|"as"|"nonlocal"|"async"|"yield"|"raise"|"except"|"finally"|"is"|"lambda"|"try"|"with") { raise (Failure("NotImplementedError: these Python 3.7 features are not currently being implemented in the Coral language." )) }
+  | "import" { IMPORT }
+  | ("global"|"await"|"from"|"as"|"nonlocal"|"async"|"yield"|"raise"|"except"|"finally"|"is"|"lambda"|"try"|"with") { raise (Failure("NotImplementedError: these Python 3.7 features are not currently being implemented in the Coral language." )) }
   | stringliteral as id { STRING_LITERAL(strip_quotes id) } 
   | ("True"|"False") as id { if id = "True" then BOOL_LITERAL(true) else BOOL_LITERAL(false) }
   | cstylefloat as lit { FLOAT_LITERAL(float_of_string lit) } 
