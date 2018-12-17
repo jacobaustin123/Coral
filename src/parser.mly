@@ -13,7 +13,7 @@ Python-style indentation based parsing scheme. The second is the full parser */
 %token EXP NOT NEG SEP AND OR ARROW NOP TYPE PRINT
 %token TAB COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE DOT
 %token BOOL INT FLOAT STRING BOOLARR INTARR FLOATARR STRINGARR
-%token CLASS IMPORT
+%token CLASS IMPORT CEND
 %token INDENT DEDENT
 %token LPAREN RPAREN
 %token LBRACK RBRACK
@@ -62,6 +62,8 @@ a list of Parser.tokens for use by the indentation method in Coral.ml */
 
 tokenize:
   | seq EOL { $1 @ [EOL] }
+  | seq CEND { $1 @ [EOL] }
+  | CEND { CEND :: [EOL] }
   | EOL { NOP :: [EOL] }
 
 /* seq: an auxillary target used to handle shift reduce errors in tokenize */
