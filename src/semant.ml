@@ -21,13 +21,14 @@ let binop t1 t2 op =
     | Add when same && t1 = String -> String
     (* | Add | Sub | Mul | Div | Exp when t1 = Int || t1 = FloatArr || t1 = Bool && t2 = Int || t2 = Float || t2 = Bool -> Float *)
     | Less | Leq | Greater | Geq when not same && t1 = String || t2 = String -> raise except
-    | Eq | Neq | Less | Leq | Greater | Geq | And | Or -> Bool
+    | Eq | Neq | Less | Leq | Greater | Geq | And | Or when same -> Bool
     | And | Or when same && t1 = Bool -> Bool
     | Mul when is_arr t1 && t2 = Int -> t1
     | Mul when is_arr t2 && t1 = Int -> t2
     | Mul when t1 = String && t2 = Int -> String
     | Mul when t2 = String && t1 = Int -> String
     | Add when same && is_arr t1 -> t1
+    | Div when same && t1 = Int -> Int
     | _ -> raise except
   )
 
@@ -50,7 +51,9 @@ let convert (t, e, d) = (t, (e, t), d)
 (* expr: syntactically check an expression, returning its type, the sexp object, and any relevant data *)
 let rec expr map x = convert (exp map x)
 
-and exp map = function (* evaluate expressions, return types and add to map *)
+(* exp: evaluate expressions, return their types, a partial sast, and any relevant data *)
+
+and exp map = function 
   | Lit(x) -> 
     let typ = match x with 
       | IntLit(x) -> Int 
@@ -59,26 +62,26 @@ and exp map = function (* evaluate expressions, return types and add to map *)
       | FloatLit(x) -> Float 
     in (typ, SLit(x), None) (* convert lit to type, return (type, SLit(x)), check if defined in map *)
   
-  | List(x) -> (* maybe attach list to data *)
+  | List(x) -> (* parse Lists to determine if they have uniform type, evaluate each expression separately *)
     let rec aux typ out = function
       | [] -> (type_to_array typ, SList(List.rev out, type_to_array typ), None)
       | a :: rest -> 
         let (t, e, _) = expr map a in 
         if t = typ then aux typ (e :: out) rest 
         else aux Dyn (e :: out) rest in 
-      ( match x with
-          | a :: rest -> let (t, e, _) = expr map a in aux t [e] rest
-          | [] -> (Dyn, SList([], Dyn), None) (* TODO: maybe do something with this special case of empty list *)
+      (match x with
+        | a :: rest -> let (t, e, _) = expr map a in aux t [e] rest
+        | [] -> (Dyn, SList([], Dyn), None) (* TODO: maybe do something with this special case of empty list *)
       ) 
 
-  | ListAccess(e, x) ->
+  | ListAccess(e, x) -> (* parse List access to determine the LHS is a list and the RHS is an int if possible *)
     let (t1, e1, _) = expr map e in
     let (t2, e2, _) = expr map x in
     if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn 
       then raise (Failure ("STypeError: invalid types for list access"))
     else (array_to_type t1, SListAccess(e1, e2), None)
 
-  | ListSlice(e, x1, x2) ->
+  | ListSlice(e, x1, x2) -> (* parse List Slice to determine the LHS is a list and the two RHS elements are ints if possible *)
     let (t1, e1, _) = expr map e in
     let (t2, e2, _) = expr map x1 in
     let (t3, e3, _) = expr map x2 in
@@ -86,22 +89,22 @@ and exp map = function (* evaluate expressions, return types and add to map *)
       then raise (Failure ("STypeError: invalid types for list access"))
     else (array_to_type t1, SListSlice(e1, e2, e3), None)
 
-  | Var(Bind(x, t)) -> 
+  | Var(Bind(x, t)) -> (* parse Variables, throwing an error if they are not found in the global lookup table *)
     if StringMap.mem x map then 
     let (t', typ, data) = StringMap.find x map in 
     (typ, SVar(x), data)
     else raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
   
-  | Unop(op, e) -> 
+  | Unop(op, e) -> (* parse Unops, making sure the argument and ops have valid type combinations *)
     let (t1, e', _) = expr map e in
     let t2 = unop t1 op in (t2, SUnop(op, e'), None)
 
-  | Binop(a, op, b) -> 
+  | Binop(a, op, b) -> (* parse Binops, making sure the two arguments and ops have valid type combinations *)
     let (t1, e1, _) = expr map a in 
     let (t2, e2, _) = expr map b in 
     let t3 = binop t1 t2 op in (t3, SBinop(e1, op, e2), None)
 
-  | Call(exp, args) -> 
+  | Call(exp, args) -> (* parse Call, checking that the LHS is a function, matching arguments and types, evaluating the body *)
     let (t, e, data) = expr map exp in
     if t <> Dyn && t <> FuncType 
       then raise (Failure ("STypeError: cannot call objects of type " ^ type_to_string t)) 
@@ -120,7 +123,11 @@ and exp map = function (* evaluate expressions, return types and add to map *)
 
             in let map' = StringMap.map (fun (a, b, c) -> (Dyn, b, c)) map (* ignore dynamic types when not in same scope *)
             in let (_, map1, bindout, exprout) = (List.fold_left2 aux (map, map', [], []) formals args) in
-            let (map2, block, data, locals) = (func_stmt map map1 TypeMap.empty {cond = false; forloop = false; noeval = false;} body) in
+
+            let (_, types) = split_sbind bindout in 
+            let stack = TypeMap.empty in
+            let stack' = TypeMap.add (x, types) true stack in
+            let (map2, block, data, locals) = (func_stmt map map1 stack' {cond = false; forloop = false; noeval = false;} body) in
 
             (match data with (* match return type with *)
               | Some (typ2, e', d) -> (* it did return something *)
@@ -191,7 +198,7 @@ and func_exp globals locals stack flag = function (* evaluate expressions, retur
             (raise (Failure ("STypeError: cannot call variable"))) else
             let param_length = List.length args in
             if List.length formals <> param_length 
-            then raise (Failure ("SyntaxError: unexpected number of arguments in function call"))
+            then raise (Failure ("SSyntaxError: unexpected number of arguments in function call"))
 
             else let rec aux (globals, locals, bindout, exprout) v1 v2 = match v1, v2 with 
               | b, e -> let data = func_expr globals locals stack flag e in let (t', e', _) = data in 
@@ -203,7 +210,7 @@ and func_exp globals locals stack flag = function (* evaluate expressions, retur
 
             let (_, types) = split_sbind bindout in 
             if TypeMap.mem (x, types) stack then (Dyn, (SCall(e, [], SNop)), data) else (* let func = TypeMap.find (x, types) stack *)
-            let stack' = TypeMap.add (x, types) true stack in (* temporarily a boolean *)
+            let stack' = TypeMap.add (x, types) true stack in (* temporarily a boolean. TODO move this to expr *)
             
             let (map2, block, data, locals) = (func_stmt globals map'' stack' flag body) in
             (match data with
@@ -279,12 +286,14 @@ and check_array map e b =
 
 (* check_func: checks an entire function. 
 
-  globals and locals are the globals and locals maps (locals contains all globals).
-  out is a sstmt list containing the semanting checked stmts
-  data is a (typ, e', sstmt) tuple containing return information for the function
-  local_vars is a list of sbinds containing the local variables
-  stack is a TypeMap containing the function call stack 
-*)
+globals and locals are the globals and locals maps (locals contains all globals).
+out is a sstmt list containing the semanting checked stmts.
+data is a (typ, e', sstmt) tuple containing return information for the function.
+local_vars is a list of sbinds containing the local variables.
+stack is a TypeMap containing the function call stack.
+
+TODO distinguish between outer and inner scope return statements to stop evaluating when definitely
+returned. *)
 
 and check_func globals locals out data local_vars stack flag = (function  
   | [] -> ((List.rev out), data, locals, List.sort_uniq compare (List.rev local_vars))
@@ -355,13 +364,17 @@ and func_stmt globals locals stack flag = function
   | Func(a, b, c) ->
     let rec dups = function (* check duplicate argument names *)
       | [] -> ()
-      | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
+      | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SSyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
       | _ :: t -> dups t
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in 
 
     let Bind(name, btype) = a in 
-    let (map', _, _) = assign locals (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in (* Dyn *)
-    let (semantmap, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in (* empty map for semantic checking *)
+
+    (* we assign Bind(name, Dyn) because we want to allow reassignment of functions. this weakens the type inference in 
+    exchange for reasonable flexibility *)
+
+    let (map', _, _) = assign locals (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in
+    let (semantmap, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in
 
     let (map'', bind) = List.fold_left 
         (fun (map, out) (Bind (x, t)) -> 
@@ -444,17 +457,21 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
 
   | Expr(e) -> let (t, e', _) = expr map e in (map, SExpr(e'), [])
   | Block(s) -> let ((value, globals), map') = check map [] [] flag s in (map', SBlock(value), globals)
-  | Return(e) -> raise (Failure ("SyntaxError: return statement outside of function"))
+  | Return(e) -> raise (Failure ("SSyntaxError: return statement outside of function"))
   | Func(a, b, c) -> let rec dups = function (* check duplicate argument names *)
       | [] -> ()
-      | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
+      | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SSyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
       | _ :: t -> dups t
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(name, btype) = a in 
     
     let (map', _, _) = assign map (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in
     let (semantmap, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in (* empty map for semantic checking *)
 
-    let (map'', binds) = List.fold_left (fun (map, out) (Bind(x, t)) -> let (map', bind, _) = assign map (t, (SNoexpr, t), None) (Bind(x, t)) in (map', bind :: out)) (semantmap, []) b in
+    let (map'', binds) = List.fold_left 
+      (fun (map, out) (Bind(x, t)) -> 
+        let (map', bind, _) = assign map (t, (SNoexpr, t), None) (Bind(x, t)) in 
+        (map', bind :: out)
+      ) (semantmap, []) b in
     let bindout = List.rev binds in
     let (map2, block, data, locals) = (func_stmt map'' map'' TypeMap.empty {flag with noeval = true; forloop = false; cond = false; } c) in
       (match data with
@@ -501,15 +518,10 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
     (merged, SWhile(e, SBlock(slist @ !rec2)), out)
   
   | Nop -> (map, SNop, [])
-  
+  | Print(e) -> let (t, e', _) = expr map e in (map, SPrint(e'), [])
   | Type(a) -> 
     let (t, e, _) = expr map a in 
     print_endline (type_to_string t); 
-    (map, SNop, [])
- 
-   | Print(a) -> 
-    let (t, e, _) = expr map a in 
-    print_endline (string_of_sexpr e); 
     (map, SNop, [])
 
   | _ as temp -> 
@@ -521,5 +533,3 @@ statements and returning a list of sstmts, a list of globals, and the updated ma
 and check map out globals flag = function
   | [] -> ((List.rev out, List.sort_uniq compare (List.rev globals)), map)
   | a :: t -> let (m', value, g) = stmt map flag a in check m' (value :: out) (g @ globals) flag t
-
-
