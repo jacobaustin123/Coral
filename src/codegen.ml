@@ -942,6 +942,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
           ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t objptr the_state.b) |] "printf" the_state.b); the_state (* TODO: replace this *)
       )
 
+    | STransform(a, b, c) -> the_state
+
     | SFunc sfdecl ->
         (* outer scope work: point binding to new cfuncobj *)
         let fname = sfdecl.sfname in

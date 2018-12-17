@@ -37,7 +37,72 @@ let indent tokens base current =
       else if curr = (Stack.top stack) + 1 then let _ = Stack.push curr stack in aux curr (a :: t) (Parser.INDENT :: out) stack (* if indented by one, push onto the stack and add an indent token *)
       else raise (Failure "SSyntaxError: invalid indentation detected!"); (* else raise an error *)
   in aux current tokens [] base
-    
+
+(* search_env_opt: search the given environment variable for valid search paths 
+and search these for files of the form path/name, return channel if exists, None otherwise *)
+
+let search_env_opt env name = 
+  if not (Filename.is_relative name) 
+    then if Sys.file_exists name 
+      then Some name 
+      else None
+  else let env_string = Sys.getenv_opt env in
+    match env_string with
+      | None -> if Sys.file_exists name then Some name else None
+      | Some x -> let paths = String.split_on_char ':' x in
+          let curr = List.find_opt (fun path -> Sys.file_exists (Filename.concat path name)) paths in
+          match curr with
+            | None -> if Sys.file_exists name then Some name else None
+            | Some path -> Some (Filename.concat path name)
+
+(* get_ast: loads the ast from a given path if possible, lexing and
+parsing the file found at that path *)
+
+let get_ast path = 
+  let chan = open_in path
+  in let base = Stack.create() in let _ = Stack.push 0 base in
+
+  let rec read current stack = (* logic of the interpreter *)
+    try let line = (input_line chan) ^ "\n" in (* add newline for parser, gets stripped by input_line *)
+     let lexbuf = (Lexing.from_string line) in
+     let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
+     let (curr, stack, formatted) = indent temp stack current in
+     formatted @ (read curr stack)
+   with End_of_file -> close_in chan; Array.make (Stack.length stack - 1) Parser.DEDENT |> Array.to_list
+  in let formatted = ref (read 0 base) in
+  let _ = if !debug = 1 then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
+
+  let token lexbuf = (* hack I found online to convert lexbuf list to a map from lexbuf to Parser.token, needed for Ocamlyacc *)
+  match !formatted with 
+    | []     -> Parser.EOF 
+    | h :: t -> formatted := t ; h in
+
+  let program = Parser.program token (Lexing.from_string "") in program
+
+let ast_from_path fname = 
+  let path = search_env_opt "PATH" fname in
+  let name = match path with
+    | None -> raise (Failure ("FileNotFoundError: unable to open file " ^ fname)) 
+    | Some x -> x
+  in get_ast name
+
+let fix_extension file = match Filename.check_suffix file ".cl" with
+  | true -> file
+  | false -> file ^ ".cl"
+
+let replace_import li =
+  let rec aux out = function
+    | [] -> List.rev out
+    | Import(name) :: t -> 
+        let program = ast_from_path (fix_extension name) in
+        aux ((List.rev program) @ out) t
+    | Func(a, b, s1) :: t -> let updated = aux [] (from_block s1) in aux (Func(a, b, Block(updated)) :: out) t
+    | Block(s1) :: t -> let updated = aux [] s1 in aux (Block(updated) :: out) t
+    | If(a, s1, s2) :: t -> let u1 = aux [] (from_block s1) in let u2 = aux [] (from_block s2) in aux (If(a, Block(u1), Block(u2)) :: out) t
+    | For(a, b, s1) :: t -> let updated = aux [] (from_block s1) in aux (For(a, b, Block(updated)) :: out) t
+    | While(a, s1) :: t -> let updated = aux [] (from_block s1) in aux (While(a, Block(updated)) :: out) t
+    | a :: t -> aux (a :: out) t 
+  in aux [] li
 
 let process_output_to_list = fun command -> 
   let chan = Unix.open_process_in command in
@@ -68,7 +133,7 @@ convert it to a list of Parser.token, apply the appropriate indentation correcti
 check to make sure we are at 0 indentation level, print more dots otherwise, and then
 compute the correct value and repeat *)
 
-let rec loop map smap past run = 
+let rec from_console map smap past run = 
   try 
     Printf.printf ">>> "; flush stdout;
     let base = Stack.create() in let _ = Stack.push 0 base in
@@ -90,12 +155,13 @@ let rec loop map smap past run =
       | []     -> Parser.EOF 
       | h :: t -> formatted := t ; h in
 
-    let program = if run then (Parser.program token (Lexing.from_string ""))
-    else (Parser.program token (Lexing.from_string "")) in
+    let program = 
+      if run then (Parser.program token (Lexing.from_string ""))
+      else (Parser.program token (Lexing.from_string "")) in
 
-    (* let _ = (List.iter (Printf.printf "%s ") (List.map print program); print_endline "") in (* print debug messages *) *)
+    let program_with_imports = replace_import program in
 
-    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } program) in (* temporarily here to check validity of SAST *)
+    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } program_with_imports) in (* temporarily here to check validity of SAST *)
 
     if run then
       (let m = Codegen.translate sast in
@@ -105,10 +171,10 @@ let rec loop map smap past run =
       (* Printf.printf "%s\n" (Llvm.string_of_llmodule m); *)
       Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc;
       let output = cmd_to_list "./inter.sh source.ll" in
-      List.iter print_endline output; flush stdout; loop map smap program run)
+      List.iter print_endline output; flush stdout; from_console map smap program_with_imports run)
 
     else let _ = if !debug = 1 then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
-      flush stdout; loop map smap' [] false
+      flush stdout; from_console map smap' [] false
 
     (* let m = Codegen.translate sast in *)
     (* Llvm_analysis.assert_valid_module m; *)
@@ -117,48 +183,30 @@ let rec loop map smap past run =
     (* flush stdout; loop map smap' *)
 
   with
-    | Not_found -> Printf.printf "NotFoundError: unknown lexing error\n"; loop map smap past run
-    | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; loop map smap past run
-    | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map smap past run
-    | Runtime explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map smap past run
+    | Not_found -> Printf.printf "NotFoundError: unknown lexing error\n"; from_console map smap past run
+    | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; from_console map smap past run
+    | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map smap past run
+    | Runtime explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map smap past run
 
 (* this is the main function loop for the file parser. We lex the input from a given file,
 convert it to a list of Parser.token, apply the appropriate indentation corrections,
 dedent to the zero level as needed, and then compute the correct value *)
 
-let rec file map smap fname run = (* todo combine with loop *)
+let rec from_file map smap fname run = (* todo combine with loop *)
   try
-    let chan = open_in fname in
-    let base = Stack.create() in let _ = Stack.push 0 base in
-
-    let rec read current stack = (* logic of the interpreter *)
-      try let line = (input_line chan) ^ "\n" in (* add newline for parser, gets stripped by input_line *)
-       let lexbuf = (Lexing.from_string line) in
-       let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
-       let (curr, stack, formatted) = indent temp stack current in
-       formatted @ (read curr stack)
-     with End_of_file -> close_in chan; Array.make (Stack.length stack - 1) Parser.DEDENT |> Array.to_list
-    in let formatted = ref (read 0 base) in
-    let _ = if !debug = 1 then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
-
-    let token lexbuf = (* hack I found online to convert lexbuf list to a map from lexbuf to Parser.token, needed for Ocamlyacc *)
-    match !formatted with 
-      | []     -> Parser.EOF 
-      | h :: t -> formatted := t ; h in
-
-    let program = Parser.program token (Lexing.from_string "") in
-    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } program) in (* temporarily here to check validity of SAST *)
-
+    let program = Sys.chdir (Filename.dirname fname); ast_from_path (Filename.basename fname) in
+    let program_with_imports = replace_import program in
+    let (sast, smap') = (Semant.check smap [] [] { forloop = false; cond = false; noeval = false; } program_with_imports) in (* temporarily here to check validity of SAST *)
+    let _ = if !debug = 1 then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)
+    
     if run then 
       let m = Codegen.translate sast in
       Llvm_analysis.assert_valid_module m;
       print_string (Llvm.string_of_llmodule m);
-    if !debug = 1 then print_endline ("Semantically Checked SAST:\n" ^ (string_of_sprogram sast)) (* print debug messages *)
   with
     | Not_found -> Printf.printf "NotFoundError: possibly caused by lexer!\n"; flush stdout
     | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout
-;;
 
 (* main loop *)
 let _ =
@@ -167,8 +215,7 @@ let _ =
   let emptymap = StringMap.empty in 
   let semptymap = StringMap.empty in
   if String.length !fpath = 0 then 
-      (Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
-      try loop emptymap semptymap [] (!run = 1) with Scanner.Eof -> exit 0)
-  else if (Sys.file_exists !fpath) then if !run = 1 then file emptymap semptymap !fpath true else file emptymap semptymap !fpath false
-  else raise (Failure "CompilerError: invalid file passed to Coral compiler.")
-;;
+    (Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
+    try from_console emptymap semptymap [] ( !run = 1) with Scanner.Eof -> exit 0)
+  else if !run = 1 then from_file emptymap semptymap !fpath true 
+  else from_file emptymap semptymap !fpath false

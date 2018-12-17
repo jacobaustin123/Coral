@@ -21,7 +21,7 @@ let binop t1 t2 op =
     | Add when same && t1 = String -> String
     (* | Add | Sub | Mul | Div | Exp when t1 = Int || t1 = FloatArr || t1 = Bool && t2 = Int || t2 = Float || t2 = Bool -> Float *)
     | Less | Leq | Greater | Geq when not same && t1 = String || t2 = String -> raise except
-    | Eq | Neq | Less | Leq | Greater | Geq | And | Or -> Bool
+    | Eq | Neq | Less | Leq | Greater | Geq | And | Or when same -> Bool
     | And | Or when same && t1 = Bool -> Bool
     | Mul when is_arr t1 && t2 = Int -> t1
     | Mul when is_arr t2 && t1 = Int -> t2
@@ -360,8 +360,9 @@ and func_stmt globals locals stack flag = function
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in 
 
     let Bind(name, btype) = a in 
-    let (map', _, _) = assign locals (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) a in (* Dyn *)
-    let (semantmap, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) a in (* empty map for semantic checking *)
+
+    let (map', _, _) = assign locals (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in (* Dyn *)
+    let (semantmap, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in (* empty map for semantic checking *)
 
     let (map'', bind) = List.fold_left 
         (fun (map, out) (Bind (x, t)) -> 
@@ -392,20 +393,25 @@ and func_stmt globals locals stack flag = function
         else let (map', value, data, out) = func_stmt globals locals stack {flag with cond = true;} b in 
         let (map'', value', data', out') = func_stmt globals locals stack {flag with cond = true;} c in 
         if equals map' map'' then (map', SIf(e', value, value'), match_data data data', out) 
-        else let merged = merge map' map'' in (merged, SIf(e', value, value'), match_data data data', out @ out')
+        else let merged = transform map' map'' in 
+        let slist = from_sblock value in let slist' = from_sblock value' in
+        (merged, SIf(e', SBlock(slist @ !rec1), SBlock(slist' @ !rec2)), match_data data data', out @ out')
 
   | For(a, b, c) -> let (m, b1, b2) = check_array locals b a in 
         let (m', x', d, out) = func_stmt globals m stack {flag with cond = true; forloop = true;} c in 
         let (typ, e', _) = func_expr globals m' stack flag b in 
         if equals locals m' then (m', SFor(b2, e', x'), d, b1 :: out)
         else let merged = merge locals m' in 
-        (merged, SFor(b2, e', x'), match_data d None, b1 :: out)
+        let slist = from_sblock x' in 
+        (merged, SFor(b2, e', SBlock(slist @ !rec2)), match_data d None, b1 :: out)
 
   | While(a, b) -> let (typ, e, data) = func_expr globals locals stack flag a in 
         if typ <> Bool && typ <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
         else let (m', x', d, out) = func_stmt globals locals stack {flag with cond = true;} b in 
         if equals locals m' then (m', SWhile(e, x'), d, out) else
-        let merged = merge locals m' in (merged, SWhile(e, x'), match_data d None, out)
+        let merged = merge locals m' in 
+        let slist = from_sblock x' in
+        (merged, SWhile(e, SBlock(slist @ !rec2)), match_data d None, out)
 
   | Nop -> let (a, b, out) = stmt locals flag (Nop) in (a, b, None, out)
   | Type(a) -> let (a, b, out) = stmt locals flag (Type a) in (a, b, None, out)
@@ -446,8 +452,8 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
       | _ :: t -> dups t
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(name, btype) = a in 
     
-    let (map', _, _) = assign map (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) a in
-    let (semantmap, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) a in (* empty map for semantic checking *)
+    let (map', _, _) = assign map (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in
+    let (semantmap, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in (* empty map for semantic checking *)
 
     let (map'', binds) = List.fold_left 
       (fun (map, out) (Bind(x, t)) -> 
@@ -477,25 +483,28 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
     else let (map', value, out) = stmt map {flag with cond = true;} b in 
     let (map'', value', out') = stmt map {flag with cond = true;} c in 
     if equals map' map'' then (map', SIf(e', value, value'), out') 
-    else let merged = merge map' map'' in 
-    (merged, SIf(e', value, value'), out @ out')
+    else let merged = transform map' map'' in 
+    let slist = from_sblock value in let slist' = from_sblock value' in
+    (merged, SIf(e', SBlock(slist @ !rec1), SBlock(slist' @ !rec2)), out @ out')
 
   | For(a, b, c) -> 
     let (m, b1, b2) = check_array map b a in 
     let (m', x', out) = stmt m {flag with cond = true; forloop = true; } c in 
     let (typ, e', _) = expr m' b in 
     if equals map m' then (m', SFor(b2, e', x'), b1 :: out) 
-    else let merged = merge m m' in 
-    (merged, SFor(b2, e', x'), b1 :: out)
+    else let merged = transform m m' in 
+    let slist = from_sblock x' in
+    (merged, SFor(b2, e', SBlock(slist @ !rec2)), b1 :: out)
 
   | While(a, b) -> 
     let (t, e, _) = expr map a in 
     if t <> Bool && t <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
     else let (m', x', out) = stmt map {flag with cond = true; }b in 
     if equals map m' then (m', SWhile(e, x'), out) 
-    else let merged = merge map m' in 
-    (merged, SWhile(e, x'), out)
-
+    else let merged = transform map m' in 
+    let slist = from_sblock x' in
+    (merged, SWhile(e, SBlock(slist @ !rec2)), out)
+  
   | Nop -> (map, SNop, [])
   | Print(e) -> let (t, e', _) = expr map e in (map, SPrint(e'), [])
   | Type(a) -> 
