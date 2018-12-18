@@ -1098,46 +1098,81 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             |Int|Float|Bool -> Raw(result)
             |_ -> Box(result)
         ) in (res,the_state)
-    (*| SListAccess(e1,e2)  -> expr the_state (SBinop(e1,ListAccess,e2), ty)
-    | SUnop(op, e) ->
-      let (e', the_state) = expr the_state e in
-      let fn_idx = match op with
-        | Neg         -> ctype_neg_idx
-        | Not         -> ctype_not_idx in
-      let fn_p = build_getctypefn_cobj fn_idx e' the_state.b in
+    | SListAccess(e1,e2)  -> expr the_state (SBinop(e1,ListAccess,e2), ty)
+    |SUnop(op, e1) ->
+      let (_,ty1) = e1 in
+      let (e1',the_state) = expr the_state e1 in
+      let (res,the_state) = (match e1' with
+      |Box(v1) ->
+          let fn_idx = match op with
+            | Neg         -> ctype_neg_idx
+            | Not         -> ctype_not_idx in
+          let fn_p = build_getctypefn_cobj fn_idx v1 the_state.b in
 
-      (* exception handling: invalid_op *)
-      let bad_op_bb = L.append_block context "bad_op" the_state.func in
-      let bad_op_bd = L.builder_at_end context bad_op_bb in
+          (* exception handling: invalid_op *)
+          let bad_op_bb = L.append_block context "bad_op" the_state.func in
+          let bad_op_bd = L.builder_at_end context bad_op_bb in
 
-      let proceed_bb = L.append_block context "proceed" the_state.func in
+          let proceed_bb = L.append_block context "proceed" the_state.func in
 
-      (* check for op exception *)
-      let invalid_op = L.build_is_null fn_p "invalid_op" the_state.b in
-        ignore(L.build_cond_br invalid_op bad_op_bb proceed_bb the_state.b);
+          (* check for op exception *)
+          let invalid_op = L.build_is_null fn_p "invalid_op" the_state.b in
+            ignore(L.build_cond_br invalid_op bad_op_bb proceed_bb the_state.b);
 
-      (* print message and exit *)
-      let err_message =
-        let info = "RuntimeError: unsupported operand type for unary " ^ (Utilities.unop_to_string op) in
-          L.build_global_string info "error message" bad_op_bd in
-      let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_op_bd in
-        ignore(L.build_call printf_func [| str_format_str1 ; err_message |] "printf" bad_op_bd);
-        ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_op_bd);
+          (* print message and exit *)
+          let err_message =
+            let info = "RuntimeError: unsupported operand type for unary " ^ (Utilities.unop_to_string op) in
+              L.build_global_string info "error message" bad_op_bd in
+          let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_op_bd in
+            ignore(L.build_call printf_func [| str_format_str1 ; err_message |] "printf" bad_op_bd);
+            ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_op_bd);
 
-      (* return to normal control flow *)
-      let the_state = change_builder_state the_state (L.builder_at_end context proceed_bb) in
-        ignore(L.build_br proceed_bb bad_op_bd);
+          (* return to normal control flow *)
+          let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
+          ignore(L.build_br proceed_bb bad_op_bd);
 
-      let result = L.build_call fn_p [| e' |] "uop_result" the_state.b in
-      (result, the_state)
+          let result = L.build_call fn_p [| v1 |] "uop_result" the_state.b in
+          (Box(result), the_state)
+        |Raw(v1) ->
+                let res  = (match op with
+            | Neg when ty1=Float         -> L.build_fneg
+            | Neg         -> L.build_neg
+            | Not         -> L.build_not
+          ) v1 "unop_result" the_state.b in
+                (Raw(res),the_state)
+        ) in (res,the_state)
+
     | SList(el, t) ->
-      let (elements, the_state) = List.fold_left (fun (l, the_state) e ->
+            let build_binop_boi rawval raw_ty =
+              let raw_ltyp = (ltyp_of_typ raw_ty) in
+              let binop_boi = L.build_alloca cobj_t "binop_boi" the_state.b in
+              let heap_data_p = L.build_malloc raw_ltyp "heap_data_binop_boi" the_state.b in
+              ignore(L.build_store rawval heap_data_p the_state.b);
+              let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" the_state.b in
+              let dataptr_addr = L.build_struct_gep binop_boi cobj_data_idx "dat" the_state.b in
+              let typeptr_addr = L.build_struct_gep binop_boi cobj_type_idx "ty" the_state.b in
+              let typeptr_addr = L.build_bitcast typeptr_addr (L.pointer_type ctype_pt) "ty" the_state.b in
+              ignore(L.build_store heap_data_p dataptr_addr the_state.b);
+              ignore(L.build_store (ctype_of_typ raw_ty) typeptr_addr the_state.b);
+              Box(binop_boi)
+            in
+        let box_if_needed raw_ty = function
+            |Box(v) -> Box(v)
+            |Raw(v) -> build_binop_boi v raw_ty
+        in
+
+      let (elements, the_state) = List.fold_left (fun (l, the_state) e -> 
         let (element, the_state) = expr the_state e in
           (element::l, the_state)) ([], the_state) (List.rev el) in
       let (objptr, dataptr) = build_new_cobj clist_t the_state.b in
+      let raw_ty = (match t with
+        |IntArr -> Int
+        |FloatArr -> Float
+        |BoolArr -> Bool
+      ) in
+      let elements = List.map (fun elem -> match (box_if_needed raw_ty elem) with Box(v) -> v) elements in
       let _ = build_new_clist dataptr elements the_state.b in
-        (objptr, the_state)
-        *)
+        (Box(objptr), the_state)
         
   and add_terminal the_state instr = 
       (match L.block_terminator (L.insertion_block the_state.b) with  
