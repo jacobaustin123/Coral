@@ -821,11 +821,51 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
           Box(L.build_load addr name b)
         )
     | SBinop(e1, op, e2) ->
+      let (_,ty1) = e1
+      and (_,ty2) = e2 in
       let e1' = expr the_state e1
       and e2' = expr the_state e2 in
+
+
+      let generic_binop box1 box2 = 
+          let (Box(v1),Box(v2)) = (box1,box2) in
+          let fn_idx = (match op with
+            | Add      -> ctype_add_idx
+            | Sub      -> ctype_sub_idx
+            | Mul      -> ctype_mul_idx
+            | Div      -> ctype_div_idx
+            | Exp      -> ctype_exp_idx
+            | Eq       -> ctype_eq_idx
+            | Neq      -> ctype_neq_idx
+            | Less     -> ctype_lesser_idx
+            | Leq      -> ctype_leq_idx
+            | Greater  -> ctype_greater_idx
+            | Geq      -> ctype_geq_idx
+            | And      -> ctype_and_idx
+            | Or       -> ctype_or_idx
+            | ListAccess -> ctype_idx_idx ) in
+        let fn_p = build_getctypefn_cobj fn_idx v1 the_state.b in
+        let result = L.build_call fn_p [| v1 ; v2 |] "binop_result" the_state.b in
+        Box(result)
+      in
+      (* setup binop boi *)
+      let build_binop_boi rawval raw_ty =
+          let raw_ltyp = (ltyp_of_typ raw_ty) in
+          let binop_boi = L.build_alloca cobj_t "binop_boi" b in
+          let heap_data_p = L.build_malloc raw_ltyp "heap_data_binop_boi" b in
+          ignore(L.build_store rawval heap_data_p b);
+          let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
+          let dataptr_addr = L.build_struct_gep binop_boi cobj_data_idx "dat" b in
+          let typeptr_addr = L.build_struct_gep binop_boi cobj_type_idx "ty" b in
+          let typeptr_addr = L.build_bitcast typeptr_addr (L.pointer_type ctype_pt) "ty" b in
+          ignore(L.build_store heap_data_p dataptr_addr b);
+          ignore(L.build_store (ctype_of_typ raw_ty) typeptr_addr b);
+          Box(binop_boi)
+      in
+
       (match (e1',e2') with  (* note: if both Raw then MUST be same type since passed semant *)
           |(Raw(v1),Raw(v2)) -> 
-              let binop_instruction = (match ty with  (* both will have typ=ty *)
+              let binop_instruction = (match ty1 with  (* both will have typ=ty *)
                 |Int|Bool -> (match op with
                   | Add     -> L.build_add
                   | Sub     -> L.build_sub
@@ -856,9 +896,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                 )
             ) in
               Raw(binop_instruction v1 v2 "binop_result" b)
-          (*|(Dyn(v1),Raw(v2)) ->  (**TODO**)
-          |(Raw(v1),Dyn(v2)) -> 
-          |(Dyn(v1),Dyn(v2)) -> *)
+          |(Box(boxval),Raw(rawval)) -> 
+            generic_binop (Box(boxval)) (build_binop_boi rawval ty2)
+          |(Raw(rawval),Box(boxval)) -> 
+            generic_binop (build_binop_boi rawval ty1) (Box(boxval))
+          |(Box(v1),Box(v2)) -> generic_binop (Box(v1)) (Box(v2))
         )
       |SCall(fexpr, arg_expr_list, SFunc(sfdecl)) ->
         (*ignore(expr the_state fexpr);*) (* I guess we dont care abt the result of this since we just recompile from the sfdecl anyways *)
@@ -1001,8 +1043,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
       (*|SReturn  (* later *)*)
       |SNop -> the_state
-      | SPrint e -> 
-        let (_,t) = e in
+      | SPrint e -> let (_,t) = e in
             (match (expr the_state e) with
                 |Raw(v) -> (match t with
                     | Int -> ignore(L.build_call printf_func [| int_format_str ; v |] "printf" b);  the_state
@@ -1025,16 +1066,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         ) in
          (*let bool_val = build_getdata_cobj bool_t (expr the_state predicate) b in*)
          (*let bool_val = (L.const_bool bool_t 1) in*)
-           let merge_bb = L.append_block context "merge" the_function in  
-             let build_br_merge = L.build_br merge_bb in 
-               let then_bb = L.append_block context "then" the_function in
-               let new_state = change_builder_state the_state (L.builder_at_end context then_bb) in
-                 add_terminal (stmt new_state then_stmt) build_br_merge;  
-               let else_bb = L.append_block context "else" the_function in
-               let new_state = change_builder_state the_state (L.builder_at_end context else_bb) in
-                 add_terminal (stmt new_state else_stmt) build_br_merge;  (* same deal as with 'then' BB *)
-                   ignore(L.build_cond_br bool_val then_bb else_bb b);  
-                   let new_state = change_builder_state the_state (L.builder_at_end context merge_bb ) in 
+        let merge_bb = L.append_block context "merge" the_function in  
+        let build_br_merge = L.build_br merge_bb in 
+        let then_bb = L.append_block context "then" the_function in
+        let new_state = change_builder_state the_state (L.builder_at_end context then_bb) in
+        add_terminal (stmt new_state then_stmt) build_br_merge;  
+        let else_bb = L.append_block context "else" the_function in
+        let new_state = change_builder_state the_state (L.builder_at_end context else_bb) in
+        add_terminal (stmt new_state else_stmt) build_br_merge;  (* same deal as with 'then' BB *)
+        ignore(L.build_cond_br bool_val then_bb else_bb b);  
+        let new_state = change_builder_state the_state (L.builder_at_end context merge_bb ) in 
                    
         (*(match (lookup (new_state.namespace) (Bind("x",Dyn))) with
             |BoxAddr(_,true) -> tstp "ayyy!!!!!!!!1"
@@ -1044,10 +1085,10 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                    new_state
       | SWhile (predicate, body) ->
         let pred_bb = L.append_block context "while" the_function in
-            ignore(L.build_br pred_bb b);
+        ignore(L.build_br pred_bb b);
         let body_bb = L.append_block context "while_body" the_function in
         let new_state = change_builder_state the_state (L.builder_at_end context body_bb) in
-          add_terminal (stmt new_state body) (L.build_br pred_bb);
+        add_terminal (stmt new_state body) (L.build_br pred_bb);
         let pred_builder = L.builder_at_end context pred_bb in
         (* eval the boolean predicate *)
         let new_state = change_builder_state the_state (L.builder_at_end context pred_bb) in
@@ -1057,9 +1098,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
           (*|Dyn(v -> *)
         ) in
         (*let bool_val = build_getdata_cobj bool_t (expr new_state predicate) pred_builder in*)
-        
         let merge_bb = L.append_block context "merge" the_function in
-          ignore(L.build_cond_br bool_val body_bb merge_bb pred_builder);
+        ignore(L.build_cond_br bool_val body_bb merge_bb pred_builder);
         let new_state = change_builder_state the_state (L.builder_at_end context merge_bb) in new_state
     | SReturn e -> let (_,ty) = e in
             (match ty with
