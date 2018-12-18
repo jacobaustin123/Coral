@@ -26,7 +26,7 @@ and sexp =
   | SLit of literal (* literal *)
   | SVar of string (* see above *)
   | SUnop of uop * sexpr (* (uop, sexpr ) *)
-  | SCall of sexpr * sexpr list * sstmt (* SVar or SCall, list of args, SFunc) *)
+  | SCall of sexpr * sexpr list * sstmt (* SVar or SCall, list of args, SFunc) *) (*stmt=SNop if recursive call within fn or weak fn *)
   | SMethod of sexpr * string * sexpr list (* not implemented *)
   | SField of sexpr * string (* not implemented *)
   | SList of sexpr list * typ (* (list of expressions, inferred type) *)
@@ -56,7 +56,6 @@ let append_list v = List.map (fun c -> c ^ v)
 let rec string_of_sexpr (e, t) = "(" ^ string_of_sexp e ^ ": " ^ string_of_typ t ^ ")"
 
 and string_of_sbind = function
-  | Bind(s, t) when t = Dyn -> s
   | Bind(s, t) -> s ^ ": " ^ string_of_typ t
 
 and string_of_sexp = function

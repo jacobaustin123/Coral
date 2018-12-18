@@ -99,6 +99,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   and float_pt = L.pointer_type float_t
   and bool_pt = L.pointer_type bool_t
   and char_pt = L.pointer_type char_t in
+  let char_ppt = L.pointer_type char_pt in
 
   (* define cobj and ctype structs *)
   let cobj_t = L.named_struct_type context "CObj" in (*define a named struct*)
@@ -116,6 +117,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   (* define ctype and ctype structs *)
   let ctype_t = L.named_struct_type context "CType" in (*define a named struct*)
   let ctype_pt = L.pointer_type ctype_t in
+  let ctype_ppt = L.pointer_type ctype_pt in
 
   (* cobj idxs *)
   let cobj_data_idx = 0
@@ -146,7 +148,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   and ctype_idx_idx = 15
   and ctype_call_idx = 16
   and ctype_heapify_idx = 17
-  and num_ctype_idxs = 18 in (**must update when adding idxs! (tho not used anywhere yet)**)
+  and ctype_print_idx = 18
+  and num_ctype_idxs = 19 in (**must update when adding idxs! (tho not used anywhere yet)**)
 
   (* type sigs for fns in ctype *)
   let ctype_add_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
@@ -166,7 +169,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   and ctype_not_t = L.function_type cobj_pt [| cobj_pt |]
   and ctype_idx_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
   and ctype_call_t = L.function_type cobj_pt [| cobj_pt ; cobj_ppt |]
-  and ctype_heapify_t = L.function_type int_t [| cobj_pt |] in
+  and ctype_heapify_t = L.function_type int_t [| cobj_pt |]
+  and ctype_print_t = L.function_type int_t [| cobj_pt |] in
 
   (* type sigs for ptrs to fns in ctype *)
   let ctype_add_pt = L.pointer_type ctype_add_t
@@ -186,7 +190,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   and ctype_not_pt = L.pointer_type ctype_not_t
   and ctype_idx_pt = L.pointer_type ctype_idx_t
   and ctype_call_pt = L.pointer_type ctype_call_t 
-  and ctype_heapify_pt = L.pointer_type ctype_heapify_t in
+  and ctype_heapify_pt = L.pointer_type ctype_heapify_t 
+  and ctype_print_pt = L.pointer_type ctype_print_t in
 
   let ctype_t = L.named_struct_type context "CType" in (*define a named struct*)
   let ctype_pt = L.pointer_type ctype_t in
@@ -212,7 +217,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     ctype_not_pt;
   	ctype_idx_pt;
     ctype_call_pt;
-  	ctype_heapify_pt |] false);
+    ctype_heapify_pt;
+  	ctype_print_pt |] false);
 
    let get_t = function
      | "int" -> int_t
@@ -380,6 +386,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         L.const_pointer_null ctype_idx_pt; (* ctype_not_pt *)
         func_call_fn; (* ctype_call_pt *)
         L.const_pointer_null ctype_heapify_pt; (* ctype_not_pt *)
+        L.const_pointer_null ctype_print_pt; (* ctype_not_pt *)
     |]) the_module in
 
 
@@ -392,6 +399,14 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   in
 
 
+  (* Print *)
+  let (int_print_fn,int_print_b) = build_ctype_fn "int_print" ctype_print_t in
+  let (float_print_fn,float_print_b) = build_ctype_fn "float_print" ctype_print_t in
+  let get_print_fn_lval = function
+    |"int" -> int_print_fn
+    |"float" -> float_print_fn
+    | _ -> L.const_pointer_null ctype_print_pt
+  in
 
   (* Heapify *)
   let (int_heapify_fn,int_heapify_b) = build_ctype_fn "int_heapify" ctype_heapify_t in
@@ -415,7 +430,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   	    | None -> L.const_pointer_null ctype_neg_pt)
   	  | BLoprt(o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
-        | None -> L.const_pointer_null ctype_idx_pt)) bops) @ ([L.const_pointer_null ctype_call_pt; get_heapify_fn_lval t])))) the_module) built_ops
+        | None -> L.const_pointer_null ctype_idx_pt)) bops) @ ([L.const_pointer_null ctype_call_pt; get_heapify_fn_lval t ; get_print_fn_lval t])))) the_module) built_ops
   	    in
 
   let ctype_of_datatype = function
@@ -622,13 +637,15 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       let [remote_self_p] = formals_llvalues in
       let box_addr = boilerplate_till_load remote_self_p "self_p" b in
       (* the box dataptr_addr points to the raw data we want to copy *)
-      let dataptr_addr = L.build_struct_gep box_addr cobj_data_idx "dat" b in
-      let dataptr_addr = L.build_bitcast dataptr_addr (L.pointer_type data_type) "dat" b in
-      let raw_data = L.build_load dataptr_addr "raw_data" b in
+      let dataptr_addr_i8pp = L.build_struct_gep box_addr cobj_data_idx "dat" b in
+      let dataptr_addr = L.build_bitcast dataptr_addr_i8pp (L.pointer_type (L.pointer_type data_type)) "dat" b in
+      let rawdata_addr = L.build_load dataptr_addr "raw_data_addr" b in
+      let rawdata = L.build_load rawdata_addr "raw_data" b in
       let heap_data_p = L.build_malloc data_type "heap_data_p" b in
-      ignore(L.build_store raw_data heap_data_p);
+      ignore(L.build_store rawdata heap_data_p b);
+      let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
+      ignore(L.build_store heap_data_p dataptr_addr_i8pp b);
       ignore(L.build_ret (L.const_int int_t 0) b);  (* or can ret void? *)
-      ()
   in
 
   (* build the heapify functions *)
@@ -639,6 +656,36 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   in
   ignore(List.iter (fun t -> build_heapify (get_t t) (get_heapify_fn_lval t) (get_heapify_builder_of_t t)) ["int";"float";"bool"]);
   
+
+  (* define printf *)
+  let printf_t : L.lltype =   (* define the type that the printf function shd be *)
+      L.var_arg_function_type int_t [| char_pt |] in
+  let printf_func : L.llvalue =   (* now use that type to declare printf (dont fill out the body just declare it in the context) *)
+      L.declare_function "printf" printf_t the_module in
+
+  let build_print_fn data_type fn b =   (* data_type = int_t etc *)
+      let formals_llvalues = (Array.to_list (L.params fn)) in
+      let [remote_self_p] = formals_llvalues in
+      let box_addr = boilerplate_till_load remote_self_p "self_p" b in
+      (* the box dataptr_addr points to the raw data we want to copy *)
+      let dataptr_addr_i8pp = L.build_struct_gep box_addr cobj_data_idx "dat" b in
+      let dataptr_addr = L.build_bitcast dataptr_addr_i8pp (L.pointer_type (L.pointer_type data_type)) "dat" b in
+      let rawdata_addr = L.build_load dataptr_addr "raw_data_addr" b in
+      let rawdata = L.build_load rawdata_addr "raw_data" b in
+      let format_str = (match data_type with
+        |t when t = int_t -> L.build_global_stringptr "%d\n" "fmt" b
+        |t when t = float_t -> L.build_global_stringptr "%g\n" "fmt" b
+      ) in
+      ignore(L.build_call printf_func [| format_str ; rawdata |] "printf" b);
+      ignore(L.build_ret (L.const_int int_t 0) b);  (* or can ret void? *)
+  in
+  (* build the print functions *)
+  let get_print_builder_of_t = function
+    |"int" -> int_print_b
+    |"float" -> float_print_b
+  in
+  ignore(List.iter (fun t -> build_print_fn (get_t t) (get_print_fn_lval t) (get_print_builder_of_t t)) ["int";"float"]);
+
 
   let name_of_bind = function
       |Bind(name,_) -> name
@@ -670,14 +717,17 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       in
       binds = List.sort_uniq Pervasives.compare (binds @ dyns_list) 
       in   (* now binds has a dyn() version of each variable *) **)
-      let get_const bind = match (type_of_bind bind) with
+      let prettyname_of_bind bind = (name_of_bind bind)^"_"^(string_of_typ (type_of_bind bind))
+      in
+      let get_const bind = match (type_of_bind bind) with 
         |Int -> L.const_null int_t
         |Float -> L.const_null float_t
         |Bool -> L.const_null bool_t
-        |_ -> L.const_null cobj_t
+        |_ -> L.define_global ((prettyname_of_bind bind)^"_obj") (L.const_named_struct cobj_t [|L.const_pointer_null char_pt;L.const_pointer_null ctype_pt|]) the_module
+        (*L.define_global (prettyname_of_bind bind) (the_cobj) the_module*)
+
+        (*|_ -> L.define_global (prettyname_of_bind bind) (L.const_null cobj_t) the_module*)
         (** TODO impl lists and everything! and strings. idk how these will work **)
-      in
-      let prettyname_of_bind bind = (name_of_bind bind)^"_"^(string_of_typ (type_of_bind bind))
       in
       let allocate bind = 
         let alloc_result = 
@@ -698,15 +748,10 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       let globals_list = snd prgm  (* snd prgrm is the bind list of globals *) in
         build_binding_list None globals_list
   in
-  let lookup_global_binding bind = tst(); 
+  let lookup_global_binding bind = (*tst(); *)
     BindMap.find bind globals_map
   in
 
-  (* define printf *)
-  let printf_t : L.lltype =   (* define the type that the printf function shd be *)
-      L.var_arg_function_type int_t [| char_pt |] in
-  let printf_func : L.llvalue =   (* now use that type to declare printf (dont fill out the body just declare it in the context) *)
-      L.declare_function "printf" printf_t the_module in
 
   (** setup main() where all the code will go **)
   let main_ftype = L.function_type int_t [||] in   (* ftype is the full llvm function signature *)
@@ -746,7 +791,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     in aux (len-1) []
   in
 
-  let lookup namespace bind = tstp (string_of_sbind bind);
+  let lookup namespace bind = (*tstp (string_of_sbind bind);*)
       try BindMap.find bind namespace
         with Not_found -> lookup_global_binding bind
   in
@@ -767,10 +812,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         (match (lookup namespace (Bind(name, ty))) with
           |RawAddr(addr) -> Raw(L.build_load addr name b)
           |BoxAddr(addr,needs_update) -> (match needs_update with
-            |true -> 
-              let fn_p = build_getctypefn_cobj ctype_heapify_idx addr b in
-              ignore(L.build_call fn_p [|addr|] "heapify_result" b);()
-            |false -> ()
+            |_ ->  (* TODO *)
+              let cobj_p = L.build_load addr name b in
+              let fn_p = build_getctypefn_cobj ctype_heapify_idx cobj_p b in
+              ignore(L.build_call fn_p [|cobj_p|] "heapify_result" b);  (* TODO update the state to acct for this *)
+            (*|false -> ()*)
             );
           Box(L.build_load addr name b)
         )
@@ -934,9 +980,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       match s with
       |SBlock s -> List.fold_left stmt the_state s
       |SExpr e ->  ignore(expr the_state e); the_state
-      |SAsn (bind_list,e) -> (*L.dump_module the_module;*) tstp "entering asn";
+      |SAsn (bind_list,e) -> (*L.dump_module the_module;*) 
         let (_, ty) = e in
-        let e' = expr the_state e in tstp "passing checkpoint";
+        let e' = expr the_state e in 
         let binds = List.map (fun (Bind(name, explicit_type)) -> Bind(name, ty)) bind_list in
         let addrs = List.map (lookup namespace) binds in
         let do_store rhs lhs =
@@ -958,9 +1004,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       | SPrint e -> 
         let (_,t) = e in
             (match (expr the_state e) with
-                |Raw(v) -> match t with
+                |Raw(v) -> (match t with
                     | Int -> ignore(L.build_call printf_func [| int_format_str ; v |] "printf" b);  the_state
                     | Float -> ignore(L.build_call printf_func [| float_format_str ; v |] "printf" b);  the_state
+                )
+                |Box(v) ->
+                    (*let cobjptr = L.build_alloca cobj_t "tmp" b in
+                    ignore(L.build_store v cobjptr b);*)
+                    (*ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t v b) |] "printf" the_state.b); the_state*)
+                    let fn_p = build_getctypefn_cobj ctype_print_idx v b in
+                    ignore(L.build_call fn_p [|v|] "print_cob" the_state.b); the_state
             )
               
     
@@ -981,7 +1034,14 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                let new_state = change_builder_state the_state (L.builder_at_end context else_bb) in
                  add_terminal (stmt new_state else_stmt) build_br_merge;  (* same deal as with 'then' BB *)
                    ignore(L.build_cond_br bool_val then_bb else_bb b);  
-                   let new_state = change_builder_state the_state (L.builder_at_end context merge_bb ) in new_state
+                   let new_state = change_builder_state the_state (L.builder_at_end context merge_bb ) in 
+                   
+        (*(match (lookup (new_state.namespace) (Bind("x",Dyn))) with
+            |BoxAddr(_,true) -> tstp "ayyy!!!!!!!!1"
+            |BoxAddr(_,false) -> tstp "false!!!!!!"
+        );*)
+                   
+                   new_state
       | SWhile (predicate, body) ->
         let pred_bb = L.append_block context "while" the_function in
             ignore(L.build_br pred_bb b);
@@ -1013,11 +1073,14 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let BoxAddr(box_addr,_) = lookup namespace (Bind(name,Dyn))
         and RawAddr(raw_addr) = lookup namespace (Bind(name,raw_ty)) in
         (* gep for direct pointers to the type and data fields of box *)
-        let dataptr_addr = L.build_struct_gep box_addr cobj_data_idx "dat" b in
-        let typeptr_addr = L.build_struct_gep box_addr cobj_type_idx "ty" b in
+        let cobj_addr = L.build_load box_addr "cobjptr" b in
+        let raw_addr = L.build_bitcast raw_addr char_pt "raw" b in
+        let dataptr_addr = L.build_struct_gep cobj_addr cobj_data_idx "dat" b in
+        let typeptr_addr = L.build_struct_gep cobj_addr cobj_type_idx "ty" b in
+        let typeptr_addr = L.build_bitcast typeptr_addr (L.pointer_type ctype_pt) "ty" b in
         (* store raw_addr in the box's dataptr field and update the typeptr *)
         ignore(L.build_store raw_addr dataptr_addr b);
-        ignore(L.build_store (ctype_of_typ raw_ty) dataptr_addr b);
+        ignore(L.build_store (ctype_of_typ raw_ty) typeptr_addr b);
         let the_state = set_needs_reboxing the_state name true in
         the_state
     (*
@@ -1165,6 +1228,5 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 *)
 
   ignore(L.build_ret (L.const_int int_t 0) final_state.b);
-  pm();
     (* prints module *)
   the_module  (* return the resulting llvm module with all code!! *)
