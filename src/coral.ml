@@ -120,6 +120,9 @@ let parse_imports li =
     | a :: t -> aux (a :: out) t 
   in aux [] li
 
+(* parse_range: similar to parse_imports, parse_range traverses the ast and replaces for ... range loops with 
+while loops and a counter variable. This can be compiled without the overhead of list traversals *)
+
 let parse_range li =
   let rec aux out = function
     | [] -> List.rev out
@@ -128,7 +131,9 @@ let parse_range li =
         let a1 = Asn([Var a], Lit(IntLit(0))) in
         let a2 = Asn([Var a], Binop(Var a, Add, Lit(IntLit(1)))) in
         let a3 = While(Binop(Var a, Less, b), Block(updated @ [a2])) in
-        aux (a3 :: (a1 :: out)) t
+        let a4 = If(Binop(b, Greater, Lit(IntLit(0))), Block(a1 :: [a3]), Block([])) in
+
+        aux (a4 :: out) t
 
     | Func(a, b, s1) :: t -> let updated = aux [] (from_block s1) in aux (Func(a, b, Block(updated)) :: out) t
     | Block(s1) :: t -> let updated = aux [] s1 in aux (Block(updated) :: out) t
