@@ -120,6 +120,9 @@ let parse_imports li =
     | a :: t -> aux (a :: out) t 
   in aux [] li
 
+(* parse_range: similar to parse_imports, parse_range traverses the ast and replaces for ... range loops with 
+while loops and a counter variable. This can be compiled without the overhead of list traversals *)
+
 let parse_range li =
   let rec aux out = function
     | [] -> List.rev out
@@ -128,7 +131,9 @@ let parse_range li =
         let a1 = Asn([Var a], Lit(IntLit(0))) in
         let a2 = Asn([Var a], Binop(Var a, Add, Lit(IntLit(1)))) in
         let a3 = While(Binop(Var a, Less, b), Block(updated @ [a2])) in
-        aux (a3 :: (a1 :: out)) t
+        let a4 = If(Binop(b, Greater, Lit(IntLit(0))), Block(a1 :: [a3]), Block([])) in
+
+        aux (a4 :: out) t
 
     | Func(a, b, s1) :: t -> let updated = aux [] (from_block s1) in aux (Func(a, b, Block(updated)) :: out) t
     | Block(s1) :: t -> let updated = aux [] s1 in aux (Block(updated) :: out) t
@@ -222,7 +227,7 @@ let rec from_console map past run =
       else (Parser.program token (Lexing.from_string "")) in
 
     let imported_program = parse_imports program in
-    let sanitized_program = parse_range program in
+    let sanitized_program = parse_range imported_program in
 
     let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } sanitized_program) in (* temporarily here to check validity of SAST *)
     let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
@@ -249,7 +254,7 @@ let rec from_file map fname run = (* todo combine with loop *)
     let original_path = Sys.getcwd () in
     let program = Sys.chdir (Filename.dirname fname); ast_from_path (Filename.basename fname) in
     let imported_program = parse_imports program in
-    let sanitized_program = parse_range program in
+    let sanitized_program = parse_range imported_program in
 
     let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } sanitized_program) in (* temporarily here to check validity of SAST *)
     let () = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)

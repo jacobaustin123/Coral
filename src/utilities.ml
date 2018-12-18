@@ -88,8 +88,14 @@ let print = function
   | Parser.PRINT -> "PRINT"
   | Parser.IMPORT -> "IMPORT"
   | Parser.RANGE -> "RANGE"
-  | _ -> "Token not supported by print utility"
-;;
+  | Parser.NOELSE -> "NOELSE"
+  | Parser.NEG -> "NEG"
+  | Parser.ARROW -> "ARROW"
+  | Parser.FUNC -> "FUNC"
+  | Parser.NONE -> "NONE"
+  | Parser.CEND -> "CEND"
+  | Parser.LBRACE -> "LBRACE"
+  | Parser.RBRACE -> "RBRACE"
 
 (* stmt_to_string converts stmt to string for error handling *)
 let stmt_to_string = function

@@ -40,6 +40,7 @@ rule token = parse
   | "float" { FLOAT }
   | "str" { STRING }
   | "bool" { BOOL }
+  | "func" { FUNC }
   | "int[]" { INTARR }
   | "float[]" { FLOATARR }
   | "str[]" { STRINGARR }
@@ -58,6 +59,7 @@ rule token = parse
   | "range" { RANGE }
   | "is" { IS }
   | "None" { NONE }
+  | "range" { RANGE }
   | '#' { comment lexbuf }
   | '+' { PLUS }
   | '-' { MINUS } 
