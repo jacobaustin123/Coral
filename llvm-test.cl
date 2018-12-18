@@ -24,11 +24,28 @@ print(1.+x)
 print(x+1.)
 print(y)
 
-n=45.
+n=y
 print(x+y*2.+4.+n)
 
 
 
+if True:
+	x=True
+else:
+	x=1
 
+if x:
+	print(10000)
+
+
+def foo():
+	if True:
+		x=69
+	else:
+		x=5
+	return x
+
+a = foo()
+print(foo())
 
 
