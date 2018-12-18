@@ -219,7 +219,7 @@ let rec from_console map past run =
       else (Parser.program token (Lexing.from_string "")) in
 
     let imported_program = parse_imports program in
-    let sanitized_program = parse_range program in
+    let sanitized_program = parse_range imported_program in
 
     let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } sanitized_program) in (* temporarily here to check validity of SAST *)
     let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
@@ -246,7 +246,7 @@ let rec from_file map fname run = (* todo combine with loop *)
     let original_path = Sys.getcwd () in
     let program = Sys.chdir (Filename.dirname fname); ast_from_path (Filename.basename fname) in
     let imported_program = parse_imports program in
-    let sanitized_program = parse_range program in
+    let sanitized_program = parse_range imported_program in
 
     let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } sanitized_program) in (* temporarily here to check validity of SAST *)
     let () = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)
