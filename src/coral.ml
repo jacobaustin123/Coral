@@ -3,6 +3,7 @@ open Sast
 open Utilities
 open Interpret
 
+
 (* boolean flags used to handle command line arguments *)
 let debug = ref false
 let run = ref false
@@ -13,7 +14,6 @@ let set = ref false
 
 (* usage: usage message for function calls *)
 let usage = "usage: " ^ Sys.argv.(0) ^ " [file] [-d] [-r]"
-
 
 (* function used to handle command line arguments *)
 let speclist =
@@ -191,10 +191,7 @@ let codegen sast =
 (* this is the main function loop for the interpreter. We lex the input from stdin,
 convert it to a list of Parser.token, apply the appropriate indentation corrections,
 check to make sure we are at 0 indentation level, print more dots otherwise, and then
-compute the correct value and repeat. 
-
-map is used only if the interpreter is enabled. otherwise it is unecessary, and can be removed. *)
-
+compute the correct value and repeat. *)
 
 let rec from_console map past run = 
   try 
@@ -270,6 +267,7 @@ anonymous argument (file path) and runs either the interpreter or the from_file 
 let () =
   Arg.parse speclist (fun path -> if not !set then fpath := path; set := true; ) usage; (* parse command line arguments *)
   let emptymap = StringMap.empty in 
+
   if !set then from_file emptymap !fpath !run
   else
   ( 
@@ -278,5 +276,4 @@ let () =
       from_console emptymap [] !run 
     with Scanner.Eof -> exit 0
   )
-
 

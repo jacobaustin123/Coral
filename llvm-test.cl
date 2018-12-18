@@ -19,6 +19,7 @@ if True:
 else:
 	y=5
 
+print(x+y)
 
 print(1.+x)
 print(x+1.)
