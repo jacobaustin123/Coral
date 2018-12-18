@@ -36,6 +36,7 @@ type stmt =
   | Expr of expr
   | If of expr * stmt * stmt
   | For of bind * expr * stmt
+  | Range of bind * expr * stmt
   | While of expr * stmt
   | Return of expr
   | Class of string * stmt
