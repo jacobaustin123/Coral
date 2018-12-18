@@ -55,6 +55,7 @@ rule token = parse
   | "or" { OR }
   | "in" { IN }
   | "return" { RETURN }
+  | "range" { RANGE }
   | "is" { IS }
   | "None" { NONE }
   | '#' { comment lexbuf }

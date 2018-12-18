@@ -87,6 +87,7 @@ let print = function
   | Parser.EXPEQ -> "EXPEQ"
   | Parser.PRINT -> "PRINT"
   | Parser.IMPORT -> "IMPORT"
+  | Parser.RANGE -> "RANGE"
   | _ -> "Token not supported by print utility"
 ;;
 
@@ -97,6 +98,7 @@ let stmt_to_string = function
   | Expr(_) -> "expr"
   | If(_, _, _) -> "if"
   | For(_, _, _) -> "for"
+  | Range(_, _, _) -> "range"
   | While(_, _) -> "while"
   | Return(_) -> "return"
   | Class(_, _) -> "class"
