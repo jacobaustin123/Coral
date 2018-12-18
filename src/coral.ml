@@ -118,6 +118,30 @@ let parse_imports li =
     | a :: t -> aux (a :: out) t 
   in aux [] li
 
+(* parse_range: similar to parse_imports, parse_range traverses the ast and replaces for ... range loops with 
+while loops and a counter variable. This can be compiled without the overhead of list traversals *)
+
+let parse_range li =
+  let rec aux out = function
+    | [] -> List.rev out
+    | Range(a, b, s1) :: t -> 
+        let updated = aux [] (from_block s1) in
+        let a1 = Asn([Var a], Lit(IntLit(0))) in
+        let a2 = Asn([Var a], Binop(Var a, Add, Lit(IntLit(1)))) in
+        let a3 = While(Binop(Var a, Less, b), Block(updated @ [a2])) in
+        let a4 = If(Binop(b, Greater, Lit(IntLit(0))), Block(a1 :: [a3]), Block([])) in
+
+        aux (a4 :: out) t
+
+    | Func(a, b, s1) :: t -> let updated = aux [] (from_block s1) in aux (Func(a, b, Block(updated)) :: out) t
+    | Block(s1) :: t -> let updated = aux [] s1 in aux (Block(updated) :: out) t
+    | If(a, s1, s2) :: t -> let u1 = aux [] (from_block s1) in let u2 = aux [] (from_block s2) in aux (If(a, Block(u1), Block(u2)) :: out) t
+    | For(a, b, s1) :: t -> let updated = aux [] (from_block s1) in aux (For(a, b, Block(updated)) :: out) t
+    | While(a, s1) :: t -> let updated = aux [] (from_block s1) in aux (While(a, Block(updated)) :: out) t
+    | a :: t -> aux (a :: out) t 
+  in aux [] li
+
+
 (* process_output_to_list: [copied from a Stack Overflow forum post. Runs a Unix command in a subprocess,
 captures the output, and stores earch result in a list to be printed or used further. Used for running
 bash scripts to compile the program *)
@@ -180,8 +204,9 @@ let rec from_console map =
 
     let program = Parser.program token (Lexing.from_string "") in
     let imported_program = parse_imports program in
+    let sanitized_program = parse_range imported_program in
 
-    let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } imported_program) in (* temporarily here to check validity of SAST *)
+    let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } sanitized_program) in (* temporarily here to check validity of SAST *)
     let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
     
     flush stdout; from_console map'
@@ -201,7 +226,8 @@ let rec from_file map fname = (* todo combine with loop *)
     let original_path = Sys.getcwd () in
     let program = Sys.chdir (Filename.dirname fname); ast_from_path (Filename.basename fname) in
     let imported_program = parse_imports program in
-    let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } imported_program) in (* temporarily here to check validity of SAST *)
+    let sanitized_program = parse_range imported_program in
+    let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } sanitized_program) in (* temporarily here to check validity of SAST *)
     let () = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)
     let () = Sys.chdir original_path in
     flush stdout;

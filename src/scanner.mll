@@ -58,6 +58,7 @@ rule token = parse
   | "return" { RETURN }
   | "is" { IS }
   | "None" { NONE }
+  | "range" { RANGE }
   | '#' { comment lexbuf }
   | '+' { PLUS }
   | '-' { MINUS } 

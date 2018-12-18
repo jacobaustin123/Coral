@@ -13,7 +13,7 @@ Python-style indentation based parsing scheme. The second is the full parser */
 %token EXP NOT NEG SEP AND OR ARROW NOP TYPE PRINT FUNC
 %token TAB COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE DOT
 %token BOOL INT FLOAT STRING BOOLARR INTARR FLOATARR STRINGARR
-%token CLASS IMPORT CEND
+%token CLASS IMPORT CEND RANGE
 %token INDENT DEDENT
 %token LPAREN RPAREN
 %token LBRACK RBRACK
@@ -137,6 +137,7 @@ token:
   | TYPE { TYPE }
   | PRINT { PRINT }
   | IMPORT { IMPORT }
+  | RANGE { RANGE }
 
 /* program: the main program parser target. read a list of statements until EOF is reached.
 constructed backwards per the usual OCaml functional list syntax. */
@@ -178,6 +179,7 @@ stmt:
   | IF expr COLON stmt_block %prec NOELSE { If($2, $4, Block([])) }
   | IF expr COLON stmt_block ELSE COLON stmt_block { If($2, $4, $7) } /* to do figure out (Block) */
   | FOR bind_opt IN expr COLON stmt_block { For($2, $4, $6) }
+  | FOR bind_opt IN RANGE LPAREN expr RPAREN COLON stmt_block { Range($2, $6, $9) }
   | WHILE expr COLON stmt_block { While($2, $4) }
   | formal_asn_list ASN expr { Asn(List.rev $1, $3) }
   | lvalue PLUSEQ expr { Asn([$1], Binop($1, Add, $3)) }

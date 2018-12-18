@@ -87,7 +87,15 @@ let print = function
   | Parser.EXPEQ -> "EXPEQ"
   | Parser.PRINT -> "PRINT"
   | Parser.IMPORT -> "IMPORT"
-  | _ -> "Token not supported by print utility"
+  | Parser.RANGE -> "RANGE"
+  | Parser.NOELSE -> "NOELSE"
+  | Parser.NEG -> "NEG"
+  | Parser.ARROW -> "ARROW"
+  | Parser.FUNC -> "FUNC"
+  | Parser.NONE -> "NONE"
+  | Parser.CEND -> "CEND"
+  | Parser.LBRACE -> "LBRACE"
+  | Parser.RBRACE -> "RBRACE"
 ;;
 
 (* stmt_to_string converts stmt to string for error handling *)
@@ -97,6 +105,7 @@ let stmt_to_string = function
   | Expr(_) -> "expr"
   | If(_, _, _) -> "if"
   | For(_, _, _) -> "for"
+  | Range(_, _, _) -> "range"
   | While(_, _) -> "while"
   | Return(_) -> "return"
   | Class(_, _) -> "class"
