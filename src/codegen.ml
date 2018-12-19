@@ -16,78 +16,19 @@ module L = Llvm
 (*module A = Ast*)
 open Ast
 open Sast
+open Codegenutils
 
-module StringMap = Map.Make(String)
-module BindMap = Map.Make(struct type t = Ast.bind let compare = Pervasives.compare end)
-module SfdeclMap = Map.Make(struct type t = Sast.sfunc_decl let compare = Pervasives.compare end)
-let pt some_lltype = Printf.eprintf "pt: %s%s\n" "---->" (L.string_of_lltype some_lltype)
-let pv some_llvalue = Printf.eprintf "pv: %s%s\n" "---->" (L.string_of_llvalue some_llvalue)
-let tst() = Printf.eprintf "!!!!!!!!!!\n";()
-let tstp str = Printf.eprintf "%s\n" str;()
-let pbind bind = tstp (string_of_sbind bind);()
 
 
 
 (*type state = (L.llvalue StringMap.t) * L.llvalue * L.llbuilder*)
 
 (* the fundamental datatype returned by expr() *)
-type dataunit =
-    |Raw of L.llvalue     (* where llvalue = i32 or other prim *)
-    |Box of L.llvalue     (* where llvalue = cobj_t *)
-type dataunit_addr = 
-    |RawAddr of L.llvalue (* where llvalue = i32_pt, like what alloca returned *)
-    |BoxAddr of L.llvalue * bool  (* bool is needs_update: a flag to tell you if the box contents need to be updated by a heapify() call before the next usage *)
-type state = {
-    namespace: dataunit_addr BindMap.t;
-    func: L.llvalue;
-    b: L.llbuilder;
-    optim_funcs: L.llvalue SfdeclMap.t;
-    generic_func: bool;  (* true if in a totally cfunctionobject function (unoptim) *)
-}
-type state_component = 
-    | S_names of dataunit_addr BindMap.t
-    | S_func of L.llvalue
-    | S_b of L.llbuilder
-    | S_optimfuncs of L.llvalue SfdeclMap.t
-    | S_needs_reboxing of string * bool
-    | S_generic_func of bool
-    | S_list of state_component list
 
-let seq len =
-  let rec aux len acc =
-    if len < 0 then acc else aux (len - 1) (len::acc)
-  in aux (len - 1) []
 
 let initial_list_size = 10
 let list_growth_factor = 2
 
-type oprt =
-  | Oprt of
-      string
-    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
-    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
-    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
-    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
-    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
-  | Uoprt of
-      string
-    * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
-    * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
-    * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
-    * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
-    * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
-  | Loprt of
-      string
-    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
-    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
-    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
-    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
-    * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype) option
-
-type built_oprt =
-  | BOprt of ((L.llvalue * L.llbuilder) * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)) option
-  | BUoprt of ((L.llvalue * L.llbuilder) * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)) option
-  | BLoprt of ((L.llvalue * L.llbuilder) * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)) option
 
 (* translate : Sast.program -> Llvm.module *)
 let translate prgm =   (* note this whole thing only takes two things: globals= list of (typ,name) (bindings basically). And functions= list of sfunc_decl's (each has styp sfname sformals slocals sbody) *)
@@ -418,10 +359,32 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     fnptr
   in
 
+  let build_special_ctype_fn fn ty =
+      let (name,fn_ty) = (match fn with
+        |FPrint -> ("print",ctype_print_t)
+        |FHeapify -> ("heapify",ctype_heapify_t)
+        |FCall -> ("call",ctype_call_t)
+      ) in
+      let (the_fn,the_bld) = build_ctype_fn ((string_of_typ ty)^"_"^name) fn_ty in
+      (the_fn,the_bld)
+  in
+  
+  (*let x = [
+      (FPrint,[Int,Bool,Float]);
+      (FHeapify,[Int,Bool,Float]);
+      (FCall,[FuncType])
+  ]
+            
+  let build_fns spec_ty ty_list = List.map (build_special_ctype_fn spec_ty) ty_list in
+  let all = List.map (fun x -> match x with (spec_ty,ty_list) in build_fns spec_ty ty_list) x in
+
+  let get_special_fn spec_ty ty = 
+    match *)
+
 
   (* Print *)
-  let (int_print_fn,int_print_b) = build_ctype_fn "int_print" ctype_print_t in
-  let (float_print_fn,float_print_b) = build_ctype_fn "float_print" ctype_print_t in
+  let (int_print_fn,int_print_b) = build_special_ctype_fn FPrint Int in
+  let (float_print_fn,float_print_b) = build_special_ctype_fn FPrint Float in
   let get_print_fn_lval = function
     |"int" -> int_print_fn
     |"float" -> float_print_fn
@@ -429,9 +392,10 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   in
 
   (* Heapify *)
-  let (int_heapify_fn,int_heapify_b) = build_ctype_fn "int_heapify" ctype_heapify_t in
-  let (float_heapify_fn,float_heapify_b) = build_ctype_fn "float_heapify" ctype_heapify_t in
-  let (bool_heapify_fn,bool_heapify_b) = build_ctype_fn "bool_heapify" ctype_heapify_t in
+  let (int_heapify_fn,int_heapify_b) = build_special_ctype_fn FHeapify Int in
+  let (float_heapify_fn,float_heapify_b) = build_special_ctype_fn FHeapify Float in
+  let (bool_heapify_fn,bool_heapify_b) = build_special_ctype_fn FHeapify Bool in
+  let (func_heapify_fn,func_heapify_b) = build_special_ctype_fn FHeapify FuncType in
   let get_heapify_fn_lval = function
     |"int" -> int_heapify_fn
     |"float" -> float_heapify_fn
@@ -573,12 +537,6 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     cobj_p
   in
 
-  (*let quick_def_fn fname ret_type formals_types =
-    let ftype = L.function_type ret_type formals_types in
-    let the_function = L.define_function fname ftype the_module in
-    let builder = L.builder_at_end context (L.entry_block the_function) in
-    (the_function, ftype, builder)
-    *)
   let boilerplate_binop data_type fn b =
     let formals_llvalues = (Array.to_list (L.params fn)) in
     let [ remote_self_p; remote_other_p ] = formals_llvalues in
@@ -692,6 +650,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     |"bool" -> bool_heapify_b
   in
   ignore(List.iter (fun t -> build_heapify (get_t t) (get_heapify_fn_lval t) (get_heapify_builder_of_t t)) ["int";"float";"bool"]);
+
+  let _ =
+    let (fn,b) = (func_heapify_fn,func_heapify_b) in
+    ignore(L.build_ret (L.const_int int_t 0) b);
+  in
+
+
   
 
   (* define printf *)
