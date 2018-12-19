@@ -751,10 +751,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       match s with
       |SBlock s -> List.fold_left stmt the_state s
       |SExpr e ->  ignore(expr the_state e); the_state
-      |SAsn (bind_list,e) -> (*L.dump_module the_module;*) tstp "entering asn";
+      |SAsn (lvalue_list, e) -> (*L.dump_module the_module;*) tstp "entering asn";
         let e' = expr the_state e in tstp "passing checkpoint";
-        let get_name = (fun (Bind(name,explicit_t)) -> name) in
-        let names = List.map get_name bind_list in
+        let get_name = function
+          | SLVar (Bind (name, explicit_t)) -> name
+          | _ -> raise (Failure "CodegenError: this kind of assignment has not been implemented.")
+
+        in let names = List.map get_name lvalue_list in
         List.iter (fun name -> ignore (L.build_store e' (lookup name namespace) b)) names ; tstp "leaving asn"; the_state
       (*|SReturn  (* later *)*)
       |SNop -> the_state
