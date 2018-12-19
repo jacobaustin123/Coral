@@ -27,6 +27,7 @@ gcd.coral
 testall.log
 source.*
 main
-
+*.diff
+*.out
 # IntelliJ nonsense
 .idea/*

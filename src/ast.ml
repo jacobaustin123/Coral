@@ -107,6 +107,7 @@ let rec string_of_stmt = function
   | Expr(e) -> string_of_expr e
   | If(e, s1, s2) ->  "if " ^ string_of_expr e ^ ":\n" ^ string_of_stmt s1 ^ "else:\n" ^ string_of_stmt s2
   | For(b, e, s) -> "for " ^ string_of_bind b ^ " in " ^ string_of_expr e ^ ":\n" ^ string_of_stmt s
+  | Range(b, e, s) -> "for " ^ string_of_bind b ^ " in range (" ^ string_of_expr e ^ "):\n" ^ string_of_stmt s
   | While(e, s) -> "while " ^ string_of_expr e ^ ":\n" ^ string_of_stmt s
   | Return(e) -> "return " ^ string_of_expr e ^ "\n"
   | Class(str, s) -> "class " ^ str ^ ":\n" ^ string_of_stmt s
