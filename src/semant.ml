@@ -64,7 +64,7 @@ and exp map = function
   
   | List(x) -> (* parse Lists to determine if they have uniform type, evaluate each expression separately *)
     let rec aux typ out = function
-      | [] -> (Dyn, SList(List.rev out, type_to_array typ), None)
+      | [] -> (Dyn, SList(List.rev out, type_to_array typ), None) (* replace Dyn with type_to_array typ to allow type inference on lists *)
       | a :: rest -> 
         let (t, e, _) = expr map a in 
         if t = typ then aux typ (e :: out) rest 
@@ -471,14 +471,14 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
         let (t1, e1, _) = expr map e in
         let (t2, e2, _) = expr map index in
         if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn then raise (Failure ("STypeError: invalid types for list access"))
-        else (aux (m, SLListAccess(e1, e2) :: out, binds) t)
+        else (aux (m, SLListAccess(e1, e2) :: binds, locals) t)
 
       | ListSlice(e, low, high) :: t ->
-        let (t1, e1, _) = expr e in
-        let (t2, e2, _) = expr low in
-        let (t3, e3, _) = expr high in
+        let (t1, e1, _) = expr map e in
+        let (t2, e2, _) = expr map low in
+        let (t3, e3, _) = expr map high in
         if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t3 <> Int && t3 <> Dyn then raise (Failure ("STypeError: invalid types for list access"))
-        else (aux (m, SLListSlice(e1, e2, e3) :: out, binds) t)
+        else (aux (m, SLListSlice(e1, e2, e3) :: binds, locals) t)
 
       | Field(a, b) :: t -> raise (Failure "NotImplementedError: Fields are not implemented")
       | _ -> raise (Failure ("STypeError: invalid types for assignment."))
