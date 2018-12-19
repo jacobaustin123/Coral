@@ -1201,7 +1201,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       |SAsn (bind_list,e) -> (*L.dump_module the_module;*) 
         let (_, ty) = e in
         let (e',the_state) = expr the_state e in 
-        let binds = List.map (fun (Bind(name, explicit_type)) -> Bind(name, ty)) bind_list in
+        let get_bind = function
+          | SLVar (Bind (name, explicit_type)) -> Bind(name, ty)
+          | _ -> raise (Failure "CodegenError: this kind of assignment has not been implemented.")
+
+        in let binds = List.map get_bind bind_list in
         let addrs = List.map (lookup namespace) binds in
         let do_store rhs lhs =
             (match rhs with
