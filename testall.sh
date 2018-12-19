@@ -147,7 +147,7 @@ if [ $# -ge 1 ]
 then
     files=$@
 else
-    files="tests/test-*.cl tests/sfail-*.cl tests/stest-*.cl" # tests/fail-*.cl 
+    files="tests/test-*.cl tests/sfail-*.cl tests/stest-*.cl  tests/fail-*.cl"
 fi
 
 for file in $files
@@ -157,15 +157,15 @@ do
 	*stest-*)
 	    CheckSemant $file 2>> $globallog
 	    ;;
-	*sfail-*)
+  *sfail-*)
  	     CheckSemant $file 2>> $globallog
-        ;;
-    *test-*)
-        CheckLLVM $file 2>> $globallog
-        ;;
-    *fail-*)
-        CheckLLVM $file 2>> $globallog
-        ;;
+      ;;
+  *test-*)
+      CheckLLVM $file 2>> $globallog
+      ;;
+  *fail-*)
+      CheckLLVM $file 2>> $globallog
+      ;;
 	*)
 	    echo "unknown file type $file"
 	    globalerror=1

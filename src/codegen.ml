@@ -286,18 +286,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   in
 
   let build_idx self_p other_p name b =
-
-    (* TODO: throw error if array bounds exceeded *)
-    let capacity = build_getcap_clist self_p b in
-    let inbounds = L.build_icmp L.Icmp.Slt other_p capacity "__inbounds" b in (* other_p is index being accessed *)
-
-    (* get elememnt *)
-    let gep_addr = L.build_struct_gep self_p clist_data_idx "__gep_addr" b in
-    let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (L.pointer_type (L.pointer_type cobj_pt)) "__gep_addr_as_cobjptrptrptr" b in
-    let gep_addr_as_cobjptrptr = L.build_load gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
-    let gep_addr_as_cobjptrptr = L.build_gep gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
-    let cobjptr = L.build_load gep_addr_as_cobjptrptr "__cobjptr" b in
-    cobjptr
+     (* get elememnt *)
+     let gep_addr = L.build_struct_gep self_p clist_data_idx "__gep_addr" b in
+     let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (L.pointer_type (L.pointer_type cobj_pt)) "__gep_addr_as_cobjptrptrptr" b in
+     let gep_addr_as_cobjptrptr = L.build_load gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
+     let gep_addr_as_cobjptrptr = L.build_gep gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
+     let cobjptr = L.build_load gep_addr_as_cobjptrptr "__cobjptr" b in
+     cobjptr
   in
 
   let built_ops =
@@ -475,9 +470,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     | dt when dt = clist_t -> ctype_list
   in
   let ctype_of_typ = function  (* only for optimized Raws hence limited matching *)
-      |Int -> ctype_int
-      |Float -> ctype_float
-      |Bool -> ctype_bool
+      | Int -> ctype_int
+      | Float -> ctype_float
+      | Bool -> ctype_bool
+      | String -> ctype_char
+      | Dyn -> tstp "Codegen Error: requesting ctype of Dyn"; ctype_int
   in
 
   let build_getctypefn_cobj ctype_fn_idx cobj_p b =
@@ -799,7 +796,6 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     with Not_found -> tstp "AAAA";BindMap.find bind globals_map
   in
 
-
   (** setup main() where all the code will go **)
   let main_ftype = L.function_type int_t [||] in   (* ftype is the full llvm function signature *)
   let main_function = L.define_function "main" main_ftype the_module in
@@ -822,7 +818,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
   let lookup namespace bind = (*tstp (string_of_sbind bind);*)
       let bind = match bind with
-        |Bind(n,Int)|Bind(n,Float)|Bind(n,Bool) -> bind
+        |Bind(n, Int)|Bind(n, Float)|Bind(n, Bool) | Bind(n, String) -> bind
         |Bind(n,_) -> Bind(n,Dyn)
       in
       try BindMap.find bind namespace
@@ -885,7 +881,6 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             | ListAccess -> ctype_idx_idx ) in
         let fn_p = build_getctypefn_cobj fn_idx v1 the_state.b in
 
-
         (* exception handling: invalid_op *)
         let bad_op_bb = L.append_block context "bad_op" the_state.func in
         let bad_op_bd = L.builder_at_end context bad_op_bb in
@@ -947,7 +942,33 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
           ignore(L.build_br proceed_bb bad_arg_bd);
 
+        (* exception handling: index out of bounds *)
+        let _ = match op with
+          | ListAccess ->
+             let bad_acc_bb = L.append_block context "bad_acc" the_state.func in
+             let bad_acc_bd = L.builder_at_end context bad_acc_bb in
 
+             let proceed_bb = L.append_block context "proceed" the_state.func in
+
+             (* check for out of bounds exception *)
+             let idx_arg = build_getdata_cobj int_t v2 the_state.b in
+             let capacity = build_getcap_clist self_p the_state.b in
+             let outofbounds = L.build_icmp L.Icmp.Sge idx_arg capacity "inbounds" the_state.b in (* other_p is index being accessed *)
+               ignore(L.build_cond_br outofbounds bad_acc_bb proceed_bb the_state.b);
+
+             (* print message and exit *)
+             let err_message =
+               let info = "invalid index parameter: out of bounds" in
+                 L.build_global_string info "error message" bad_acc_bd in
+             let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_acc_bd in
+               ignore(L.build_call printf_func [| str_format_str1; err_message |] "printf" bad_acc_bd);
+               ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_acc_bd);
+
+             (* return to normal control flow *)
+             let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
+               ignore(L.build_br proceed_bb bad_acc_bd);
+          | _ -> ()
+        in
 
         let result = L.build_call fn_p [| v1 ; v2 |] "binop_result" the_state.b in
         (Box(result),the_state)
@@ -1180,9 +1201,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
           (element::l, the_state)) ([], the_state) (List.rev el) in
       let (objptr, dataptr) = build_new_cobj clist_t the_state.b in
       let raw_ty = (match t with
-        |IntArr -> Int
-        |FloatArr -> Float
-        |BoolArr -> Bool
+        | IntArr -> Int
+        | FloatArr -> Float
+        | BoolArr -> Bool
+        | StringArr -> String
+        | Dyn -> Dyn
       ) in
       let elements = List.map (fun elem -> match (box_if_needed raw_ty elem) with Box(v) -> v) elements in
       let _ = build_new_clist dataptr elements the_state.b in
