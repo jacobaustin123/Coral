@@ -209,7 +209,7 @@ let comp x y =  match List.length x, List.length y with
 ;;
 
 (* merge function used to compare and combine two maps for type inference. handles scoping and undefined objects *)
-let compare_types a b = if a = b then a else Dyn
+let compare_types a b = if a = b then a else Dyn (* if a = b && a = FuncType then Dyn else *)
 let compare_decl a b = if a = b then a else false
 let compare_data a b = if a = b then a else None
 
