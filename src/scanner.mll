@@ -88,7 +88,7 @@ rule token = parse
   | ("True"|"False") as id { if id = "True" then BOOL_LITERAL(true) else BOOL_LITERAL(false) }
   | cstylefloat as lit { FLOAT_LITERAL(float_of_string lit) } 
   | ['0'-'9']+ as id { INT_LITERAL(int_of_string id) }
-  | letter+ as id { VARIABLE(id) }
+  | (['a'-'z''A'-'Z''_']letter*) as id { VARIABLE(id) }
   | eof { raise Eof }
   | _ as char { raise (Failure("SyntaxError: invalid character in identifier " ^ Char.escaped char)) }
 
