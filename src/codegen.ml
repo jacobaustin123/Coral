@@ -397,6 +397,20 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   	    | None -> L.const_pointer_null ctype_idx_pt)) bops) @ ([L.const_pointer_null ctype_call_pt])))) the_module) built_ops
   	    in
 
+  let ctype_of_ASTtype = function
+    | Int -> Some ctype_int
+    | Float -> Some ctype_float
+    | Bool -> Some ctype_bool
+    | String -> Some ctype_list
+    | Dyn -> None
+    | IntArr -> Some ctype_list
+    | FloatArr -> Some ctype_list
+    | BoolArr -> Some ctype_list
+    | StringArr -> Some ctype_list
+    | FuncType -> Some ctype_func
+    | Null -> None
+  in
+
   let ctype_of_datatype = function
     | dt when dt = int_t -> ctype_int
     | dt when dt = float_t -> ctype_float
@@ -856,17 +870,60 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       | None -> ignore (instr the_state.b)
     in
 
-  let rec stmt the_state s =   (* namespace comes first bc never gets modified unless descending so it works better for fold_left in SBlock *)
+  let rec stmt the_state s = (* namespace comes first bc never gets modified unless descending so it works better for fold_left in SBlock *)
       let (namespace,the_function,b) = (the_state.namespace,the_state.func,the_state.b) in
       match s with
       |SBlock s -> List.fold_left stmt the_state s
       |SExpr e ->  let (_, the_state) = expr the_state e in the_state
-      |SAsn (bind_list,e) ->
+      |SAsn (bind_list, e) ->
         let (e', the_state) = expr the_state e in
+
+        let tps = List.map (function | Bind(_, tp) -> tp) bind_list in
+
+        let needs_runtime_checks = List.fold_left (fun b t -> b || (t != Dyn)) false tps in
+        let rtp = (if needs_runtime_checks then build_gettype_cobj e' the_state.b else ctype_char) in (* type of righthand expression *)
+
+        let validate_asn the_state tp = match tp with
+          | _ when tp == Dyn -> the_state
+          | _ ->
+            (* exception handling: invalid assign *)
+            let bad_asn_bb = L.append_block context "bad_asn" the_state.func in
+            let bad_asn_bd = L.builder_at_end context bad_asn_bb in
+
+            let proceed_bb = L.append_block context "proceed" the_state.func in
+
+            (* check for asn exception *)
+            let ltp = ctype_of_ASTtype tp in (* type of lefthand expression *)
+            let _ = match ltp with
+              | None -> ()
+              | Some ltp ->
+                let ltp_as_int = L.build_ptrtoint ltp int_t "ltp_as_int" the_state.b in
+                let rtp_as_int = L.build_ptrtoint rtp int_t "rtp_as_int" the_state.b in
+                let diff = L.build_sub ltp_as_int rtp_as_int "diff" the_state.b in
+                let invalid_asn = L.build_icmp L.Icmp.Ne diff (L.const_int int_t 0) "invalid_asn" the_state.b in
+                  ignore(L.build_cond_br invalid_asn bad_asn_bb proceed_bb the_state.b);
+            in
+
+          (* print message and exit *)
+          let err_message =
+            let info = "invalid assignment to object of type " ^ (Utilities.type_to_string tp) in
+              L.build_global_string info "error message" bad_asn_bd in
+          let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_asn_bd in
+            ignore(L.build_call printf_func [| str_format_str1 ; err_message |] "printf" bad_asn_bd);
+            ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_asn_bd);
+
+          (* return to normal control flow *)
+          let the_state = change_builder_state the_state (L.builder_at_end context proceed_bb) in
+            ignore(L.build_br proceed_bb bad_asn_bd);
+            the_state
+        in
+
+        let the_state = List.fold_left validate_asn the_state tps in
         let get_name = (fun (Bind(name, explicit_t)) -> name) in
         let names = List.map get_name bind_list in
           List.iter (fun name -> ignore (L.build_store e' (lookup name namespace) the_state.b)) names;
           the_state
+
       |SNop -> the_state
       |SIf (predicate, then_stmt, else_stmt) ->
         let (bool_val, the_state) =
