@@ -417,6 +417,13 @@ and func_stmt globals locals stack flag = function
         let slist = from_sblock x' in 
         (merged, SFor(b2, e', SBlock(slist @ !rec2)), match_data d None, b1 :: out @ !binds)
 
+  | Range(a, b, c) -> 
+        let a1 = Asn([Var a], Lit(IntLit(0))) in
+        let a2 = Asn([Var a], Binop(Var a, Add, Lit(IntLit(1)))) in
+        let a3 = While(Binop(Var a, Less, b), Block(from_block c @ [a2])) in
+        let a4 = If(Binop(b, Greater, Lit(IntLit(0))), Block(a1 :: [a3]), Block([])) in
+        func_stmt globals locals stack flag a4 
+
   | While(a, b) -> let (typ, e, data) = func_expr globals locals stack flag a in 
         if typ <> Bool && typ <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
         else let (m', x', d, out) = func_stmt globals locals stack {flag with cond = true;} b in 
@@ -514,6 +521,13 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
     else let merged = transform m m' in 
     let slist = from_sblock x' in
     (merged, SFor(b2, e', SBlock(slist @ !rec2)), b1 :: out @ !binds)
+
+  | Range(a, b, c) -> 
+        let a1 = Asn([Var a], Lit(IntLit(0))) in
+        let a2 = Asn([Var a], Binop(Var a, Add, Lit(IntLit(1)))) in
+        let a3 = While(Binop(Var a, Less, b), Block(from_block c @ [a2])) in
+        let a4 = If(Binop(b, Greater, Lit(IntLit(0))), Block(a1 :: [a3]), Block([])) in
+        stmt map flag a4
 
   | While(a, b) -> 
     let (t, e, _) = expr map a in 
