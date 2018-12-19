@@ -119,7 +119,7 @@ and exp map = function
 
             else let rec aux (map, map', bindout, exprout) v1 v2 = match v1, v2 with
               | b, e -> let data = expr map e in let (t', e', _) = data in 
-                let (map1, fullbind, weakbind) = assign map' data b in (map, map1, (weakbind :: bindout), (e' :: exprout))
+                let (map1, bind, _) = assign map' data b in (map, map1, (bind :: bindout), (e' :: exprout))
 
             in let map' = StringMap.map (fun (a, b, c) -> (Dyn, b, c)) map (* ignore dynamic types when not in same scope *)
             in let (_, map1, bindout, exprout) = (List.fold_left2 aux (map, map', [], []) formals args) in
@@ -202,7 +202,7 @@ and func_exp globals locals stack flag = function (* evaluate expressions, retur
 
             else let rec aux (globals, locals, bindout, exprout) v1 v2 = match v1, v2 with 
               | b, e -> let data = func_expr globals locals stack flag e in let (t', e', _) = data in 
-              let (map1, strongbind, weakbind) = assign globals data b in (map1, locals, (weakbind :: bindout), (e' :: exprout)) in
+              let (map1, _, bind2) = assign globals data b in (map1, locals, (bind2 :: bindout), (e' :: exprout)) in
 
             let map' = StringMap.map (fun (a, b, c) -> (Dyn, b, c)) locals in
             let (map1, _, bindout, exprout) = (List.fold_left2 aux (globals, map', [], []) formals args) in
@@ -417,6 +417,13 @@ and func_stmt globals locals stack flag = function
         let slist = from_sblock x' in 
         (merged, SFor(b2, e', SBlock(slist @ !rec2)), match_data d None, b1 :: out @ !binds)
 
+  | Range(a, b, c) -> 
+        let a1 = Asn([Var a], Lit(IntLit(0))) in
+        let a2 = Asn([Var a], Binop(Var a, Add, Lit(IntLit(1)))) in
+        let a3 = While(Binop(Var a, Less, b), Block(from_block c @ [a2])) in
+        let a4 = If(Binop(b, Greater, Lit(IntLit(0))), Block(a1 :: [a3]), Block([])) in
+        func_stmt globals locals stack flag a4 
+
   | While(a, b) -> let (typ, e, data) = func_expr globals locals stack flag a in 
         if typ <> Bool && typ <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
         else let (m', x', d, out) = func_stmt globals locals stack {flag with cond = true;} b in 
@@ -514,6 +521,13 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
     else let merged = transform m m' in 
     let slist = from_sblock x' in
     (merged, SFor(b2, e', SBlock(slist @ !rec2)), b1 :: out @ !binds)
+
+  | Range(a, b, c) -> 
+        let a1 = Asn([Var a], Lit(IntLit(0))) in
+        let a2 = Asn([Var a], Binop(Var a, Add, Lit(IntLit(1)))) in
+        let a3 = While(Binop(Var a, Less, b), Block(from_block c @ [a2])) in
+        let a4 = If(Binop(b, Greater, Lit(IntLit(0))), Block(a1 :: [a3]), Block([])) in
+        stmt map flag a4
 
   | While(a, b) -> 
     let (t, e, _) = expr map a in 
