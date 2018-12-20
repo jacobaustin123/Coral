@@ -6,7 +6,7 @@ open Interpret
 
 (* boolean flags used to handle command line arguments *)
 let debug = ref false
-let run = ref false
+let run = ref true
 
 (* file path flags to handle compilation from a file *)
 let fpath = ref ""
@@ -20,7 +20,7 @@ let speclist =
 [
   ( "[file]", Arg.String (fun foo -> ()), ": compile from a file instead of the default interpreter");
   ( "-d", Arg.Set debug, ": print debugging information at compile time");
-  ( "-r", Arg.Set run, ": run commands or files instead of merely parsing them");
+  ( "-no-compile", Arg.Clear run, ": run semantic checking on a file instead of running it");
 ]
 
 (* this is a complicated function. it takes the lexed buffer, runs it through the tokenize parser in order to 

@@ -64,7 +64,7 @@ and exp map = function
   
   | List(x) -> (* parse Lists to determine if they have uniform type, evaluate each expression separately *)
     let rec aux typ out = function
-      | [] -> (Dyn, SList(List.rev out, type_to_array typ), None) (* replace Dyn with type_to_array typ to allow type inference on lists *)
+      | [] -> (type_to_array typ, SList(List.rev out, type_to_array typ), None) (* replace Dyn with type_to_array typ to allow type inference on lists *)
       | a :: rest -> 
         let (t, e, _) = expr map a in 
         if t = typ then aux typ (e :: out) rest 
@@ -147,11 +147,9 @@ and exp map = function
           
           | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation"))) (* can be expanded to allow classes in the future *)
       
-      | None -> raise (Failure "SNotImplementedError: calling weakly defined functions has not been implemented");
-
-          (* print_endline "SWarning: called unknown/undefined function"; (* TODO probably not necessary, may be a problem for recursion *)
+      | None -> print_endline "SWarning: called unknown/undefined function"; (* TODO probably not necessary, may be a problem for recursion *)
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr map e' in e' :: acc) [] args) in
-          (Dyn, (SCall(e, eout, SNop)), None) *)
+          (Dyn, (SCall(e, eout, SNop)), None)
         )
 
   | _ as temp -> print_endline ("SNotImplementedError: '" ^ (expr_to_string temp) ^ 
@@ -231,9 +229,10 @@ and func_exp globals locals stack flag = function (* evaluate expressions, retur
           
           | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation")))
       
-      | None -> if not flag.noeval then raise (Failure "SNotImplementedError: calling weakly defined functions has not been implemented") else
+      | None -> if not flag.noeval then print_endline "SNotImplementedError: calling weakly defined functions has not been implemented";
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals stack flag e' in e'' :: acc) [] args) in
-          (Dyn, (SCall(e, eout, SNop)), None)) (* TODO fix this somehow *)
+          (Dyn, (SCall(e, eout, SNop)), None)
+        )
 
     | _ as other -> exp locals other
 
