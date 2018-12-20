@@ -147,9 +147,12 @@ and exp map = function
           
           | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation"))) (* can be expanded to allow classes in the future *)
       
-      | None -> print_endline "SWarning: called unknown/undefined function"; (* TODO probably not necessary, may be a problem for recursion *)
+      | None -> raise (Failure "SNotImplementedError: calling weakly defined functions has not been implemented");
+
+          (* print_endline "SWarning: called unknown/undefined function"; (* TODO probably not necessary, may be a problem for recursion *)
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr map e' in e' :: acc) [] args) in
-          (Dyn, (SCall(e, eout, SNop)), None))
+          (Dyn, (SCall(e, eout, SNop)), None) *)
+        )
 
   | _ as temp -> print_endline ("SNotImplementedError: '" ^ (expr_to_string temp) ^ 
       "' semantic checking not implemented"); (Dyn, SNoexpr, None)
@@ -228,7 +231,7 @@ and func_exp globals locals stack flag = function (* evaluate expressions, retur
           
           | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation")))
       
-      | None -> if not flag.noeval then print_endline "SWarning: called weak/undefined function"; 
+      | None -> if not flag.noeval then raise (Failure "SNotImplementedError: calling weakly defined functions has not been implemented") else
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals stack flag e' in e'' :: acc) [] args) in
           (Dyn, (SCall(e, eout, SNop)), None)) (* TODO fix this somehow *)
 

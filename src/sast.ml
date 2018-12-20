@@ -26,7 +26,7 @@ and sexp =
   | SLit of literal (* literal *)
   | SVar of string (* see above *)
   | SUnop of uop * sexpr (* (uop, sexpr ) *)
-  | SCall of sexpr * sexpr list * sstmt (* SVar or SCall, list of args, SFunc) *) (*stmt=SNop if recursive call within fn or weak fn *)
+  | SCall of sexpr * sexpr list * sstmt (* SVar or SCall, list of args, SFunc) *) (* sstmt is SNop if recursive call within function or weak function *)
   | SMethod of sexpr * string * sexpr list (* not implemented *)
   | SField of sexpr * string (* not implemented *)
   | SList of sexpr list * typ (* (list of expressions, inferred type) *)
