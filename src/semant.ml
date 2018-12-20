@@ -134,7 +134,7 @@ and exp map = function
                   let Bind(n1, btype) = name in 
                   if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn 
                   then raise (Failure ("STypeError: invalid return type")) 
-                  else let func = { styp = btype; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
+                  else let func = { styp = typ2; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
                     (btype, (SCall(e, (List.rev exprout), SFunc(func))), d) 
                   else let func = { styp = typ2; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in (* case where definite return type and Dynamic inferrence still has  bind*)
                   (typ2, (SCall(e, (List.rev exprout), SFunc(func))), d)
@@ -219,7 +219,7 @@ and func_exp globals locals stack flag = function (* evaluate expressions, retur
             (match data with
               | Some (typ2, e', d) -> let Bind(n1, btype) = name in if btype <> Dyn && btype <> typ2 then 
                   if typ2 <> Dyn then raise (Failure ("STypeError: invalid return type")) else 
-                  let func = { styp = btype; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in
+                  let func = { styp = typ2; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in
                   (btype, (SCall(e, (List.rev exprout), SFunc(func))), d) else (* case where definite return type and Dynamic inferrence still has  bind*)
                   let func = { styp = typ2; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in
                   (typ2, (SCall(e, (List.rev exprout), SFunc(func))), d) (* TODO fix this somehow *)
@@ -400,7 +400,7 @@ and func_stmt globals locals stack flag = function
       | Some (typ2, e', d) ->
         if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
         raise (Failure ("STypeError: invalid return type")) 
-        else let func = { styp = btype; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
+        else let func = { styp = typ2; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
           (map', SFunc(func), None, [Bind(name, FuncType)]) 
         else let func = { styp = typ2; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
         (map', SFunc(func), None, [Bind(name, FuncType)])
@@ -512,7 +512,7 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
         | Some (typ2, e', d) ->
             if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
             raise (Failure ("STypeError: invalid return type")) else 
-            let func = { styp = btype; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
+            let func = { styp = typ2; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
               (map', SFunc(func), [Bind(name, FuncType)]) else
               let func = { styp = typ2; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
             (map', SFunc(func), [Bind(name, FuncType)])

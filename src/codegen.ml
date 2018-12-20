@@ -1394,7 +1394,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
          ignore(L.build_store data raw_addr the_state.b);
          the_state
  
-       |(raw_ty,Dyn) when raw_ty=Int || raw_ty=Float || raw_ty=Bool ->
+       | (raw_ty,Dyn) when raw_ty=Int || raw_ty=Float || raw_ty=Bool ->
          (* get addresses for raw and boxed versions *)
          let BoxAddr(box_addr,_) = lookup namespace (Bind(name,Dyn)) (* no need to check needs_update flag bc this is assignment *)
          and RawAddr(raw_addr) = lookup namespace (Bind(name,raw_ty)) in
