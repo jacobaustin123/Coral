@@ -439,7 +439,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
   let build_getctypefn_cobj ctype_fn_idx cobj_p b =
     let x2 = L.build_struct_gep cobj_p cobj_type_idx "x2" b in
-    let x3 = L.build_load x2 "x3" b n  (* x3: ctype_pt *)
+    let x3 = L.build_load x2 "x3" b in  (* x3: ctype_pt *)
     let x4 = L.build_struct_gep x3 ctype_fn_idx "x4" b in
     let fn_ptr = L.build_load x4 "fn_ptr" b in
     fn_ptr
