@@ -6,7 +6,7 @@ open Interpret
 
 (* boolean flags used to handle command line arguments *)
 let debug = ref false
-let run = ref true
+let norun = ref false
 
 (* file path flags to handle compilation from a file *)
 let fpath = ref ""
@@ -20,6 +20,7 @@ let speclist =
 [
   ( "[file]", Arg.String (fun foo -> ()), ": compile from a file instead of the default interpreter");
   ( "-d", Arg.Set debug, ": print debugging information at compile time");
+  ( "-no-compile", Arg.Set norun, ": run semantic checking instead of compiling the program");
 ]
 
 (* this is a complicated function. it takes the lexed buffer, runs it through the tokenize parser in order to 
@@ -212,7 +213,7 @@ let rec from_console map past run =
       | h :: t -> formatted := t ; h in
 
     let program = 
-      if run then ((strip_print past) @ (Parser.program token (Lexing.from_string "")))
+      if not run then ((strip_print past) @ (Parser.program token (Lexing.from_string "")))
       else (Parser.program token (Lexing.from_string "")) in
 
     let imported_program = parse_imports program in
@@ -220,7 +221,7 @@ let rec from_console map past run =
     let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } imported_program) in (* temporarily here to check validity of SAST *)
     let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
     
-    if run then
+    if not run then
       let output = codegen sast in
       List.iter print_endline output; flush stdout; 
       from_console map imported_program run
@@ -247,7 +248,7 @@ let rec from_file map fname run = (* todo combine with loop *)
     let () = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)
     let () = Sys.chdir original_path in
 
-    if run then 
+    if not run then 
       let output = codegen sast in
       List.iter print_endline output; flush stdout;
 
@@ -263,12 +264,12 @@ let () =
   Arg.parse speclist (fun path -> if not !set then fpath := path; set := true; ) usage; (* parse command line arguments *)
   let emptymap = StringMap.empty in 
 
-  if !set then from_file emptymap !fpath !run
+  if !set then from_file emptymap !fpath !norun
   else
   ( 
     Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
     try 
-      from_console emptymap [] !run 
+      from_console emptymap [] !norun 
     with Scanner.Eof -> exit 0
   )
 
