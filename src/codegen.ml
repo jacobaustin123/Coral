@@ -763,7 +763,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   let int_format_str = L.build_global_stringptr "%d\n" "fmt" main_builder
   and string_format_str = L.build_global_stringptr "%s\n" "fmt" main_builder
   and float_format_str = L.build_global_stringptr "%g\n" "fmt" main_builder in 
-  let init_state:state = {namespace=BindMap.empty; func=main_function; b=main_builder;optim_funcs=SfdeclMap.empty;generic_func=false} in
+  let init_state:state = {ret_typ=Int;namespace=BindMap.empty; func=main_function; b=main_builder;optim_funcs=SfdeclMap.empty;generic_func=false} in
 
 
   (* useful utility functions! *)
@@ -801,11 +801,12 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       Box(temp_box)
   in
   let rec change_state old = function
-      | S_names(namespace) -> {namespace=namespace;func=old.func;b=old.b;optim_funcs=old.optim_funcs;generic_func=old.generic_func}
-      | S_func(func) -> {namespace=old.namespace;func=func;b=old.b;optim_funcs=old.optim_funcs;generic_func=old.generic_func}
-      | S_b(b) -> {namespace=old.namespace;func=old.func;b=b;optim_funcs=old.optim_funcs;generic_func=old.generic_func}
-      | S_optimfuncs(optim_funcs) -> {namespace=old.namespace;func=old.func;b=old.b;optim_funcs=optim_funcs;generic_func=old.generic_func}
-      | S_generic_func(boolval) -> {namespace=old.namespace;func=old.func;b=old.b;optim_funcs=old.optim_funcs;generic_func=boolval}
+      | S_rettyp(ret_typ) -> {ret_typ=ret_typ;namespace=old.namespace;func=old.func;b=old.b;optim_funcs=old.optim_funcs;generic_func=old.generic_func}
+      | S_names(namespace) -> {ret_typ=old.ret_typ;namespace=namespace;func=old.func;b=old.b;optim_funcs=old.optim_funcs;generic_func=old.generic_func}
+      | S_func(func) -> {ret_typ=old.ret_typ;namespace=old.namespace;func=func;b=old.b;optim_funcs=old.optim_funcs;generic_func=old.generic_func}
+      | S_b(b) -> {ret_typ=old.ret_typ;namespace=old.namespace;func=old.func;b=b;optim_funcs=old.optim_funcs;generic_func=old.generic_func}
+      | S_optimfuncs(optim_funcs) -> {ret_typ=old.ret_typ;namespace=old.namespace;func=old.func;b=old.b;optim_funcs=optim_funcs;generic_func=old.generic_func}
+      | S_generic_func(boolval) -> {ret_typ=old.ret_typ;namespace=old.namespace;func=old.func;b=old.b;optim_funcs=old.optim_funcs;generic_func=boolval}
     | S_needs_reboxing(name,boolval) -> 
       let BoxAddr(addr,_) = lookup (old.namespace) (Bind(name,Dyn)) in
       let new_namespace = BindMap.add (Bind(name,Dyn)) (BoxAddr(addr,boolval)) old.namespace in
@@ -977,7 +978,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             generic_binop (build_temp_box rawval ty1 the_state.b) (Box(boxval))
           |(Box(v1),Box(v2)) -> generic_binop (Box(v1)) (Box(v2))
         ) in (res,the_state)
-      |SCall(fexpr, arg_expr_list, SNop) ->
+      |SCall(fexpr, arg_expr_list, SNop) -> raise (Failure "Generic scalls partially implemented and disabled");
         tstp ("GENERIC SCALL of "^(string_of_int (List.length arg_expr_list))^" args");
         (* eval the arg exprs *)
         let argc = List.length arg_expr_list in
@@ -1059,12 +1060,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             let addrs = List.map addr_of_bind sfdecl.sformals in
 
             ignore(List.iter2 (fun addr value -> ignore(L.build_store value addr fn_builder)) addrs vals_to_store);
-            let fn_state = change_state the_state (S_list([S_names(fn_namespace);S_func(optim_func);S_b(fn_builder);S_generic_func(false)])) in
+            let fn_state = change_state the_state (S_list([S_names(fn_namespace);S_func(optim_func);S_b(fn_builder);S_rettyp(sfdecl.styp);S_generic_func(false)])) in
             let fn_state = stmt fn_state sfdecl.sbody in  
             let fn_state = add_terminal fn_state (match sfdecl.styp with
                 Null -> (fun b -> L.build_ret (build_new_cobj_init int_t (L.const_int int_t 0) b) b)
               | Float -> L.build_ret (L.const_float float_t 0.0) 
-              | t -> L.build_ret (L.const_int (ltyp_of_typ t) 0)
+              | Dyn -> (fun b -> L.build_ret (build_new_cobj_init int_t (L.const_int int_t 0) b) b)
+              | t -> L.build_ret (L.const_int int_t 0)
             ) in optim_func
         ) in
         let result = L.build_call optim_func (Array.of_list arg_vals) "result" the_state.b in
@@ -1308,7 +1310,10 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
           |false -> (match ty with
             | Null -> L.build_ret (build_new_cobj_init int_t (L.const_int int_t 0) the_state.b) the_state.b
             | _ -> L.build_ret (match res with
-                |Raw(v) -> v
+                | Raw(v) -> (match the_state.ret_typ with
+                    |Dyn ->(match (build_temp_box v ty the_state.b) with Box(v) -> v)
+                    |_ -> v
+                )
                 |Box(v) -> v
             ) the_state.b
             )
@@ -1317,7 +1322,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             |Raw(v) -> (match (build_temp_box v ty the_state.b) with Box(v) -> v)
             ) the_state.b
         );the_state
-    | SFunc sfdecl -> 
+    | SFunc sfdecl -> the_state (*
         tstp ("CREATING GENERIC FN: " ^ sfdecl.sfname); (* create the generic function object, locals may be typed but all formals are dyn/boxed *)
         (* outer scope work: point binding to new cfuncobj *)
         let fname = sfdecl.sfname in
@@ -1374,6 +1379,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let fn_state = add_terminal (stmt fn_state sfdecl.sbody) build_return in
         let the_state = change_state the_state (S_optimfuncs(fn_state.optim_funcs)) in (* grab optimfuncs from inner *)
         the_state  (* SFunc() returns the original builder *)
+        *)
     | STransform (name,from_ty,to_ty) -> 
       tstp ("Transforming "^name^": "^(string_of_typ from_ty)^" -> "^(string_of_typ to_ty));
       (match (from_ty,to_ty) with
