@@ -5,8 +5,8 @@ module L = Llvm
 (* debug function *)
 let pt some_lltype = Printf.eprintf "pt: %s%s\n" "---->" (L.string_of_lltype some_lltype)
 let pv some_llvalue = Printf.eprintf "pv: %s%s\n" "---->" (L.string_of_llvalue some_llvalue)
-let tst() = Printf.eprintf "!!!!!!!!!!\n";()
-let tstp str = Printf.eprintf "%s\n" str;()
+let tst() = (*Printf.eprintf "!!!!!!!!!!\n";*)()
+let tstp str = (*Printf.eprintf "%s\n" str;*)()
 let pbind bind = tstp (string_of_sbind bind);()
 
 (* Maps *)
@@ -49,17 +49,17 @@ let seq len =
     if len < 0 then acc else aux (len - 1) (len::acc)
   in aux (len - 1) []
 
-type binop = ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)
-type listop = ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)
-type unop = ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)
+type binop_builder = ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)
+type listop_builder = ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)
+type unop_builder = ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)
 (* operator generation! *)
 type oprt =
   | Oprt of
-      string * binop option * binop option * binop option * binop option * binop option
+      string * binop_builder option * binop_builder option * binop_builder option * binop_builder option * binop_builder option
   | Uoprt of
-      string * unop option * unop option * unop option * unop option * unop option
+      string * unop_builder option * unop_builder option * unop_builder option * unop_builder option * unop_builder option
   | Loprt of
-      string * listop option * listop option * listop option * listop option * listop option
+      string * listop_builder option * listop_builder option * listop_builder option * listop_builder option * listop_builder option
 
 (* operators after they've been built *)
 type built_oprt =
