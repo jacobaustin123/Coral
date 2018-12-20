@@ -27,6 +27,7 @@ type dataunit_addr =
 type state = {
     namespace: dataunit_addr BindMap.t;
     func: L.llvalue;
+    ret_typ: typ;
     b: L.llbuilder;
     optim_funcs: L.llvalue SfdeclMap.t;
     generic_func: bool;  (* true if in a totally cfunctionobject function (unoptim) *)
@@ -34,6 +35,7 @@ type state = {
 (* a type used by change_state() to succinctly update the state record *)
 type state_component = 
     | S_names of dataunit_addr BindMap.t
+    | S_rettyp of typ
     | S_func of L.llvalue
     | S_b of L.llbuilder
     | S_optimfuncs of L.llvalue SfdeclMap.t
