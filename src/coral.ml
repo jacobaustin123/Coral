@@ -171,6 +171,7 @@ let rec strip_stmt = function
   | If(a, b, c) -> If(a, strip_stmt b, strip_stmt c)
   | While(a, b) -> While(a, strip_stmt b)
   | For(a, b, c) -> For(a, b, strip_stmt c)
+  | Range(a, b, c) -> Range(a, b, strip_stmt c)
   | Block(x) -> Block(strip_print x)
   | _ as x -> x
 
