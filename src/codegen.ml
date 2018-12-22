@@ -1153,16 +1153,17 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       match s with
       | SBlock s -> List.fold_left stmt the_state s
       | SExpr e ->  let (_,the_state) = expr the_state e in the_state
-      | SAsn (bind_list, e) -> (*L.dump_module the_module;*)
+      | SAsn (lvalue_list, e) -> (*L.dump_module the_module;*)
         let (_, tp_rhs) = e in
         let (e', the_state) = expr the_state e in
-        let get_bind = function
-          | SLVar (Bind (name, explicit_type)) -> (Bind(name, tp_rhs), explicit_type)
-          | _ -> raise (Failure "CodegenError: this kind of assignment has not been implemented.")
+        let get_binds = function
+          | SLVar (Bind (name, explicit_type)) ->  (Bind(name, tp_rhs), explicit_type)
+          | _ -> raise (Failure "CodegenError: this kind of assignment has not been implemented")
 
-        in let binds = List.map get_bind bind_list in
-        
+        in let binds = List.map get_binds lvalue_list in (* saving explicit type for runtime error checking *)
+
         let addrs = List.map (fun (bind, explicit_type) -> ((lookup namespace bind), explicit_type)) binds in
+
         let do_store lhs rhs the_state =
           let (lbind, tp_lhs) = lhs in
           let the_state = (match rhs with
