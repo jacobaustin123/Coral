@@ -157,15 +157,15 @@ do
 	*stest-*)
 	    CheckSemant $file 2>> $globallog
 	    ;;
-	*sfail-*)
+  *sfail-*)
  	     CheckSemant $file 2>> $globallog
-        ;;
-    *test-*)
-        CheckLLVM $file 2>> $globallog
-        ;;
-    *fail-*)
-        CheckLLVM $file 2>> $globallog
-        ;;
+      ;;
+  *test-*)
+      CheckLLVM $file 2>> $globallog
+      ;;
+  *fail-*)
+      CheckLLVM $file 2>> $globallog
+      ;;
 	*)
 	    echo "unknown file type $file"
 	    globalerror=1

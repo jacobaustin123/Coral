@@ -201,26 +201,20 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   in
 
   let build_getcap_clist clist_p b =
-
-    let gep_addr = L.build_struct_gep clist_p clist_cap_idx "__gep_addr" b in
+    let gep_addr = L.build_struct_gep clist_p clist_cap_idx "__gep_addr" b in (* DA PROBLEM *)
     let gep_addr_as_intptr = L.build_bitcast gep_addr int_pt "__gep_addr_as_intptr" b in
     let capacity = L.build_load gep_addr_as_intptr "__capacity" b in
     capacity
   in
 
   let build_idx self_p other_p name b =
-
-    (* TODO: throw error if array bounds exceeded *)
-    let capacity = build_getcap_clist self_p b in
-    let inbounds = L.build_icmp L.Icmp.Slt other_p capacity "__inbounds" b in (* other_p is index being accessed *)
-
-    (* get elememnt *)
-    let gep_addr = L.build_struct_gep self_p clist_data_idx "__gep_addr" b in
-    let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (L.pointer_type (L.pointer_type cobj_pt)) "__gep_addr_as_cobjptrptrptr" b in
-    let gep_addr_as_cobjptrptr = L.build_load gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
-    let gep_addr_as_cobjptrptr = L.build_gep gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
-    let cobjptr = L.build_load gep_addr_as_cobjptrptr "__cobjptr" b in
-    cobjptr
+     (* get elememnt *)
+     let gep_addr = L.build_struct_gep self_p clist_data_idx "__gep_addr" b in
+     let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (L.pointer_type (L.pointer_type cobj_pt)) "__gep_addr_as_cobjptrptrptr" b in
+     let gep_addr_as_cobjptrptr = L.build_load gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
+     let gep_addr_as_cobjptrptr = L.build_gep gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
+     let cobjptr = L.build_load gep_addr_as_cobjptrptr "__cobjptr" b in
+     cobjptr
   in
 
   let built_ops =
@@ -433,9 +427,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     | dt when dt = clist_t -> ctype_list
   in
   let ctype_of_typ = function  (* only for optimized Raws hence limited matching *)
-      |Int -> ctype_int
-      |Float -> ctype_float
-      |Bool -> ctype_bool
+      | Int -> ctype_int
+      | Float -> ctype_float
+      | Bool -> ctype_bool
+      | String -> ctype_char
+      | Dyn -> tstp "Codegen Error: requesting ctype of Dyn"; ctype_int
   in
 
   let build_getctypefn_cobj ctype_fn_idx cobj_p b =
@@ -497,7 +493,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
     (* null pointers to fill empty capacity *)
     let elms_w_nulls = if List.length elm_pts_as_cobjptrs < capacity
-      then elm_pts_as_cobjptrs@(Array.to_list (Array.make (capacity - List.length elm_pts) (L.const_pointer_null cobj_pt)))
+      then elm_pts_as_cobjptrs @ (Array.to_list (Array.make (capacity - List.length elm_pts) (L.const_pointer_null cobj_pt)))
       else elm_pts_as_cobjptrs in
 
     (* stores the data *)
@@ -756,7 +752,6 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     with Not_found -> tstp "Not found in globals:";pbind bind;BindMap.find bind globals_map
   in
 
-
   (** setup main() where all the code will go **)
   let main_ftype = L.function_type int_t [||] in   (* ftype is the full llvm function signature *)
   let main_function = L.define_function "main" main_ftype the_module in
@@ -780,7 +775,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
   let lookup namespace bind = (*tstp (string_of_sbind bind);*)
       let bind = match bind with
-        |Bind(n,Int)|Bind(n,Float)|Bind(n,Bool) -> bind
+        |Bind(n, Int)|Bind(n, Float)|Bind(n, Bool) | Bind(n, String) -> bind
         |Bind(n,_) -> Bind(n,Dyn)
       in
       try BindMap.find bind namespace
@@ -854,7 +849,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       let (e2',the_state) = expr the_state e2 in
 
       let generic_binop box1 box2 = 
-          let (Box(v1),Box(v2)) = (box1,box2) in
+          let (Box(v1), Box(v2)) = (box1, box2) in
           let fn_idx = (match op with
             | Add      -> ctype_add_idx
             | Sub      -> ctype_sub_idx
@@ -870,8 +865,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             | And      -> ctype_and_idx
             | Or       -> ctype_or_idx
             | ListAccess -> ctype_idx_idx ) in
-        let fn_p = build_getctypefn_cobj fn_idx v1 the_state.b in
 
+        let fn_p = build_getctypefn_cobj fn_idx v1 the_state.b in
 
         (* exception handling: invalid_op *)
         let bad_op_bb = L.append_block context "bad_op" the_state.func in
@@ -904,7 +899,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         (* check for arg exception *)
   
         let _ = match op with
-          | ListAccess ->
+          | ListAccess -> (* check and make sure v2 is an int *)
             let typ1 = ctype_int in
             let typ2 = build_gettype_cobj v2 the_state.b in
             let typ1_as_int = L.build_ptrtoint typ1 int_t "typ1_as_int" the_state.b in
@@ -934,14 +929,43 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
           ignore(L.build_br proceed_bb bad_arg_bd);
 
+        (* exception handling: index out of bounds *)
 
+        let the_state = match op with
+          | ListAccess ->
 
-        let result = L.build_call fn_p [| v1 ; v2 |] "binop_result" the_state.b in
+            let proceed_bb = L.append_block context "proceed" the_state.func in
+            let bad_acc_bb = L.append_block context "bad_acc" the_state.func in
+            let bad_acc_bd = L.builder_at_end context bad_acc_bb in
+
+                       (* check for out of bounds exception *)
+             let idx_arg = build_getdata_cobj int_t v2 the_state.b in
+             (* ignore(L.build_call printf_func [| int_format_str; idx_arg |] "printf" the_state.b); *)
+             let list_ptr = build_getlist_cobj v1 the_state.b in
+             let length = build_getlen_clist list_ptr the_state.b in
+             let lt_length = L.build_icmp L.Icmp.Sge idx_arg length "lt_length" the_state.b in (* other_p is index being accessed *)
+             let gt_zero = L.build_icmp L.Icmp.Slt idx_arg (L.const_int int_t 0) "gt_zero" the_state.b in (* other_p is index being accessed *)
+             let outofbounds = L.build_or lt_length gt_zero "inbounds" the_state.b in
+               ignore(L.build_cond_br outofbounds bad_acc_bb proceed_bb the_state.b);
+
+             let err_message =
+               let info = "RuntimeError: list index out of bounds" in
+                 L.build_global_string info "error message" bad_acc_bd in
+             let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_acc_bd in
+               ignore(L.build_call printf_func [| str_format_str1; err_message |] "printf" bad_acc_bd);
+               ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_acc_bd);
+
+             let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
+               ignore(L.build_br proceed_bb bad_acc_bd); the_state
+                 
+          | _ -> the_state
+      
+      in let result = L.build_call fn_p [| v1 ; v2 |] "binop_result" the_state.b in
         (Box(result),the_state)
       in
 
-      let (res,the_state) = (match (e1',e2') with
-          |(Raw(v1),Raw(v2)) -> 
+      let (res, the_state) = (match (e1', e2') with
+          | (Raw(v1), Raw(v2)) ->
               let binop_instruction = (match ty1 with  
                 |Int|Bool -> (match op with
                   | Add     -> L.build_add
@@ -973,14 +997,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                 )
             ) in
               (Raw(binop_instruction v1 v2 "binop_result" the_state.b),the_state)
-          |(Box(boxval),Raw(rawval)) -> 
+
+          | (Box(boxval),Raw(rawval)) -> 
             generic_binop (Box(boxval)) (build_temp_box rawval ty2 the_state.b)
-          |(Raw(rawval),Box(boxval)) -> 
+          | (Raw(rawval),Box(boxval)) -> 
             generic_binop (build_temp_box rawval ty1 the_state.b) (Box(boxval))
-          |(Box(v1),Box(v2)) -> generic_binop (Box(v1)) (Box(v2))
+          | (Box(v1),Box(v2)) -> generic_binop (Box(v1)) (Box(v2))
+
         ) in (res,the_state)
 
-      |SCall(fexpr, arg_expr_list, SNop) -> raise (Failure "CodegenError: Generic scalls partially implemented and disabled");
+      | SCall(fexpr, arg_expr_list, SNop) -> raise (Failure "CodegenError: Generic scalls partially implemented and disabled");
         tstp ("GENERIC SCALL of "^(string_of_int (List.length arg_expr_list))^" args");
         (* eval the arg exprs *)
         let argc = List.length arg_expr_list in
@@ -1077,8 +1103,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             |Int|Float|Bool -> Raw(result)
             |_ -> Box(result)
         ) in (res,the_state)
-    | SListAccess(e1,e2)  -> expr the_state (SBinop(e1,ListAccess,e2), ty)
-    |SUnop(op, e1) ->
+    | SListAccess(e1, e2)  -> expr the_state (SBinop(e1, ListAccess, e2), ty)
+
+    | SUnop(op, e1) ->
       let (_,ty1) = e1 in
       let (e1',the_state) = expr the_state e1 in
       let (res,the_state) = (match e1' with
@@ -1128,15 +1155,17 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         in
 
       let (elements, the_state) = List.fold_left (fun (l, the_state) e -> 
-        let (element, the_state) = expr the_state e in
-          (element::l, the_state)) ([], the_state) (List.rev el) in
+        let (element, the_state) = expr the_state e in let (_, typ) = e in 
+          ((element, typ) :: l, the_state)) ([], the_state) (List.rev el) in
       let (objptr, dataptr) = build_new_cobj clist_t the_state.b in
       let raw_ty = (match t with
-        |IntArr -> Int
-        |FloatArr -> Float
-        |BoolArr -> Bool
+        | IntArr -> Int
+        | FloatArr -> Float
+        | BoolArr -> Bool
+        | StringArr -> String
+        | Dyn -> Dyn
       ) in
-      let elements = List.map (fun elem -> match (transform_if_needed raw_ty elem) with Box(v) -> v) elements in
+      let elements = List.map (fun (elem, t) -> match (transform_if_needed t elem) with Box(v) -> v) elements in
       let _ = build_new_clist dataptr elements the_state.b in
         (Box(objptr), the_state)
         
