@@ -10,4 +10,3 @@ if evade_semant:
 x = i
 
 print(2) # shouldn't get to here
-

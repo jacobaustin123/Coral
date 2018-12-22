@@ -6,7 +6,7 @@ open Interpret
 
 (* boolean flags used to handle command line arguments *)
 let debug = ref false
-let norun = ref false
+let run = ref true
 
 (* file path flags to handle compilation from a file *)
 let fpath = ref ""
@@ -20,7 +20,7 @@ let speclist =
 [
   ( "[file]", Arg.String (fun foo -> ()), ": compile from a file instead of the default interpreter");
   ( "-d", Arg.Set debug, ": print debugging information at compile time");
-  ( "-no-compile", Arg.Set norun, ": run semantic checking instead of compiling the program");
+  ( "-no-compile", Arg.Clear run, ": run semantic checking on a file instead of running it");
 ]
 
 (* this is a complicated function. it takes the lexed buffer, runs it through the tokenize parser in order to 
@@ -40,22 +40,6 @@ let indent tokens base current =
       else if curr = (Stack.top stack) + 1 then let _ = Stack.push curr stack in aux curr (a :: t) (Parser.INDENT :: out) stack (* if indented by one, push onto the stack and add an indent token *)
       else raise (Failure "SSyntaxError: invalid indentation detected!"); (* else raise an error *)
   in aux current tokens [] base
-
-
-let indent_file tokens base current =
-    let rec aux curr s out stack = match s with
-    | [] -> (curr, stack, List.rev out)
-    | Parser.NOP :: (Parser.EOL :: t) -> aux 0 t out stack;
-    | Parser.CEND :: (Parser.EOL :: t) -> aux 0 t out stack;
-    | Parser.TAB :: t -> aux (curr + 1) t out stack;
-    | Parser.COLON :: (Parser.EOL :: t) -> (Stack.push (curr + 1) stack; aux curr (Parser.EOL :: t) (Parser.INDENT :: (Parser.COLON :: out)) stack)
-    | Parser.EOL :: t -> aux 0 t (Parser.SEP :: out) stack 
-    | a :: t -> if Stack.top stack = curr then aux curr t (a::out) stack (* do nothing, continue with next character *)
-      else if Stack.top stack > curr then let _ = Stack.pop stack in aux curr (a :: t) (Parser.DEDENT :: out) stack (* if dedented, pop off the stack and add a DEDENT token *)
-      else if curr = (Stack.top stack) + 1 then let _ = Stack.push curr stack in aux curr (a :: t) (Parser.INDENT :: out) stack (* if indented by one, push onto the stack and add an indent token *)
-      else raise (Failure "SSyntaxError: invalid indentation detected!"); (* else raise an error *)
-  in aux current tokens [] base
-
 
 (* search_env_opt: search the given environment variable for valid search paths 
 and search these for files of the form path/name, return channel if exists, None otherwise *)
@@ -85,7 +69,7 @@ let get_ast path =
     try let line = (input_line chan) ^ "\n" in (* add newline for parser, gets stripped by input_line *)
      let lexbuf = (Lexing.from_string line) in
      let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
-     let (curr, stack, formatted) = indent_file temp stack current in
+     let (curr, stack, formatted) = indent temp stack current in
      formatted @ (read curr stack)
    with End_of_file -> close_in chan; Array.make (Stack.length stack - 1) Parser.DEDENT |> Array.to_list
   in let formatted = ref (read 0 base) in
@@ -165,6 +149,7 @@ let rec strip_stmt = function
   | If(a, b, c) -> If(a, strip_stmt b, strip_stmt c)
   | While(a, b) -> While(a, strip_stmt b)
   | For(a, b, c) -> For(a, b, strip_stmt c)
+  | Range(a, b, c) -> Range(a, b, strip_stmt c)
   | Block(x) -> Block(strip_print x)
   | _ as x -> x
 
@@ -213,7 +198,7 @@ let rec from_console map past run =
       | h :: t -> formatted := t ; h in
 
     let program = 
-      if not run then ((strip_print past) @ (Parser.program token (Lexing.from_string "")))
+      if run then ((strip_print past) @ (Parser.program token (Lexing.from_string "")))
       else (Parser.program token (Lexing.from_string "")) in
 
     let imported_program = parse_imports program in
@@ -221,7 +206,7 @@ let rec from_console map past run =
     let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; } imported_program) in (* temporarily here to check validity of SAST *)
     let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
     
-    if not run then
+    if run then
       let output = codegen sast in
       List.iter print_endline output; flush stdout; 
       from_console map imported_program run
@@ -248,7 +233,7 @@ let rec from_file map fname run = (* todo combine with loop *)
     let () = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)
     let () = Sys.chdir original_path in
 
-    if not run then 
+    if run then 
       let output = codegen sast in
       List.iter print_endline output; flush stdout;
 
@@ -264,12 +249,12 @@ let () =
   Arg.parse speclist (fun path -> if not !set then fpath := path; set := true; ) usage; (* parse command line arguments *)
   let emptymap = StringMap.empty in 
 
-  if !set then from_file emptymap !fpath !norun
+  if !set then from_file emptymap !fpath !run
   else
   ( 
     Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
     try 
-      from_console emptymap [] !norun 
+      from_console emptymap [] !run 
     with Scanner.Eof -> exit 0
   )
 

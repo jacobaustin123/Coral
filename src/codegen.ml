@@ -368,15 +368,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   let (int_print_fn,int_print_b) = build_special_ctype_fn FPrint "int" in
   let (char_print_fn,char_print_b) = build_special_ctype_fn FPrint "char" in
   let (float_print_fn,float_print_b) = build_special_ctype_fn FPrint "float" in
-  let (bool_print_fn,bool_print_b) = build_special_ctype_fn FPrint "bool" in
+  let (bool_print_fn, bool_print_b) = build_special_ctype_fn FPrint "bool" in
+  
   let get_print_fn_lval = function
-    |"int" -> int_print_fn
-    |"float" -> float_print_fn
-    |"char" -> char_print_fn
-    |"bool" -> bool_print_fn
+    | "int" -> int_print_fn
+    | "float" -> float_print_fn
+    | "char" -> char_print_fn
+    | "bool" -> bool_print_fn
     | _ -> L.const_pointer_null ctype_print_pt
-  in
-  let get_print_builder = function
+
+  in let get_print_builder = function
     |"int" -> int_print_b
     |"float" -> float_print_b
     |"char" -> char_print_b
@@ -884,7 +885,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   
         (* print message and exit *)
         let err_message =
-          let info = "invalid use of " ^ (Utilities.binop_to_string op) ^ " operator" in
+          let info = "RuntimeError: invalid use of " ^ (Utilities.binop_to_string op) ^ " operator." in
             L.build_global_string info "error message" bad_op_bd in
         let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_op_bd in
           ignore(L.build_call printf_func [| str_format_str1 ; err_message |] "printf" bad_op_bd);
@@ -968,7 +969,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                   | Greater -> L.build_fcmp L.Fcmp.Ogt
                   | Geq     -> L.build_fcmp L.Fcmp.Oge
                   | And | Or ->
-                      raise (Failure "internal error: semant should have rejected and/or on float")
+                      raise (Failure "CodegenError: internal error: semant should have rejected and/or on float")
                 )
             ) in
               (Raw(binop_instruction v1 v2 "binop_result" the_state.b),the_state)
@@ -978,7 +979,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             generic_binop (build_temp_box rawval ty1 the_state.b) (Box(boxval))
           |(Box(v1),Box(v2)) -> generic_binop (Box(v1)) (Box(v2))
         ) in (res,the_state)
-      |SCall(fexpr, arg_expr_list, SNop) -> raise (Failure "Generic scalls partially implemented and disabled");
+
+      |SCall(fexpr, arg_expr_list, SNop) -> raise (Failure "CodegenError: Generic scalls partially implemented and disabled");
         tstp ("GENERIC SCALL of "^(string_of_int (List.length arg_expr_list))^" args");
         (* eval the arg exprs *)
         let argc = List.length arg_expr_list in
@@ -1212,7 +1214,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         the_state
       | SNop -> the_state
       | SPrint e -> 
-            let (_,t) = e in
+            let (_, t) = e in
             let (res,the_state) = expr the_state e in
             (match res with
                 |Raw(v) -> tstp "raw"; (match t with
@@ -1221,7 +1223,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                     | Bool -> ignore(L.build_call printf_func [| int_format_str ; v |] "printf" the_state.b);  the_state
                     | String -> ignore(L.build_call printf_func [| string_format_str ; v |] "printf" the_state.b);  the_state
                 )
-                |Box(v) ->tstp "box";
+                |Box(v) -> tstp "box";
                     (*let cobjptr = L.build_alloca cobj_t "tmp" b in
                     ignore(L.build_store v cobjptr b);*)
                     (*ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t v b) |] "printf" the_state.b); the_state*)

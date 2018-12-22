@@ -1,2 +1,2 @@
 4
-invalid argument types for + operator
+RuntimeError: invalid argument types for + operator

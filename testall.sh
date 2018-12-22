@@ -147,7 +147,7 @@ if [ $# -ge 1 ]
 then
     files=$@
 else
-    files="tests/test-*.cl tests/sfail-*.cl tests/stest-*.cl" # tests/fail-*.cl 
+    files="tests/test-*.cl tests/sfail-*.cl tests/stest-*.cl tests/fail-*.cl"
 fi
 
 for file in $files

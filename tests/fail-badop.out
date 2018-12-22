@@ -1,2 +1,2 @@
 3
-invalid use of + operator
+RuntimeError: invalid use of + operator.
