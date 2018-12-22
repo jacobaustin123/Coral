@@ -278,8 +278,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   in
 
   let build_getcap_clist clist_p b =
-
-    let gep_addr = L.build_struct_gep clist_p clist_cap_idx "__gep_addr" b in
+    let gep_addr = L.build_struct_gep clist_p clist_cap_idx "__gep_addr" b in (* DA PROBLEM *)
     let gep_addr_as_intptr = L.build_bitcast gep_addr int_pt "__gep_addr_as_intptr" b in
     let capacity = L.build_load gep_addr_as_intptr "__capacity" b in
     capacity
@@ -536,7 +535,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
     (* null pointers to fill empty capacity *)
     let elms_w_nulls = if List.length elm_pts_as_cobjptrs < capacity
-      then elm_pts_as_cobjptrs@(Array.to_list (Array.make (capacity - List.length elm_pts) (L.const_pointer_null cobj_pt)))
+      then elm_pts_as_cobjptrs @ (Array.to_list (Array.make (capacity - List.length elm_pts) (L.const_pointer_null cobj_pt)))
       else elm_pts_as_cobjptrs in
 
     (* stores the data *)
@@ -863,7 +862,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       let (e2',the_state) = expr the_state e2 in
 
       let generic_binop box1 box2 = 
-          let (Box(v1),Box(v2)) = (box1,box2) in
+          let (Box(v1), Box(v2)) = (box1, box2) in
           let fn_idx = (match op with
             | Add      -> ctype_add_idx
             | Sub      -> ctype_sub_idx
@@ -879,6 +878,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             | And      -> ctype_and_idx
             | Or       -> ctype_or_idx
             | ListAccess -> ctype_idx_idx ) in
+
         let fn_p = build_getctypefn_cobj fn_idx v1 the_state.b in
 
         (* exception handling: invalid_op *)
@@ -912,7 +912,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         (* check for arg exception *)
   
         let _ = match op with
-          | ListAccess ->
+          | ListAccess -> (* check and make sure v2 is an int *)
             let typ1 = ctype_int in
             let typ2 = build_gettype_cobj v2 the_state.b in
             let typ1_as_int = L.build_ptrtoint typ1 int_t "typ1_as_int" the_state.b in
@@ -943,34 +943,37 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
           ignore(L.build_br proceed_bb bad_arg_bd);
 
         (* exception handling: index out of bounds *)
-        let _ = match op with
+
+        let the_state = match op with
           | ListAccess ->
-             let bad_acc_bb = L.append_block context "bad_acc" the_state.func in
-             let bad_acc_bd = L.builder_at_end context bad_acc_bb in
 
-             let proceed_bb = L.append_block context "proceed" the_state.func in
+            let proceed_bb = L.append_block context "proceed" the_state.func in
+            let bad_acc_bb = L.append_block context "bad_acc" the_state.func in
+            let bad_acc_bd = L.builder_at_end context bad_acc_bb in
 
-             (* check for out of bounds exception *)
+                       (* check for out of bounds exception *)
              let idx_arg = build_getdata_cobj int_t v2 the_state.b in
-             let capacity = build_getcap_clist self_p the_state.b in
-             let outofbounds = L.build_icmp L.Icmp.Sge idx_arg capacity "inbounds" the_state.b in (* other_p is index being accessed *)
+             (* ignore(L.build_call printf_func [| int_format_str; idx_arg |] "printf" the_state.b); *)
+             let list_ptr = build_getlist_cobj v1 the_state.b in
+             let length = build_getlen_clist list_ptr the_state.b in
+             let lt_length = L.build_icmp L.Icmp.Sge idx_arg length "lt_length" the_state.b in (* other_p is index being accessed *)
+             let gt_zero = L.build_icmp L.Icmp.Slt idx_arg (L.const_int int_t 0) "gt_zero" the_state.b in (* other_p is index being accessed *)
+             let outofbounds = L.build_or lt_length gt_zero "inbounds" the_state.b in
                ignore(L.build_cond_br outofbounds bad_acc_bb proceed_bb the_state.b);
 
-             (* print message and exit *)
              let err_message =
-               let info = "invalid index parameter: out of bounds" in
+               let info = "RuntimeError: list index out of bounds" in
                  L.build_global_string info "error message" bad_acc_bd in
              let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_acc_bd in
                ignore(L.build_call printf_func [| str_format_str1; err_message |] "printf" bad_acc_bd);
                ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_acc_bd);
 
-             (* return to normal control flow *)
              let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
-               ignore(L.build_br proceed_bb bad_acc_bd);
-          | _ -> ()
-        in
-
-        let result = L.build_call fn_p [| v1 ; v2 |] "binop_result" the_state.b in
+               ignore(L.build_br proceed_bb bad_acc_bd); the_state
+                 
+          | _ -> the_state
+      
+      in let result = L.build_call fn_p [| v1 ; v2 |] "binop_result" the_state.b in
         (Box(result),the_state)
       in
       (* setup binop boi *)
@@ -988,8 +991,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
           Box(binop_boi)
       in
 
-      let (res,the_state) = (match (e1',e2') with
-          |(Raw(v1),Raw(v2)) -> 
+      let (res, the_state) = (match (e1', e2') with
+          | (Raw(v1), Raw(v2)) ->
               let binop_instruction = (match ty1 with  
                 |Int|Bool -> (match op with
                   | Add     -> L.build_add
@@ -1021,11 +1024,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                 )
             ) in
               (Raw(binop_instruction v1 v2 "binop_result" the_state.b),the_state)
-          |(Box(boxval),Raw(rawval)) -> 
+          | (Box(boxval), Raw(rawval)) -> 
             generic_binop (Box(boxval)) (build_binop_boi rawval ty2)
-          |(Raw(rawval),Box(boxval)) -> 
+          | (Raw(rawval),Box(boxval)) -> 
             generic_binop (build_binop_boi rawval ty1) (Box(boxval))
-          |(Box(v1),Box(v2)) -> generic_binop (Box(v1)) (Box(v2))
+          | (Box(v1), Box(v2)) -> generic_binop (Box(v1)) (Box(v2))
         ) in (res,the_state)
       |SCall(fexpr, arg_expr_list, SNop) -> tstp ("GENERIC SCALL of "^(string_of_int (List.length arg_expr_list))^" args");
         (* eval the arg exprs *)
@@ -1133,8 +1136,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             |Int|Float|Bool -> Raw(result)
             |_ -> Box(result)
         ) in (res,the_state)
-    | SListAccess(e1,e2)  -> expr the_state (SBinop(e1,ListAccess,e2), ty)
-    |SUnop(op, e1) ->
+    | SListAccess(e1, e2)  -> expr the_state (SBinop(e1, ListAccess, e2), ty)
+
+    | SUnop(op, e1) ->
       let (_,ty1) = e1 in
       let (e1',the_state) = expr the_state e1 in
       let (res,the_state) = (match e1' with
