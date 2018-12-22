@@ -775,10 +775,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
   let lookup namespace bind = (*tstp (string_of_sbind bind);*)
       let bind = match bind with
-        |Bind(n, Int)|Bind(n, Float)|Bind(n, Bool) | Bind(n, String) -> bind
-        |Bind(n,_) -> Bind(n,Dyn)
-      in
-      try BindMap.find bind namespace
+        | Bind(n, Int)| Bind(n, Float)| Bind(n, Bool) | Bind(n, String) -> bind
+        | Bind(n, _) -> Bind(n, Dyn)
+      in try BindMap.find bind namespace
         with Not_found -> lookup_global_binding bind
   in
 
@@ -1006,7 +1005,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
         ) in (res,the_state)
 
-      | SCall(fexpr, arg_expr_list, SNop) -> raise (Failure "CodegenError: Generic scalls partially implemented and disabled");
+      | SCall(fexpr, arg_expr_list, SNop) -> raise (Failure "CodegenError: Generic SCalls partially implemented and disabled.");
         tstp ("GENERIC SCALL of "^(string_of_int (List.length arg_expr_list))^" args");
         (* eval the arg exprs *)
         let argc = List.length arg_expr_list in
@@ -1048,8 +1047,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         (Box(result),the_state)
         
 
-      |SCall(fexpr, arg_expr_list, SFunc(sfdecl)) -> 
-      tstp ("OPTIMIZED SCALL of "^sfdecl.sfname^" with binds:"); List.iter pbind sfdecl.sformals; tstp ("returns:"^(string_of_typ sfdecl.styp));tstp "(end of binds)";
+      | SCall(fexpr, arg_expr_list, SFunc(sfdecl)) -> 
+        tstp ("OPTIMIZED SCALL of "^sfdecl.sfname^" with binds:"); List.iter pbind sfdecl.sformals; tstp ("returns:"^(string_of_typ sfdecl.styp));tstp "(end of binds)";
         (*ignore(expr the_state fexpr);*) (* I guess we dont care abt the result of this since we just recompile from the sfdecl anyways *)
         (*let (_,the_state) = expr the_state fexpr in*)
         let arg_types = List.map (fun (_,ty) -> ty) arg_expr_list in
@@ -1067,8 +1066,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let arg_vals = List.map unwrap_if_raw arg_dataunits in
 
         let optim_func = (match (SfdeclMap.find_opt sfdecl the_state.optim_funcs) with
-          |Some(optim_func) -> optim_func
-          |None -> tstp "(no optimized version found, generating new one)";
+          | Some(optim_func) -> optim_func
+          | None -> tstp "(no optimized version found, generating new one)";
             (* now lets build the optimized function *)
             let formal_types = (Array.of_list arg_types) in
             let ftype = L.function_type (ltyp_of_typ sfdecl.styp) (Array.of_list arg_lltypes) in  (* note sformals would work in place of arg_types w some modification *)
@@ -1103,7 +1102,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             |Int|Float|Bool -> Raw(result)
             |_ -> Box(result)
         ) in (res,the_state)
-    | SListAccess(e1, e2)  -> expr the_state (SBinop(e1, ListAccess, e2), ty)
+
+    | SListAccess(e1, e2)  -> expr the_state (SBinop(e1, ListAccess, e2), ty) (* hack to convert list access to binop version *)
 
     | SUnop(op, e1) ->
       let (_,ty1) = e1 in
@@ -1151,7 +1151,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     | SList(el, t) ->
         let transform_if_needed raw_ty = function
             |Box(v) -> Box(v)
-            |Raw(v) -> build_temp_box v raw_ty the_state.b
+            |Raw(v) -> match raw_ty with 
+                | Dyn -> raise (Failure "CodegenError: unexpected type encountered in list passed from semant")
+                | _ -> build_temp_box v raw_ty the_state.b
         in
 
       let (elements, the_state) = List.fold_left (fun (l, the_state) e -> 
@@ -1186,7 +1188,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let (_, tp_rhs) = e in
         let (e', the_state) = expr the_state e in
         let get_binds = function
-          | SLVar (Bind (name, explicit_type)) ->  (Bind(name, tp_rhs), explicit_type)
+          | SLVar (Bind (name, explicit_type)) -> match tp_rhs with
+              | Dyn -> (Bind(name, explicit_type), explicit_type)
+              | _ -> (Bind(name, tp_rhs), explicit_type) (* Dyn = explicit_type in this case *)
           | _ -> raise (Failure "CodegenError: this kind of assignment has not been implemented")
 
         in let binds = List.map get_binds lvalue_list in (* saving explicit type for runtime error checking *)
@@ -1198,45 +1202,48 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
           let the_state = (match rhs with
             | Raw(v) -> (match lbind with
                | RawAddr(addr) -> ignore(L.build_store v addr the_state.b); the_state
-               | BoxAddr(_,_) -> tstp "ERROR, assinging Raw to BoxAddr"; the_state) (** shd crash in future **)
-            | Box(v) -> (match lbind with
-               | RawAddr(_) -> tstp "ERROR, assigning Box to RawAddr"; the_state
-               | BoxAddr(addr, _) ->
-                  let the_state = (match tp_lhs with
-                    | Dyn -> the_state
-                    | _ ->
-                      (* exception handling: invalid assign *)
-                      let bad_asn_bb = L.append_block context "bad_asn" the_state.func in
-                      let bad_asn_bd = L.builder_at_end context bad_asn_bb in
+               | BoxAddr(_, _) -> raise (Failure "CodegenError: unexpected address returned in assignment."))
+            | Box(v) ->
+                let the_state = (match tp_lhs with
+                  | Dyn -> the_state
+                  | _ ->
+                    (* exception handling: invalid assign *)
+                    let bad_asn_bb = L.append_block context "bad_asn" the_state.func in
+                    let bad_asn_bd = L.builder_at_end context bad_asn_bb in
 
-                      let proceed_bb = L.append_block context "proceed" the_state.func in
+                    let proceed_bb = L.append_block context "proceed" the_state.func in
 
-                      (* check for asn exception *)
-                      let ctp_lhs = ctype_of_ASTtype tp_lhs in (* type of lefthand expression *)
-                      let ctp_rhs = build_gettype_cobj v the_state.b in
-                      let _ = (match ctp_lhs with
-                        | None -> ()
-                        | Some ctp_lhs ->
+                    (* check for asn exception *)
+                    let ctp_lhs = ctype_of_ASTtype tp_lhs in (* type of lefthand expression *)
+                    let ctp_rhs = build_gettype_cobj v the_state.b in
+                    let _ = (match ctp_lhs with
+                      | None -> ()
+                      | Some ctp_lhs ->
 
-                          let lhs_as_int = L.build_ptrtoint ctp_lhs int_t "lhs_as_int" the_state.b in
-                          let rhs_as_int = L.build_ptrtoint ctp_rhs int_t "rhs_ rtp_as_int" the_state.b in
-                          let diff = L.build_sub lhs_as_int rhs_as_int "diff" the_state.b in
-                          let invalid_asn = L.build_icmp L.Icmp.Ne diff (L.const_int int_t 0) "invalid_asn" the_state.b in
-                            ignore(L.build_cond_br invalid_asn bad_asn_bb proceed_bb the_state.b);)
-                      in
+                        let lhs_as_int = L.build_ptrtoint ctp_lhs int_t "lhs_as_int" the_state.b in
+                        let rhs_as_int = L.build_ptrtoint ctp_rhs int_t "rhs_ rtp_as_int" the_state.b in
+                        let diff = L.build_sub lhs_as_int rhs_as_int "diff" the_state.b in
+                        let invalid_asn = L.build_icmp L.Icmp.Ne diff (L.const_int int_t 0) "invalid_asn" the_state.b in
+                          ignore(L.build_cond_br invalid_asn bad_asn_bb proceed_bb the_state.b);)
+                    in
 
-                      (* print message and exit *)
-                      let err_message =
-                        let info = "invalid assignment to object of type " ^ (Utilities.type_to_string tp_rhs) in
-                          L.build_global_string info "error message" bad_asn_bd in
-                      let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_asn_bd in
-                        ignore(L.build_call printf_func [| str_format_str1; err_message |] "printf" bad_asn_bd);
-                        ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_asn_bd);
+                    (* print message and exit *)
+                    let err_message =
+                      let info = "RuntimeError: invalid assignment to object of type " ^ (Utilities.type_to_string tp_lhs) in
+                        L.build_global_string info "error message" bad_asn_bd in
+                    let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_asn_bd in
+                      ignore(L.build_call printf_func [| str_format_str1; err_message |] "printf" bad_asn_bd);
+                      ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_asn_bd);
 
-                      (* return to normal control flow *)
-                      let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
-                        ignore(L.build_br proceed_bb bad_asn_bd); the_state)
-               in ignore(L.build_store v addr the_state.b); the_state))
+                    (* return to normal control flow *)
+                    let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
+                      ignore(L.build_br proceed_bb bad_asn_bd); the_state)
+               in (match lbind with
+                   | RawAddr(addr) -> let data = build_getdata_cobj (ltyp_of_typ tp_lhs) v the_state.b in ignore(L.build_store data addr the_state.b); the_state
+                   | BoxAddr(addr, _) -> ignore(L.build_store v addr the_state.b); the_state
+                )
+            )
+
           in the_state
         in
        let (the_state, _) = List.fold_left (fun (the_state, rhs) lhs ->

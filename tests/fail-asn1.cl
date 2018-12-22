@@ -6,4 +6,4 @@ def dynamic():
 
 z = dynamic()
 
-a : int = z
+a : float = z
