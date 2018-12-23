@@ -691,11 +691,19 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       |Bind(_,ty) -> ty
   in
   let ltyp_of_typ = function
-      |Int -> int_t
-      |Float -> float_t
-      |Bool -> bool_t
-      |_ -> cobj_pt
+      | Int -> int_t
+      | Float -> float_t
+      | Bool -> bool_t
+      | _ -> cobj_pt
       (** todo lists and stuff **)
+  in
+  let const_of_typ = function
+      | Int -> L.const_null int_t
+      | Float -> L.const_null float_t
+      | Bool -> L.const_null bool_t
+      | Dyn -> tstp "const_of_typ called on Dyn"; L.const_null cobj_pt
+      | _ -> tstp "unexpected const_of_typ encountered"; raise (Failure "unexpected type encountered in const_of_typ")
+
   in
 
   (** allocate for all the bindings and put them in a map **)
@@ -720,23 +728,48 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         |Int -> L.const_null int_t
         |Float -> L.const_null float_t
         |Bool -> L.const_null bool_t
-        |_ -> L.define_global ((prettyname_of_bind bind)^"_obj") (L.const_named_struct cobj_t [|L.const_pointer_null char_pt;L.const_pointer_null ctype_pt|]) the_module
+        | _ -> L.define_global ((prettyname_of_bind bind) ^ "_obj") (L.const_named_struct cobj_t [|L.const_pointer_null char_pt; L.const_pointer_null ctype_pt|]) the_module
         (*L.define_global (prettyname_of_bind bind) (the_cobj) the_module*)
 
         (*|_ -> L.define_global (prettyname_of_bind bind) (L.const_null cobj_t) the_module*)
         (** TODO impl lists and everything! and strings. idk how these will work **)
       in
+
+      let get_const_ptr typ = match typ with 
+        | Int -> L.const_pointer_null int_pt
+        | Float -> L.const_pointer_null float_pt
+        | Bool -> L.const_pointer_null bool_pt
+        | Dyn -> L.const_pointer_null cobj_pt
+
+      in 
+
+      let ltyp_of_typ = function
+      | Int -> int_t
+      | Float -> float_t
+      | Bool -> bool_t
+      | _ -> cobj_pt
+      (** todo lists and stuff **)
+      
+      in
+
       let allocate bind = 
         let alloc_result = 
           (match local_builder_opt with
             |None -> L.define_global (prettyname_of_bind bind) (get_const bind) the_module
-            |Some(builder) -> L.build_alloca (ltyp_of_typ (type_of_bind bind)) (prettyname_of_bind bind) builder
+            |Some(builder) -> match type_of_bind bind with
+              | Dyn -> 
+                  let addr = L.build_alloca (ltyp_of_typ (type_of_bind bind)) (prettyname_of_bind bind) builder in 
+                  let cobj_addr = L.build_malloc cobj_t "__new_objptr" builder in
+                  ignore(L.build_store cobj_addr addr builder);
+                  let cobj = L.const_named_struct cobj_t [|L.const_pointer_null char_pt; L.const_pointer_null ctype_pt|] in
+                  ignore(L.build_store cobj cobj_addr builder); addr
+              | _ -> L.build_alloca (ltyp_of_typ (type_of_bind bind)) (prettyname_of_bind bind) builder
           )
         in
         let (res,newbind) = match (type_of_bind bind) with
-          |Int|Float|Bool -> (RawAddr(alloc_result),bind)
-          |_ -> (BoxAddr(alloc_result,false),Bind((name_of_bind bind),Dyn))
-        in (res,newbind)
+          | Int | Float | Bool -> (RawAddr(alloc_result), bind)
+          |_ -> (BoxAddr(alloc_result, false), Bind((name_of_bind bind), Dyn))
+        in (res, newbind)
       in
         List.fold_left (fun map bind -> 
             let (res,newbind) = allocate bind in 
@@ -821,11 +854,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     in
 
   (* explicit_t is desired type to check, rhs is an llvalue (for boxed types only) *)
-  let runtime_type_check explicit_t rhs the_state = 
-    let bad_asn_bb = L.append_block context "bad_asn" the_state.func in
+  let runtime_type_check explicit_t rhs message the_state = 
+    let bad_asn_bb = L.append_block context "bad_runtime_check" the_state.func in
     let bad_asn_bd = L.builder_at_end context bad_asn_bb in
 
-    let proceed_bb = L.append_block context "proceed" the_state.func in
+    let proceed_bb = L.append_block context "proceed_runtime_check" the_state.func in
 
     (* check for asn exception *)
     let ctp_lhs = ctype_of_ASTtype explicit_t in (* type of lefthand expression *)
@@ -835,15 +868,15 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       | Some ctp_lhs ->
 
         let lhs_as_int = L.build_ptrtoint ctp_lhs int_t "lhs_as_int" the_state.b in
-        let rhs_as_int = L.build_ptrtoint ctp_rhs int_t "rhs_ rtp_as_int" the_state.b in
+        let rhs_as_int = L.build_ptrtoint ctp_rhs int_t "rhs_rtp_as_int" the_state.b in
         let diff = L.build_sub lhs_as_int rhs_as_int "diff" the_state.b in
-        let invalid_asn = L.build_icmp L.Icmp.Ne diff (L.const_int int_t 0) "invalid_asn" the_state.b in
+        let invalid_asn = L.build_icmp L.Icmp.Ne diff (L.const_int int_t 0) "invalid_runtime_check" the_state.b in
           ignore(L.build_cond_br invalid_asn bad_asn_bb proceed_bb the_state.b);)
     in
 
     (* print message and exit *)
     let err_message =
-      let info = "RuntimeError: invalid assignment to type " ^ string_of_typ explicit_t; in
+      let info = message in
         L.build_global_string info "error message" bad_asn_bd in
     let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_asn_bd in
       ignore(L.build_call printf_func [| str_format_str1; err_message |] "printf" bad_asn_bd);
@@ -852,6 +885,42 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     (* return to normal control flow *)
     let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
       ignore(L.build_br proceed_bb bad_asn_bd); the_state
+
+  in
+
+  let defined_check addr message the_state = 
+    let bad_op_bb = L.append_block context "bad_defined" the_state.func in
+    let bad_op_bd = L.builder_at_end context bad_op_bb in
+
+    let proceed_bb = L.append_block context "proceed" the_state.func in
+
+    (* check for undefined box exception *)
+    let cobj_addr = L.build_load addr "load_ptr" the_state.b in
+    let dataptr_addr = L.build_struct_gep cobj_addr cobj_data_idx "dat_p_p" the_state.b in
+    let dataptr = L.build_load dataptr_addr "load_ptr2" the_state.b in
+    let invalid_addr = L.build_is_null dataptr "invalid_defined" the_state.b in
+      ignore(L.build_cond_br invalid_addr bad_op_bb proceed_bb the_state.b);
+
+    (* print message and exit *)
+    let err_message =
+      let info = message in
+        L.build_global_string info "error message" bad_op_bd in
+    let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_op_bd in
+      ignore(L.build_call printf_func [| str_format_str1 ; err_message |] "printf" bad_op_bd);
+      ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_op_bd);
+
+    let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
+          ignore(L.build_br proceed_bb bad_op_bd); the_state
+
+  in
+
+  let raise_failure message the_state = 
+    let err_message = 
+    let info = message in
+    L.build_global_string info "error message" the_state.b in
+    let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" the_state.b in
+    ignore(L.build_call printf_func [| str_format_str1; err_message |] "printf" the_state.b);
+    ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" the_state.b);  the_state
 
   in
 
@@ -873,11 +942,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
     | SVar name ->
         (match (lookup namespace (Bind(name, ty))) with
-          |RawAddr(addr) -> (Raw(L.build_load addr name the_state.b),the_state)
-          |BoxAddr(addr,needs_update) ->
-             let the_state = rebox_if_needed (BoxAddr(addr,needs_update)) name the_state in
+          | RawAddr(addr) -> (Raw(L.build_load addr name the_state.b),the_state)
+          | BoxAddr(addr, needs_update) ->
+            let the_state = defined_check addr ("RuntimeError: undefined variable " ^ name) the_state in (* maybe could be optimized sometimes *)
+            let the_state = rebox_if_needed (BoxAddr(addr,needs_update)) name the_state in
             (Box(L.build_load addr name the_state.b),the_state)
         )
+
     | SBinop(e1, op, e2) ->
       let (_,ty1) = e1
       and (_,ty2) = e2 in
@@ -1112,12 +1183,14 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
 
         let (the_state, arg_dataunits) = List.fold_left eval_arg (the_state, []) (List.rev arg_expr_list) in
-        let unwrap_if_raw (the_state, out) (box, tp_lhs) = (match (box, tp_lhs) with  (* maybe will crash, who knows. trying to get Dyn to work. *)
+        let unwrap_if_raw (the_state, out) (box, (Bind(name, _), tp_lhs)) = (match (box, tp_lhs) with  (* maybe will crash, who knows. trying to get Dyn to work. *)
             | Raw(v), _ -> (the_state, v :: out)
             | Box(v), Dyn -> (the_state, v :: out)
-            | Box(v), _ -> let the_state = runtime_type_check tp_lhs v the_state in let data = build_getdata_cobj (ltyp_of_typ tp_lhs) v the_state.b in (the_state, data :: out)
+            | Box(v), _ -> let the_state = runtime_type_check tp_lhs v ("RuntimeError: invalid type assigned to " ^ name) the_state in 
+                let data = build_getdata_cobj (ltyp_of_typ tp_lhs) v the_state.b in (the_state, data :: out)
           )
-        in let (the_state, arg_vals) = List.fold_left unwrap_if_raw (the_state, []) (List.combine arg_dataunits explicit_types) in
+
+        in let (the_state, arg_vals) = List.fold_left unwrap_if_raw (the_state, []) (List.combine arg_dataunits binds) in
         let arg_vals = List.rev arg_vals in
         let optim_func = (match (SfdeclMap.find_opt sfdecl the_state.optim_funcs) with
           | Some(optim_func) -> tstp ("(optimized version of " ^ sfdecl.sfname ^ " found!)"); optim_func
@@ -1154,7 +1227,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             let instr = (match sfdecl.styp with
               | Null -> (fun b -> tstp ("add_terminal invoked on Null for " ^ sfdecl.sfname); L.build_ret (build_new_cobj_init int_t (L.const_int int_t 0) b) b)
               | Dyn -> (fun b -> tstp ("add_terminal invoked on Dyn for " ^ sfdecl.sfname); L.build_ret (build_new_cobj_init int_t (L.const_int int_t 0) b) b)
-              | _ -> (fun b -> tstp ("add_terminal invoked on known type for " ^ sfdecl.sfname); L.build_ret (build_new_cobj_init int_t (L.const_int int_t 0) b) b)
+              | _ -> (fun b -> tstp ("add_terminal invoked on known type for " ^ sfdecl.sfname); L.build_ret (const_of_typ sfdecl.styp) b)
             ) in 
 
             let fn_state = add_terminal fn_state instr in optim_func
@@ -1260,10 +1333,10 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
         in let binds = List.map get_binds lvalue_list in (* saving explicit type for runtime error checking *)
 
-        let addrs = List.map (fun (bind, explicit_type) -> ((lookup namespace bind), explicit_type)) binds in
+        let addrs = List.map (fun (bind, explicit_type) -> ((lookup namespace bind), bind, explicit_type)) binds in
 
         let do_store lhs rhs the_state =
-          let (lbind, tp_lhs) = lhs in
+          let (lbind, bind, tp_lhs) = lhs in
           let the_state = (match rhs with
             | Raw(v) -> (match lbind with
                | RawAddr(addr) -> ignore(L.build_store v addr the_state.b); the_state
@@ -1272,7 +1345,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             | Box(v) ->
                 let the_state = (match tp_lhs with
                   | Dyn -> the_state
-                  | _ ->  runtime_type_check tp_lhs v the_state
+                  | _ ->  runtime_type_check tp_lhs v ("RuntimeError: invalid type assigned to " ^ name_of_bind bind) the_state
                )
 
                in (match lbind with
@@ -1313,10 +1386,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
           | Raw(v) -> (v, the_state)
           | Box(v) -> 
               let the_state = 
-                if typ = Dyn then runtime_type_check Bool v the_state 
+                if typ = Dyn then runtime_type_check Bool v ("RuntimeError: invalid boolean type in if statement") the_state 
                 else the_state 
               in (build_getdata_cobj bool_t v the_state.b, the_state)
         ) in
+
         let merge_bb = L.append_block context "merge" the_function in  
         let build_br_merge = L.build_br merge_bb in 
         let then_bb = L.append_block context "then" the_function in
@@ -1345,7 +1419,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let (e, pred_state) = expr pred_state predicate in 
         let (bool_val, pred_state) = (match e with
           |Raw(v) -> (v, pred_state)
-          |Box(v) -> let pred_state = runtime_type_check Bool v pred_state in (build_getdata_cobj bool_t v pred_state.b, pred_state)
+          |Box(v) -> let pred_state = runtime_type_check Bool v  ("RuntimeError: invalid boolean type in while statement") pred_state in (build_getdata_cobj bool_t v pred_state.b, pred_state)
         ) in
         let the_state = rip_from_inner_state the_state pred_state in
         let merge_bb = L.append_block context "merge" the_function in
@@ -1390,23 +1464,33 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
     | SReturn e -> let (_, ty) = e in
         let (res, the_state) = expr the_state e in
-        (match the_state.generic_func with  (* if generic must ret cobject *)
+        let the_state = (match the_state.generic_func with  (* if generic must ret cobject *)
           | false -> tstp "optimized function return"; (match ty with
             | Null -> raise (Failure "CodegenError: unexpected empty return type in SReturn") (*  L.build_ret (build_new_cobj_init int_t (L.const_int int_t 0) the_state.b) the_state.b *)
             
-            | _ -> L.build_ret (match res with
+            | _ -> let (data, the_state) = (match res with
                 | Raw(v) -> (match the_state.ret_typ with
-                    | Dyn -> tstp "unexpected dynamic return of raw"; (match (build_temp_box v ty the_state.b) with Box(v) -> v)
-                    | _ -> tstp "explicit return of raw"; v
+                    | Dyn -> tstp "dynamic return of raw"; (match (build_temp_box v ty the_state.b) with Box(v) -> (v, the_state))
+                    | _ -> tstp "explicit return of raw"; 
+                      if ty <> the_state.ret_typ then 
+                      let the_state = raise_failure ("RuntimeError: invalid return type (expected " ^ (string_of_typ the_state.ret_typ) ^ ")") the_state 
+                      in ((const_of_typ the_state.ret_typ), the_state)
+                      else (v, the_state)
                 )
-                | Box(v) -> tstp "dynamic return of box"; v (* TODO fix this *)
-            ) the_state.b
+                | Box(v) -> (match the_state.ret_typ with
+                    | Dyn -> tstp "dynamic return of box"; (v, the_state)
+                    | _ -> tstp "explicit return of box"; 
+                      if ty = FuncType then (v, the_state) else (* deal with FuncType more elegantly in the future *)
+                      let the_state = runtime_type_check the_state.ret_typ v ("RuntimeError: invalid return type (expected " ^ (string_of_typ the_state.ret_typ) ^ ")") the_state in
+                      let data = build_getdata_cobj (ltyp_of_typ the_state.ret_typ) v the_state.b in (data, the_state)
+                )
+            ) in (L.build_ret data the_state.b); the_state
           )
-          | true -> tstp "generic function return"; L.build_ret (match res with
-            | Box(v) -> v
-            | Raw(v) -> (match (build_temp_box v ty the_state.b) with Box(v) -> v)
-            ) the_state.b
-        ); the_state
+          | true -> tstp "generic function return"; let (data, the_state) = (match res with
+            | Box(v) -> (v, the_state)
+            | Raw(v) -> (match (build_temp_box v ty the_state.b) with Box(v) -> (v, the_state))
+            ) in (L.build_ret data the_state.b); the_state
+        ) in the_state
 
     | SFunc sfdecl -> the_state (*
         tstp ("CREATING GENERIC FN: " ^ sfdecl.sfname); (* create the generic function object, locals may be typed but all formals are dyn/boxed *)
@@ -1470,8 +1554,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       tstp ("Transforming " ^ name ^ ": " ^ (string_of_typ from_ty) ^ " -> " ^ (string_of_typ to_ty));
       (match (from_ty, to_ty) with
        | (x, y) when x = y -> the_state
-       | (FuncType, Dyn) | (Dyn,FuncType) -> the_state
-       | (Dyn,raw_ty) when raw_ty=Int || raw_ty=Float || raw_ty=Bool ->
+       | (FuncType, Dyn) | (Dyn, FuncType) -> the_state
+       | (Dyn, raw_ty) when raw_ty=Int || raw_ty=Float || raw_ty=Bool ->
          (* get addresses for raw and boxed versions *)
          let unchecked_boxaddr = lookup namespace (Bind(name,Dyn)) in
          let the_state = rebox_if_needed unchecked_boxaddr name the_state in
@@ -1486,13 +1570,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
          ignore(L.build_store data raw_addr the_state.b);
          the_state
  
+
        | (raw_ty, Dyn) when raw_ty = Int || raw_ty = Float || raw_ty = Bool ->
          (* get addresses for raw and boxed versions *)
-         let BoxAddr(box_addr,_) = lookup namespace (Bind(name,Dyn)) (* no need to check needs_update flag bc this is assignment *)
-         and RawAddr(raw_addr) = lookup namespace (Bind(name,raw_ty)) in
+         let BoxAddr(box_addr,_) = lookup namespace (Bind(name, Dyn)) (* no need to check needs_update flag bc this is assignment *)
+         and RawAddr(raw_addr) = lookup namespace (Bind(name, raw_ty)) in
          (* gep for direct pointers to the type and data fields of box *)
-         let cobj_addr = L.build_malloc cobj_t "__new_objptr" the_state.b in
-          ignore(L.build_store cobj_addr box_addr the_state.b);
+         let cobj_addr = L.build_load box_addr "load_cobj" the_state.b in
          (* let cobj_addr = L.build_load box_addr "cobjptr" the_state.b in *)
          let raw_addr = L.build_bitcast raw_addr char_pt "raw" the_state.b in
          let dataptr_addr = L.build_struct_gep cobj_addr cobj_data_idx "dat_p_p" the_state.b in
@@ -1501,7 +1585,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
          (* store raw_addr in the box's dataptr field and update the typeptr *)
          ignore(L.build_store raw_addr dataptr_addr the_state.b);
          ignore(L.build_store (ctype_of_typ raw_ty) typeptr_addr the_state.b);
-         let the_state = change_state the_state (S_needs_reboxing(name,true)) in
+         let the_state = change_state the_state (S_needs_reboxing(name, true)) in
          the_state
       )
   in

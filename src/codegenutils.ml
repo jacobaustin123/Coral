@@ -33,6 +33,7 @@ type state = {
     optim_funcs: L.llvalue SfdeclMap.t;
     generic_func: bool;  (* true if in a totally cfunctionobject function (unoptim) *)
 }
+
 (* a type used by change_state() to succinctly update the state record *)
 type state_component = 
     | S_names of dataunit_addr BindMap.t
