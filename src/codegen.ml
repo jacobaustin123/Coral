@@ -1097,14 +1097,6 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             (the_state, res::args)
         in
 
-        let (the_state, arg_dataunits) = List.fold_left eval_arg (the_state, []) (List.rev arg_expr_list) in
-        let unwrap_if_raw = function  (* maybe will crash, who knows. trying to get Dyn to work. *)
-            | Raw(v) -> v
-            | Box(v) -> v
-        in 
-
-        let arg_vals = List.map unwrap_if_raw arg_dataunits in
-
         let get_binds lhs rhs =
           let Bind (name, explicit_type) = lhs in 
           let (_, tp_rhs) = rhs in 
@@ -1113,11 +1105,20 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
               | _ -> (Bind(name, tp_rhs), explicit_type) (* Dyn = explicit_type in this case *)
 
         in let binds = List.map2 get_binds sfdecl.sformals arg_expr_list in (* saving explicit type for runtime error checking *)
-        let (typed_formals, _) = List.split binds in (* separate the strongly typed formals from the things that need to be type checked *)
+        let (typed_formals, explicit_types) = List.split binds in (* separate the strongly typed formals from the things that need to be type checked *)
+        
         let arg_types = List.map (fun (Bind(_, ty), _) -> ty) binds in
-        let arg_lltypes = List.map ltyp_of_typ arg_types in
+        let arg_lltypes = List.map ltyp_of_typ arg_types in (* arg inferred types *)
 
 
+        let (the_state, arg_dataunits) = List.fold_left eval_arg (the_state, []) (List.rev arg_expr_list) in
+        let unwrap_if_raw (the_state, out) (box, tp_lhs) = (match (box, tp_lhs) with  (* maybe will crash, who knows. trying to get Dyn to work. *)
+            | Raw(v), _ -> (the_state, v :: out)
+            | Box(v), Dyn -> (the_state, v :: out)
+            | Box(v), _ -> let the_state = runtime_type_check tp_lhs v the_state in let data = build_getdata_cobj (ltyp_of_typ tp_lhs) v the_state.b in (the_state, data :: out)
+          )
+        in let (the_state, arg_vals) = List.fold_left unwrap_if_raw (the_state, []) (List.combine arg_dataunits explicit_types) in
+        let arg_vals = List.rev arg_vals in
         let optim_func = (match (SfdeclMap.find_opt sfdecl the_state.optim_funcs) with
           | Some(optim_func) -> tstp ("(optimized version of " ^ sfdecl.sfname ^ " found!)"); optim_func
           | None -> tstp ("(no optimized version of " ^ sfdecl.sfname ^ " found, generating new one)");
@@ -1134,7 +1135,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             (* List.iter (fun (Bind (n, t)) -> print_endline (n ^ ": " ^ string_of_typ t)) sfdecl.sformals; *)
             let fn_namespace = build_binding_list (Some(fn_builder)) (typed_formals @ sfdecl.slocals) in
             let vals_to_store = Array.to_list (L.params optim_func) in
-            let addrs = List.map (fun (bind, explicit_type) -> ((lookup fn_namespace bind), explicit_type)) binds in
+
+            (* let addrs = List.map (fun (bind, explicit_type) -> ((lookup fn_namespace bind), explicit_type)) binds in *)
 
             let addr_of_bind (bind, _) = match (lookup fn_namespace bind) with 
                 |RawAddr(addr) -> addr
@@ -1143,64 +1145,10 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
             let addrs = List.map addr_of_bind binds in
 
-(*             let do_store lhs rhs_addr rhs_box the_state =
-              let (lbind, tp_lhs) = lhs in
-              let the_state = (match rhs_box with
-                | Raw(v) -> (match lbind with
-                   | RawAddr(addr) -> print_endline "raw"; ignore(L.build_store rhs_addr addr fn_builder); the_state
-                   | BoxAddr(_, _) -> raise (Failure "CodegenError: unexpected address returned in assignment."))
-                | Box(v) -> print_endline "box"; 
-                    let the_state = (match tp_lhs with
-                      | Dyn -> print_endline "dyn"; the_state
-                      | _ ->
-                        (* exception handling: invalid assign *)
-                        let bad_asn_bb = L.append_block context "bad_asn" the_state.func in
-                        let bad_asn_bd = L.builder_at_end context bad_asn_bb in
-
-                        let proceed_bb = L.append_block context "proceed" the_state.func in
-
-                        (* check for asn exception *)
-                        let ctp_lhs = ctype_of_ASTtype tp_lhs in (* type of lefthand expression *)
-                        let ctp_rhs = print_endline "this is the problem"; build_gettype_cobj rhs_addr fn_builder in
-                        let _ = (match ctp_lhs with
-                          | None -> print_endline "none"; ()
-                          | Some ctp_lhs -> print_endline "some";
-
-                            let lhs_as_int = L.build_ptrtoint ctp_lhs int_t "lhs_as_int" fn_builder in
-                            let rhs_as_int = L.build_ptrtoint ctp_rhs int_t "rhs_ rtp_as_int" fn_builder in
-                            let diff = L.build_sub lhs_as_int rhs_as_int "diff" fn_builder in
-                            let invalid_asn = L.build_icmp L.Icmp.Ne diff (L.const_int int_t 0) "invalid_asn" fn_builder in
-                              ignore(L.build_cond_br invalid_asn bad_asn_bb proceed_bb fn_builder);)
-                        in
-
-                        (* print message and exit *)
-                        let err_message =
-                          let info = "RuntimeError: invalid assignment to object of type " ^ (Utilities.type_to_string tp_lhs) in
-                            L.build_global_string info "error message" bad_asn_bd in
-                        let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_asn_bd in
-                          ignore(L.build_call printf_func [| str_format_str1; err_message |] "printf" bad_asn_bd);
-                          ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_asn_bd);
-
-                        (* return to normal control flow *)
-                        let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
-                          ignore(L.build_br proceed_bb bad_asn_bd); the_state)
-                   in  (match lbind with
-                       | RawAddr(addr) -> print_endline "raw_addr"; print_endline (string_of_typ tp_lhs); let data = build_getdata_cobj (ltyp_of_typ tp_lhs) rhs_addr fn_builder in 
-                            ignore(L.build_store data addr fn_builder); the_state
-                       | BoxAddr(addr, _) -> print_endline "box_addr"; ignore(L.build_store rhs_addr addr fn_builder); the_state
-                    )
-                )
-
-              in the_state 
-
-            in
-
-            let the_state = List.fold_left2 (fun the_state (rhs_addr, rhs_box) lhs ->
-              let the_state = do_store lhs rhs_addr rhs_box the_state in the_state) the_state (List.combine vals_to_store arg_dataunits) addrs 
-            in *)
-
-            ignore(List.iter2 (fun addr value -> ignore(L.build_store value addr fn_builder)) addrs vals_to_store);
             let fn_state = change_state the_state (S_list([S_names(fn_namespace); S_func(optim_func); S_b(fn_builder); S_rettyp(sfdecl.styp); S_generic_func(false)])) in
+          
+            ignore(List.iter2 (fun addr value -> ignore(L.build_store value addr fn_state.b)) addrs vals_to_store);
+
             let fn_state = stmt fn_state sfdecl.sbody in  
 
             let instr = (match sfdecl.styp with
@@ -1361,9 +1309,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       | SIf (predicate, then_stmt, else_stmt) ->
         let (_, typ) = predicate in
         let (e, the_state) = expr the_state predicate in 
-        let bool_val = (match e with
-          | Raw(v) -> v
-          | Box(v) -> let the_state = if typ = Dyn then runtime_type_check Bool v the_state else the_state in build_getdata_cobj bool_t v the_state.b
+        let (bool_val, the_state) = (match e with
+          | Raw(v) -> (v, the_state)
+          | Box(v) -> 
+              let the_state = 
+                if typ = Dyn then runtime_type_check Bool v the_state 
+                else the_state 
+              in (build_getdata_cobj bool_t v the_state.b, the_state)
         ) in
         let merge_bb = L.append_block context "merge" the_function in  
         let build_br_merge = L.build_br merge_bb in 
@@ -1376,9 +1328,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let else_state = add_terminal (stmt else_state else_stmt) build_br_merge in  (* same deal as with 'then' BB *)
         let the_state = rip_from_inner_state the_state else_state in
         ignore(L.build_cond_br bool_val then_bb else_bb the_state.b);  
-        let the_state = change_state the_state (S_b(L.builder_at_end context merge_bb)) in  
+        let the_state = change_state the_state (S_b(L.builder_at_end context merge_bb)) in 
         the_state
-
+ 
       | SWhile (predicate, body) ->
         let pred_bb = L.append_block context "while" the_function in
         ignore(L.build_br pred_bb the_state.b);
@@ -1389,12 +1341,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let pred_builder = L.builder_at_end context pred_bb in
         (* eval the boolean predicate *)
         let pred_state = change_state the_state (S_b(L.builder_at_end context pred_bb)) in
-        let (e,pred_state) = expr pred_state predicate in 
-        let the_state = rip_from_inner_state the_state pred_state in
-        let bool_val = (match e with
-          |Raw(v) -> v
-          |Box(v) -> build_getdata_cobj bool_t v pred_state.b
+        let (_, t) = predicate in
+        let (e, pred_state) = expr pred_state predicate in 
+        let (bool_val, pred_state) = (match e with
+          |Raw(v) -> (v, pred_state)
+          |Box(v) -> let pred_state = runtime_type_check Bool v pred_state in (build_getdata_cobj bool_t v pred_state.b, pred_state)
         ) in
+        let the_state = rip_from_inner_state the_state pred_state in
         let merge_bb = L.append_block context "merge" the_function in
         ignore(L.build_cond_br bool_val body_bb merge_bb pred_state.b);
         let merge_state = change_state the_state (S_b(L.builder_at_end context merge_bb)) in 

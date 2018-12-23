@@ -10,5 +10,3 @@ def do_wild_things(f, a, b):
 z = do_wild_things(sum, 2 * one(), 4)
 
 print(z)
-
-
