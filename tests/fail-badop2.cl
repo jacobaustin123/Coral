@@ -8,3 +8,10 @@ x = 3
 z = dynamic()
 
 y = z + 3
+print(y)
+
+x = 4
+z = dynamic()
+
+y = z + 3
+print(y)

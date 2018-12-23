@@ -1,2 +1,2 @@
 3
-RuntimeError: invalid use of + operator.
+RuntimeError: unsupported (left) operand type for binary +

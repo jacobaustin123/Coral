@@ -12,5 +12,8 @@ def bar(x):
 x = 3
 
 y = foo()
+
+print(bar(y))
 z = bar(y)
 print(z)
+print(bar(3.0))

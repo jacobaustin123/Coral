@@ -5,7 +5,7 @@ OCB_FLAGS = -tag bin_annot -I src  -use-ocamlfind -lib unix
 OCB = ocamlbuild $(OCB_FLAGS)
 
 all: clean native 
-	./coral.native llvm-test.cl
+	./coral.native test.cl
 
 fn: clean native
 	./coral.native fn-test.cl
