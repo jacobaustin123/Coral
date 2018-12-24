@@ -6,7 +6,7 @@ def foo():
 		return bar
 
 	else:
-		return 4.0
+		return 5.0
 
 def dyn():
 	if x == 3:
