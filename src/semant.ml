@@ -476,7 +476,7 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
       | ListAccess(e, index) :: t ->
         let (t1, e1, _) = expr map e in
         let (t2, e2, _) = expr map index in
-        if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t1 == String then raise (Failure ("STypeError: invalid types for list access"))
+        if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t1 == String then raise (Failure ("STypeError: invalid types for list assignment"))
         else (aux (m, SLListAccess (e1, e2) :: lvalues, locals) t)
 
       | ListSlice(e, low, high) :: t ->
