@@ -436,11 +436,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     | Bool -> Some ctype_bool
     | String -> Some ctype_list
     | Dyn -> None
-    | IntArr -> Some ctype_list
-    | FloatArr -> Some ctype_list
-    | BoolArr -> Some ctype_list
-    | StringArr -> Some ctype_list
     | FuncType -> Some ctype_func
+    | Arr -> Some ctype_list
     | Null -> None
   in
 
@@ -691,10 +688,10 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       let rawdata_addr = L.build_load dataptr_addr "raw_data_addr" b in
       let rawdata = L.build_load rawdata_addr "raw_data" b in
       let format_str = (match data_type with
-        |t when t = int_t -> L.build_global_stringptr "%d\n" "fmt" b
-        |t when t = float_t -> L.build_global_stringptr "%g\n" "fmt" b
-        |t when t = bool_t -> L.build_global_stringptr "%d\n" "fmt" b
-        |t when t = char_t -> L.build_global_stringptr "%c\n" "fmt" b
+        |t when t = int_t -> L.build_global_stringptr "%d" "fmt" b
+        |t when t = float_t -> L.build_global_stringptr "%g" "fmt" b
+        |t when t = bool_t -> L.build_global_stringptr "%d" "fmt" b
+        |t when t = char_t -> L.build_global_stringptr "%c" "fmt" b
       ) in
       ignore(L.build_call printf_func [| format_str ; rawdata |] "printf" b);
       ignore(L.build_ret (L.const_int int_t 0) b);  (* or can ret void? *)
@@ -716,6 +713,10 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
     ignore(L.build_store (L.const_int int_t (0)) nptr b);
     let n = L.build_load nptr "n" b in
     let ln = build_getlen_clist listptr b in
+    let fs1 = L.build_global_stringptr "[" "fmt" b in
+    let fs2 = L.build_global_stringptr ", " "fmt" b in
+    let fs3 = L.build_global_stringptr "]" "fmt" b in
+    ignore(L.build_call printf_func [| fs1 ; L.const_int int_t 0 |] "printf" b);
 
     (* iter block *)
     let iter_bb = L.append_block context "iter" fn in
@@ -735,12 +736,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
     let fn_p = build_getctypefn_cobj ctype_print_idx elmptr body_builder in
     ignore(L.build_call fn_p [|elmptr|] "print_cob" body_builder);
+    ignore(L.build_call printf_func [| fs2 ; L.const_int int_t 0 |] "printf" body_builder);
+
     L.build_br iter_bb body_builder;
 
     let merge_bb = L.append_block context "merge" fn in
     ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
     
     let end_builder = L.builder_at_end context merge_bb in
+    ignore(L.build_call printf_func [| fs3 ; L.const_int int_t 0 |] "printf" end_builder);
+
     ignore(L.build_ret (L.const_int int_t 0) end_builder);  (* or can ret void? *)
   in
 
@@ -849,7 +854,9 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   let main_builder = L.builder_at_end context (L.entry_block main_function) in
   let int_format_str = L.build_global_stringptr "%d\n" "fmt" main_builder
   and string_format_str = L.build_global_stringptr "%s\n" "fmt" main_builder
-  and float_format_str = L.build_global_stringptr "%g\n" "fmt" main_builder in
+  and float_format_str = L.build_global_stringptr "%g\n" "fmt" main_builder
+  and newline_format_str = L.build_global_stringptr "\n" "fmt" main_builder in
+
   let init_state:state = {ret_typ=Int;namespace=BindMap.empty; func=main_function; b=main_builder;optim_funcs=SfdeclMap.empty;generic_func=false} in
 
 
@@ -1398,14 +1405,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let (element, the_state) = expr the_state e in let (_, typ) = e in 
           ((element, typ) :: l, the_state)) ([], the_state) (List.rev el) in
       let (objptr, dataptr) = build_new_cobj clist_t the_state.b in
-      let raw_ty = (match t with
-        | IntArr -> Int
-        | FloatArr -> Float
-        | BoolArr -> Bool
-        | StringArr -> String
-        | Dyn -> Dyn
-      ) in
-      let elements = List.map (fun (elem, t) -> match (transform_if_needed t elem) with Box(v) -> v) elements in
+       let elements = List.map (fun (elem, t) -> match (transform_if_needed t elem) with Box(v) -> v) elements in
       let _ = build_new_clist dataptr elements the_state.b in
         (Box(objptr), the_state)
         
@@ -1427,18 +1427,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let (_, tp_rhs) = e in
         let (e', the_state) = expr the_state e in
 
-        let get_binds bind = 
-          let (Bind (name, explicit_type)) = bind in 
-            (match tp_rhs with 
-              | Dyn -> (Bind(name, explicit_type), explicit_type)
-              | _ -> (Bind(name, tp_rhs), explicit_type)
-            )
+        let get_addrs (the_state, out) = function
+          | SLVar Bind(name, explicit_t) -> (match tp_rhs with
+              | Dyn -> (the_state, (lookup namespace (Bind (name, explicit_t)), name, explicit_t) :: out)
+              | _ -> (the_state, (lookup namespace (Bind(name, tp_rhs)), name, explicit_t) :: out)
+          )
 
-        in let get_addrs (the_state, out) = function
-          | SLVar(x) -> let (bind, explicit_type) = get_binds x in 
-                        (the_state, ((lookup namespace bind), bind, explicit_type) :: out)
-          
-          | SLListAccess(e, idx) -> 
+          | SLListAccess (e, idx) -> 
               let (Box(lpointer), the_state) = expr the_state e in
               let (idx, the_state) = expr the_state idx in
 
@@ -1448,13 +1443,13 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
               ) in
 
               let (Box(result), the_state) = build_getidx_parent_list lpointer idx the_state in
-              (the_state, (BoxAddr(result, false), Bind("list_access", Dyn), Dyn) :: out)
+              (the_state, (BoxAddr(result, false), "list_access", Dyn) :: out)
 
         in let (the_state, addrs) = List.fold_left get_addrs (the_state, []) lvalue_list in (* saving explicit type for runtime error checking *)
         let addrs = List.rev addrs in
 
         let do_store lhs rhs the_state =
-          let (lbind, bind, tp_lhs) = lhs in
+          let (lbind, name, explicit_t) = lhs in
           let the_state = (match rhs with
             | Raw(v) -> (match lbind with
                | RawAddr(addr) -> ignore(L.build_store v addr the_state.b); the_state
@@ -1464,13 +1459,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
              )
 
             | Box(v) ->
-                let the_state = (match tp_lhs with
+                let the_state = (match explicit_t with
                   | Dyn -> the_state
-                  | _ ->  check_explicit_type tp_lhs v ("RuntimeError: invalid type assigned to " ^ name_of_bind bind) the_state
+                  | _ ->  check_explicit_type explicit_t v ("RuntimeError: invalid type assigned to " ^ name) the_state
                )
 
                in (match lbind with
-                   | RawAddr(addr) -> let data = build_getdata_cobj (ltyp_of_typ tp_lhs) v the_state.b in ignore(L.build_store data addr the_state.b); the_state
+                   | RawAddr(addr) -> 
+                      let data = build_getdata_cobj (ltyp_of_typ explicit_t) v the_state.b in 
+                      ignore(L.build_store data addr the_state.b); the_state
+
                    | BoxAddr(addr, _) -> ignore(L.build_store v addr the_state.b); the_state
                   )
           ) in the_state
@@ -1497,7 +1495,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                     ignore(L.build_store v cobjptr b);*)
                     (*ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t v b) |] "printf" the_state.b); the_state*)
                     let fn_p = build_getctypefn_cobj ctype_print_idx v the_state.b in
-                    ignore(L.build_call fn_p [|v|] "print_cob" the_state.b); the_state
+                    ignore(L.build_call fn_p [|v|] "print_cob" the_state.b); 
+                    ignore(L.build_call printf_func [| newline_format_str ; L.const_int int_t 0 |] "printf" the_state.b); the_state
             )
               
     
@@ -1574,11 +1573,18 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
          let body_builder = L.builder_at_end context body_bb in
 
          let elmptr = build_idx listptr n "binop_result" body_builder in
-           let BoxAddr(var_addr,_) = (lookup namespace var) in (*assignment so ok to throw away the needs_update bool*)
-           ignore(L.build_store elmptr var_addr body_builder);
-         let the_state = change_state the_state (S_b(body_builder)) in
-           add_terminal (stmt the_state body) (L.build_br iter_bb);
+          let the_state = change_state the_state (S_b(body_builder)) in
 
+         let Bind(name, explicit_t) = var in 
+         let the_state = (match (lookup namespace var) with (*assignment so ok to throw away the needs_update bool*)
+              | BoxAddr(var_addr, _) -> ignore(L.build_store elmptr var_addr the_state.b); the_state
+              | RawAddr(var_addr) -> 
+                  let the_state = check_explicit_type explicit_t elmptr ("RuntimeError: invalid type assigned to " ^ name) the_state in
+                  let rawdata = build_getdata_cobj (ltyp_of_typ explicit_t) elmptr the_state.b in
+                  ignore(L.build_store rawdata var_addr the_state.b); the_state
+          ) in
+
+         add_terminal (stmt the_state body) (L.build_br iter_bb);
          let merge_bb = L.append_block context "merge" the_function in
            ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
          let the_state = change_state the_state (S_b(L.builder_at_end context merge_bb)) in
@@ -1602,7 +1608,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                 | Box(v) -> (match the_state.ret_typ with
                     | Dyn -> tstp "dynamic return of box"; (v, the_state)
                     | _ -> tstp "explicit return of box"; 
-                      if ty = FuncType then (v, the_state) else (* deal with FuncType more elegantly in the future *)
+                      if ty = FuncType || ty = Arr then (v, the_state) else (* deal with FuncType more elegantly in the future *)
                       let the_state = check_explicit_type the_state.ret_typ v ("RuntimeError: invalid return type (expected " ^ (string_of_typ the_state.ret_typ) ^ ")") the_state in
                       let data = build_getdata_cobj (ltyp_of_typ the_state.ret_typ) v the_state.b in (data, the_state)
                 )

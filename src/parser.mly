@@ -12,7 +12,7 @@ Python-style indentation based parsing scheme. The second is the full parser */
 %token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE PLUSEQ MINUSEQ TIMESEQ DIVIDEEQ EXPEQ
 %token EXP NOT NEG SEP AND OR ARROW NOP TYPE PRINT FUNC
 %token TAB COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE DOT
-%token BOOL INT FLOAT STRING BOOLARR INTARR FLOATARR STRINGARR
+%token BOOL INT FLOAT STRING ARR
 %token CLASS IMPORT CEND RANGE
 %token INDENT DEDENT
 %token LPAREN RPAREN
@@ -118,11 +118,8 @@ token:
   | INT { INT }
   | FLOAT { FLOAT }
   | FUNC { FUNC }
+  | ARR { ARR }
   | STRING { STRING }
-  | INTARR { INTARR }
-  | FLOATARR { FLOATARR }
-  | STRINGARR { STRINGARR }
-  | BOOLARR { BOOLARR }
   | INDENT { INDENT }
   | DEDENT { DEDENT }
   | VARIABLE { VARIABLE($1) }
@@ -256,10 +253,7 @@ typ:
   | INT { Int }
   | BOOL { Bool }
   | STRING { String }
-  | FLOATARR { FloatArr }
-  | INTARR { IntArr }
-  | BOOLARR { BoolArr }
-  | STRINGARR { StringArr }
+  | ARR { Arr }
   | FUNC { FuncType }
 
 /* expr: these are all possible expressions allowed in the Coral language. each

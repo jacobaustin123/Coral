@@ -41,10 +41,7 @@ rule token = parse
   | "str" { STRING }
   | "bool" { BOOL }
   | "func" { FUNC }
-  | "int[]" { INTARR }
-  | "float[]" { FLOATARR }
-  | "str[]" { STRINGARR }
-  | "bool[]" { BOOLARR }
+  | "list" { ARR }
   | ',' { COMMA }
   | '.' { DOT }
   | "!=" { NEQ }

@@ -14,7 +14,7 @@ type literal =
   | FloatLit of float
   | StringLit of string
 
-type typ = Int | Float | Bool | String | Dyn | IntArr | FloatArr | BoolArr | StringArr | FuncType | Null
+type typ = Int | Float | Bool | String | Dyn | Arr | FuncType | Null
 
 type bind = Bind of string * typ
 
@@ -79,10 +79,7 @@ let rec string_of_typ = function
   | Bool -> "bool"
   | String -> "str"
   | Dyn -> "dyn"
-  | IntArr -> "int[]"
-  | FloatArr -> "float[]"
-  | BoolArr -> "bool[]"
-  | StringArr -> "str[]"
+  | Arr -> "[]"
   | FuncType -> "func"
   | Null -> "null"
 

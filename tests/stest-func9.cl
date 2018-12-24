@@ -4,9 +4,9 @@ def foo(x, y):
 
 type(foo("hi", 4.0)) # float
 
-def bar(x : int[]):
+def bar(x : list):
 	acc = 0
-	for i in x:
+	for i : int in x:
 		acc += i
 	return acc
 

@@ -74,10 +74,7 @@ let print = function
   | Parser.BOOL -> "BOOL"
   | Parser.FLOAT -> "FLOAT"
   | Parser.STRING -> "STRING"
-  | Parser.INTARR -> "INTARR"
-  | Parser.FLOATARR -> "FLOATARR"
-  | Parser.STRINGARR -> "STRINGARR"
-  | Parser.BOOLARR -> "BOOLARR"
+  | Parser.ARR -> "ARR"
   | Parser.NOP -> "NOP"
   | Parser.TYPE -> "TYPE"
   | Parser.PLUSEQ -> "PLUSEQ"
@@ -134,10 +131,7 @@ let type_to_string = function
   | Float -> "float"
   | Bool -> "bool"
   | String -> "string"
-  | IntArr -> "int list"
-  | FloatArr -> "float list"
-  | BoolArr -> "bool list"
-  | StringArr -> "string list"
+  | Arr -> "list"
   | FuncType -> "func"
   | Null -> "null"
 
@@ -163,25 +157,14 @@ let binop_to_string = function
   | Or -> "or"
   | ListAccess -> "[]"
 
-(* type_to_array converts type to corresponding array type for array handling *)
-let type_to_array = function
-  | Int -> IntArr
-  | Bool -> BoolArr
-  | String -> StringArr
-  | Float -> FloatArr
-  | _ as x -> x
-
-(* array_to_type converts array types to their corresponding non-array types *)
-let array_to_type = function
-  | IntArr -> Int
-  | BoolArr -> Bool
-  | FloatArr -> Float
-  | StringArr -> String
-  | _ as x -> x
+(* is_bind checks if something is a bind *)
+let is_var = function
+  | Var(_) -> true
+  | _ -> false
 
 (* is_arr checks if a given type is an array type. Strings are currently treated as arrays *)
 let is_arr = function
-  | StringArr | BoolArr | IntArr | FloatArr -> true
+  | Arr -> true
   | String -> true
   | _ -> false
 

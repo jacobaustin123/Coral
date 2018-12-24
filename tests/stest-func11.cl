@@ -1,5 +1,5 @@
-def foo(x : int[]) -> float:
-	def bar(x : int[]) -> int:
+def foo(x : list) -> float:
+	def bar(x : list) -> int:
 		return 3
 	type(bar([4, 2])) # int
 	def bar():
