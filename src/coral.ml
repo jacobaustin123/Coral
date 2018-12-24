@@ -12,6 +12,9 @@ let run = ref true
 let fpath = ref ""
 let set = ref false
 
+(* exceptions flag enables or disables runtime exceptions *)
+let exceptions = ref true
+
 (* usage: usage message for function calls *)
 let usage = "usage: " ^ Sys.argv.(0) ^ " [file] [-d] [-r]"
 
@@ -20,7 +23,8 @@ let speclist =
 [
   ( "[file]", Arg.String (fun foo -> ()), ": compile from a file instead of the default interpreter");
   ( "-d", Arg.Set debug, ": print debugging information at compile time");
-  ( "-no-compile", Arg.Clear run, ": run semantic checking on a file instead of running it");
+  ( "-no-compile", Arg.Clear run, ": run semantic checking on a file instead of compiling or running it");
+  ( "-no-except", Arg.Clear exceptions, ": run compilation on a file without runtime checks");
 ]
 
 (* this is a complicated function. it takes the lexed buffer, runs it through the tokenize parser in order to 
@@ -176,7 +180,7 @@ evaluate it, and return the output *)
 let codegen sast = 
   let output = 
   (try 
-    let m = Codegen.translate sast in
+    let m = Codegen.translate sast !exceptions in
     Llvm_analysis.assert_valid_module m;
     let oc = open_out "source.ll" in
     Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc;

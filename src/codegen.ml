@@ -17,7 +17,9 @@ let list_growth_factor = 2
 
 
 (* translate : Sast.program -> Llvm.module *)
-let translate prgm =   (* note this whole thing only takes two things: globals= list of (typ,name) (bindings basically). And functions= list of sfunc_decl's (each has styp sfname sformals slocals sbody) *)
+let translate prgm except =   (* note this whole thing only takes two things: globals= list of (typ,name) (bindings basically). And functions= list of sfunc_decl's (each has styp sfname sformals slocals sbody) *)
+  exceptions := except;
+
   let context = L.global_context () in  (* context keeps track of global vars and stuff i think *)
   
   (* Create the LLVM compilation module boolo which
