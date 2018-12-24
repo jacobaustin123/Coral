@@ -83,10 +83,11 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   and ctype_neg_idx = 13
   and ctype_not_idx = 14
   and ctype_idx_idx = 15
-  and ctype_call_idx = 16
-  and ctype_heapify_idx = 17
-  and ctype_print_idx = 18
-  and num_ctype_idxs = 19 in (** must update when adding idxs! (tho not used anywhere yet) **)
+  and ctype_idx_parent_idx = 16
+  and ctype_call_idx = 17
+  and ctype_heapify_idx = 18
+  and ctype_print_idx = 19
+  and num_ctype_idxs = 20 in (** must update when adding idxs! (tho not used anywhere yet) **)
 
   (* type sigs for fns in ctype *)
   let ctype_add_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
@@ -105,6 +106,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   and ctype_neg_t = L.function_type cobj_pt [| cobj_pt |]
   and ctype_not_t = L.function_type cobj_pt [| cobj_pt |]
   and ctype_idx_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
+  and ctype_idx_parent_t = L.function_type (L.pointer_type cobj_pt) [| cobj_pt; cobj_pt |]
   and ctype_call_t = L.function_type cobj_pt [| cobj_pt ; cobj_ppt |]
   and ctype_heapify_t = L.function_type int_t [| cobj_pt |]
   and ctype_print_t = L.function_type int_t [| cobj_pt |] in
@@ -126,6 +128,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   and ctype_neg_pt = L.pointer_type ctype_neg_t
   and ctype_not_pt = L.pointer_type ctype_not_t
   and ctype_idx_pt = L.pointer_type ctype_idx_t
+  and ctype_idx_parent_pt = L.pointer_type ctype_idx_parent_t
   and ctype_call_pt = L.pointer_type ctype_call_t 
   and ctype_heapify_pt = L.pointer_type ctype_heapify_t 
   and ctype_print_pt = L.pointer_type ctype_print_t in
@@ -153,6 +156,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   	ctype_neg_pt;
     ctype_not_pt;
   	ctype_idx_pt;
+    ctype_idx_parent_pt;
     ctype_call_pt;
     ctype_heapify_pt;
   	ctype_print_pt |] false);
@@ -219,6 +223,16 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
      cobjptr
   in
 
+  let build_idx_parent self_p other_p name b =
+   (* get elememnt *)
+   let gep_addr = L.build_struct_gep self_p clist_data_idx "__gep_addr" b in
+   let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (L.pointer_type (L.pointer_type cobj_pt)) "__gep_addr_as_cobjptrptrptr" b in
+   let gep_addr_as_cobjptrptr = L.build_load gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
+   let parent = L.build_gep gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
+   parent
+
+  in
+
   let built_ops =
   	 let typs = ["int"; "float"; "bool"; "char"; "list"] in
 
@@ -238,7 +252,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
        Oprt("or", Some((L.build_or), int_t), None, Some((L.build_or), bool_t), Some((L.build_or), char_t), None);
        Uoprt("neg", Some((L.build_neg), int_t), Some((L.build_fneg), float_t), Some((L.build_neg), bool_t), None, None);
        Uoprt("not", Some((L.build_not), int_t), None, Some((L.build_not), bool_t), Some((L.build_not), char_t), None);
-       Loprt("idx", None, None, None, None, Some((build_idx), int_t))
+       Loprt("idx", None, None, None, None, Some((build_idx), int_t));
+       Loprt("idx_parent", None, None, None, None, Some((build_idx_parent), int_t))
        ] in
 
   	 List.map (fun t -> let bops = List.map (function
@@ -266,8 +281,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                 | "geq" -> ctype_geq_t
                 | "and" -> ctype_and_t
                 | "or" -> ctype_or_t) o)
-				      in BOprt(Some(((fn, bd), tfn)))
-			      | None -> BOprt(None)
+				      in BOprt(o, Some(((fn, bd), tfn)))
+			      | None -> BOprt(o, None)
           in bop
         | Uoprt(o, i, f, b, c, l) ->
           let tfn = match t with
@@ -282,8 +297,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 			        let (fn, bd) = build_ctype_fn (t ^ "_" ^ o) ((function
                 | "neg" -> ctype_neg_t
                 | "not" -> ctype_not_t) o)
-				      in BUoprt(Some(((fn, bd), tfn)))
-			      | None -> BUoprt(None)
+				      in BUoprt(o, Some(((fn, bd), tfn)))
+			      | None -> BUoprt(o, None)
 		      in bop
  	      | Loprt(o, i, f, b, c, l) ->
           let tfn = match t with
@@ -296,9 +311,10 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 		      let bop = match tfn with
 			      | Some tfn ->
 			        let (fn, bd) = build_ctype_fn (t ^ "_" ^ o) ((function
-                | "idx" -> ctype_idx_t) o)
-				      in BLoprt(Some(((fn, bd), tfn)))
-			      | None -> BLoprt(None)
+                | "idx" -> ctype_idx_t
+                | "idx_parent" -> ctype_idx_parent_t) o)
+				      in BLoprt(o, Some(((fn, bd), tfn)))
+			      | None -> BLoprt(o, None)
           in bop) ops
         in (t, bops)) typs
       in
@@ -323,6 +339,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         L.const_pointer_null ctype_neg_pt; (* ctype_neg_pt *)
         L.const_pointer_null ctype_not_pt; (* ctype_not_pt *)
         L.const_pointer_null ctype_idx_pt; (* ctype_not_pt *)
+        L.const_pointer_null ctype_idx_parent_pt; (* ctype_not_pt *)
         func_call_fn; (* ctype_call_pt *)
         L.const_pointer_null ctype_heapify_pt; (* ctype_not_pt *)
         L.const_pointer_null ctype_print_pt; (* ctype_not_pt *)
@@ -402,15 +419,15 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   (* define the default CTypes *)
   let [ctype_int; ctype_float; ctype_bool; ctype_char; ctype_list] =
   	List.map (fun (t, bops) -> L.define_global ("ctype_" ^ t) (L.const_named_struct ctype_t (Array.of_list ((List.map (function
-  	  | BOprt(o) -> (match o with
+  	  | BOprt(fn, o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
   	    | None -> L.const_pointer_null ctype_add_pt)
-  	  | BUoprt(o) -> (match o with
+  	  | BUoprt(fn, o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
   	    | None -> L.const_pointer_null ctype_neg_pt)
-  	  | BLoprt(o) -> (match o with
+  	  | BLoprt(fn, o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
-        | None -> L.const_pointer_null ctype_idx_pt)) bops) @ ([L.const_pointer_null ctype_call_pt; get_heapify_fn_lval t ; get_print_fn_lval t])))) the_module) built_ops
+        | None -> match fn with "idx" -> L.const_pointer_null ctype_idx_pt | "idx_parent" -> L.const_pointer_null ctype_idx_parent_pt)) bops) @ ([L.const_pointer_null ctype_call_pt; get_heapify_fn_lval t ; get_print_fn_lval t])))) the_module) built_ops
   	    in
 
   let ctype_of_ASTtype = function
@@ -580,7 +597,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   in
 
   List.iter (fun (t, bops) -> List.iter (function
-    | BOprt(o) -> (match o with
+    | BOprt(_, o) -> (match o with
       | Some(((fn, bd), tfn)) ->
         let (tf, tp) = tfn in
         let (self_data, other_data) = boilerplate_binop (get_t t) fn bd in
@@ -588,7 +605,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let result = build_new_cobj_init tp result_data bd in
         ignore(L.build_ret result bd)
       | None -> ())
-    | BUoprt(o) -> (match o with
+    | BUoprt(_, o) -> (match o with
       | Some(((fn, bd), tfn)) ->
         let (tf, tp) = tfn in
         let (self_data) = boilerplate_uop (get_t t) fn bd in
@@ -596,7 +613,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let result = build_new_cobj_init tp result_data bd in
         ignore(L.build_ret result bd)
       | None -> ())
-    | BLoprt(o) -> (match o with
+    | BLoprt(_, o) -> (match o with
       | Some(((fn, bd), tfn)) ->
         let (tf, tp) = tfn in
         let (self_data, other_data) = boilerplate_lop (get_t t) fn bd in
@@ -1045,6 +1062,41 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
   in
 
+  (* safe getidx for lists, with type checking *)
+  let build_getidx_list list_pointer index_pointer the_state =
+    let fn_p = build_getctypefn_cobj ctype_idx_idx list_pointer the_state.b in
+    let the_state = check_null fn_p "RuntimeError: unsupported operand type(s) for list access" the_state in
+    let the_state = check_explicit_type Int index_pointer "RuntimeError: unsupported operand type(s) for list access" the_state in
+    let the_state = check_bounds list_pointer index_pointer "RuntimeError: list index out of bounds" the_state in
+    let result = L.build_call fn_p [| list_pointer ; index_pointer |] "binop_result" the_state.b in
+    (Box(result), the_state)
+  in
+
+  (* safe getidx for lists, with type checking *)
+  let build_getidx_parent_list list_pointer index_pointer the_state =
+    let fn_p = build_getctypefn_cobj ctype_idx_parent_idx list_pointer the_state.b in
+    let the_state = check_null fn_p "RuntimeError: unsupported operand type(s) for list access" the_state in
+    let the_state = check_explicit_type Int index_pointer "RuntimeError: unsupported operand type(s) for list access" the_state in
+    let the_state = check_bounds list_pointer index_pointer "RuntimeError: list index out of bounds" the_state in
+    let result = L.build_call fn_p [| list_pointer ; index_pointer |] "parent_binop_result" the_state.b in
+    (Box(result), the_state)
+
+(*   (* safe getidx for lists, used to get the parent of the index for assignment *)
+  let build_getidx_parent_list list_pointer index_pointer the_state =
+    let the_state = check_null fn_p ("RuntimeError: unsupported operand type(s) for list access") the_state in
+    let the_state = check_explicit_type Int index_pointer "RuntimeError: unsupported operand type(s) for list access" the_state in
+    let the_state = check_bounds list_pointer index_pointer "RuntimeError: list index out of bounds" the_state in
+    let n = build_getdata_cobj int_t index_pointer the_state.b in 
+
+    let listptr = build_getlist_cobj list_pointer the_state.b in 
+    let gep_addr = L.build_struct_gep listptr clist_data_idx "__gep_addr" the_state.b in
+    let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (L.pointer_type (L.pointer_type cobj_pt)) "__gep_addr_as_cobjptrptrptr" the_state.b in
+    let gep_addr_as_cobjptrptr = L.build_load gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" the_state.b in
+    let result = L.build_gep gep_addr_as_cobjptrptr [| n |] "__gep_addr_as_cobjptrptr" the_state.b in (* other_p is offset of sought element *)
+    (Box(result), the_state) *)
+  
+  in
+
   let raise_failure message the_state = 
     if not !exceptions then the_state else
 
@@ -1092,6 +1144,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
       let generic_binop box1 box2 = 
           let (Box(v1), Box(v2)) = (box1, box2) in
+
           let fn_idx = (match op with
             | Add      -> ctype_add_idx
             | Sub      -> ctype_sub_idx
@@ -1108,49 +1161,14 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
             | Or       -> ctype_or_idx
             | ListAccess -> ctype_idx_idx ) in
 
-        let fn_p = build_getctypefn_cobj fn_idx v1 the_state.b in
-
-        let the_state = check_null fn_p ("RuntimeError: unsupported operand type(s) for binary " ^ (Utilities.binop_to_string op)) the_state in
-  
-        (* check for arg exception *)
-        let the_state = match op with
-          | ListAccess -> check_explicit_type Int v2 ("RuntimeError: unsupported operand type(s) for binary " ^ (Utilities.binop_to_string op)) the_state
-          | _ -> check_same_type v1 v2 ("RuntimeError: unsupported operand type(s) for binary " ^ (Utilities.binop_to_string op)) the_state
-
-        in
-
-        (* exception handling: index out of bounds *)
-
-        let the_state = match op with
-          | ListAccess ->
-            let proceed_bb = L.append_block context "proceed" the_state.func in
-            let bad_acc_bb = L.append_block context "bad_acc" the_state.func in
-            let bad_acc_bd = L.builder_at_end context bad_acc_bb in
-
-                       (* check for out of bounds exception *)
-             let idx_arg = build_getdata_cobj int_t v2 the_state.b in
-             (* ignore(L.build_call printf_func [| int_format_str; idx_arg |] "printf" the_state.b); *)
-             let list_ptr = build_getlist_cobj v1 the_state.b in
-             let length = build_getlen_clist list_ptr the_state.b in
-             let lt_length = L.build_icmp L.Icmp.Sge idx_arg length "lt_length" the_state.b in (* other_p is index being accessed *)
-             let gt_zero = L.build_icmp L.Icmp.Slt idx_arg (L.const_int int_t 0) "gt_zero" the_state.b in (* other_p is index being accessed *)
-             let outofbounds = L.build_or lt_length gt_zero "inbounds" the_state.b in
-               ignore(L.build_cond_br outofbounds bad_acc_bb proceed_bb the_state.b);
-
-             let err_message =
-               let info = "RuntimeError: list index out of bounds" in
-                 L.build_global_string info "error message" bad_acc_bd in
-             let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_acc_bd in
-               ignore(L.build_call printf_func [| str_format_str1; err_message |] "printf" bad_acc_bd);
-               ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_acc_bd);
-
-             let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
-               ignore(L.build_br proceed_bb bad_acc_bd); the_state
-                 
-          | _ -> the_state
-      
-        in let result = L.build_call fn_p [| v1 ; v2 |] "binop_result" the_state.b in
-        (Box(result), the_state)
+        (match op with 
+          | ListAccess -> build_getidx_list v1 v2 the_state
+          | _ -> 
+            let fn_p = build_getctypefn_cobj fn_idx v1 the_state.b in
+            let the_state = check_null fn_p ("RuntimeError: unsupported operand type(s) for binary " ^ (Utilities.binop_to_string op)) the_state in
+            let the_state = check_same_type v1 v2 ("RuntimeError: unsupported operand type(s) for binary " ^ (Utilities.binop_to_string op)) the_state in
+            let result = L.build_call fn_p [| v1 ; v2 |] "binop_result" the_state.b in
+            (Box(result), the_state))
 
       in
 
@@ -1409,22 +1427,41 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
         let (_, tp_rhs) = e in
         let (e', the_state) = expr the_state e in
 
-        let get_binds = function
-          | SLVar (Bind (name, explicit_type)) -> match tp_rhs with
+        let get_binds bind = 
+          let (Bind (name, explicit_type)) = bind in 
+            (match tp_rhs with 
               | Dyn -> (Bind(name, explicit_type), explicit_type)
-              | _ -> (Bind(name, tp_rhs), explicit_type) (* Dyn = explicit_type in this case *)
-          | _ -> raise (Failure "CodegenError: this kind of assignment has not been implemented")
+              | _ -> (Bind(name, tp_rhs), explicit_type)
+            )
 
-        in let binds = List.map get_binds lvalue_list in (* saving explicit type for runtime error checking *)
+        in let get_addrs (the_state, out) = function
+          | SLVar(x) -> let (bind, explicit_type) = get_binds x in 
+                        (the_state, ((lookup namespace bind), bind, explicit_type) :: out)
+          
+          | SLListAccess(e, idx) -> 
+              let (Box(lpointer), the_state) = expr the_state e in
+              let (idx, the_state) = expr the_state idx in
 
-        let addrs = List.map (fun (bind, explicit_type) -> ((lookup namespace bind), bind, explicit_type)) binds in
+              let idx = (match idx with
+                | Raw(rawval) -> let Box(newval) = build_temp_box rawval Int the_state.b in newval
+                | Box(boxval) -> boxval
+              ) in
+
+              let (Box(result), the_state) = build_getidx_parent_list lpointer idx the_state in
+              (the_state, (BoxAddr(result, false), Bind("list_access", Dyn), Dyn) :: out)
+
+        in let (the_state, addrs) = List.fold_left get_addrs (the_state, []) lvalue_list in (* saving explicit type for runtime error checking *)
+        let addrs = List.rev addrs in
 
         let do_store lhs rhs the_state =
           let (lbind, bind, tp_lhs) = lhs in
           let the_state = (match rhs with
             | Raw(v) -> (match lbind with
                | RawAddr(addr) -> ignore(L.build_store v addr the_state.b); the_state
-               | BoxAddr(_, _) -> raise (Failure "CodegenError: unexpected address returned in assignment."))
+               | BoxAddr(addr, _) -> tstp "raw assigned to box (list assignment)";
+                    let Box(data) = build_temp_box v tp_rhs the_state.b in 
+                    ignore(L.build_store data addr the_state.b); the_state
+             )
 
             | Box(v) ->
                 let the_state = (match tp_lhs with
@@ -1438,8 +1475,8 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
                   )
           ) in the_state
 
-        in let (the_state, _) = List.fold_left (fun (the_state, rhs) lhs ->
-          let the_state = do_store lhs rhs the_state in (the_state, e')) (the_state, e') addrs in
+        in let the_state = List.fold_left (fun the_state lhs ->
+          let the_state = do_store lhs e' the_state in the_state) the_state addrs in
         the_state
 
       | SNop -> the_state
