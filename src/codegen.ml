@@ -687,6 +687,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   ignore(List.iter (fun t -> build_print_fn (get_t t) (get_print_fn_lval t) (get_print_builder t)) ["int";"float";"bool";"char"]);
 
  
+ (* builds the print function for lists. basically just iterates over all the objects and calls their print functions *)
   let build_list_print_fn fn b =   (* data_type = int_t etc *)
     let formals_llvalues = (Array.to_list (L.params fn)) in
     let [remote_self_p] = formals_llvalues in
