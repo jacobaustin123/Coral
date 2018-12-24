@@ -338,7 +338,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   in
 
   let build_special_ctype_fn fn ty_str =
-      let (name,fn_ty) = (match fn with
+      let (name, fn_ty) = (match fn with
         | FPrint -> ("print", ctype_print_t)
         | FHeapify -> ("heapify", ctype_heapify_t)
         | FCall -> ("call", ctype_call_t)
@@ -365,19 +365,22 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
   let (char_print_fn, char_print_b) = build_special_ctype_fn FPrint "char" in
   let (float_print_fn, float_print_b) = build_special_ctype_fn FPrint "float" in
   let (bool_print_fn, bool_print_b) = build_special_ctype_fn FPrint "bool" in
-  
+  let (list_print_fn, list_print_b) = build_special_ctype_fn FPrint "list" in
+
   let get_print_fn_lval = function
     | "int" -> int_print_fn
     | "float" -> float_print_fn
     | "char" -> char_print_fn
     | "bool" -> bool_print_fn
+    | "list" -> list_print_fn
     | _ -> L.const_pointer_null ctype_print_pt
 
   in let get_print_builder = function
-    |"int" -> int_print_b
-    |"float" -> float_print_b
-    |"char" -> char_print_b
-    |"bool" -> bool_print_b
+    | "int" -> int_print_b
+    | "float" -> float_print_b
+    | "char" -> char_print_b
+    | "bool" -> bool_print_b
+    | "list" -> list_print_b
   in
 
   (* Heapify *)
@@ -398,7 +401,7 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
 
   (* define the default CTypes *)
   let [ctype_int; ctype_float; ctype_bool; ctype_char; ctype_list] =
-  	List.map (fun (t, bops) -> L.define_global ("ctype_" ^ t) (L.const_named_struct ctype_t (Array.of_list ((List.map(function
+  	List.map (fun (t, bops) -> L.define_global ("ctype_" ^ t) (L.const_named_struct ctype_t (Array.of_list ((List.map (function
   	  | BOprt(o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
   	    | None -> L.const_pointer_null ctype_add_pt)
@@ -679,8 +682,55 @@ let translate prgm =   (* note this whole thing only takes two things: globals= 
       ignore(L.build_call printf_func [| format_str ; rawdata |] "printf" b);
       ignore(L.build_ret (L.const_int int_t 0) b);  (* or can ret void? *)
   in
+
   (* build the print functions *)
   ignore(List.iter (fun t -> build_print_fn (get_t t) (get_print_fn_lval t) (get_print_builder t)) ["int";"float";"bool";"char"]);
+
+ 
+  let build_list_print_fn fn b =   (* data_type = int_t etc *)
+    let formals_llvalues = (Array.to_list (L.params fn)) in
+    let [remote_self_p] = formals_llvalues in
+    let objptr = boilerplate_till_load remote_self_p "self_p" b in
+    (* the box dataptr_addr points to the raw data we want to copy *)
+
+    let listptr = build_getlist_cobj objptr b in
+    let nptr = L.build_alloca int_t "nptr" b in
+    ignore(L.build_store (L.const_int int_t (0)) nptr b);
+    let n = L.build_load nptr "n" b in
+    let ln = build_getlen_clist listptr b in
+
+    (* iter block *)
+    let iter_bb = L.append_block context "iter" fn in
+    ignore(L.build_br iter_bb b);
+
+    let iter_builder = L.builder_at_end context iter_bb in
+    let n = L.build_load nptr "n" iter_builder in
+    let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
+    ignore(L.build_store nnext nptr iter_builder);
+
+    let iter_complete = (L.build_icmp L.Icmp.Sge) n ln "iter_complete" iter_builder in (* true if n exceeds list length *)
+
+    (* body of for loop *)
+    let body_bb = L.append_block context "list_print_body" fn in
+    let body_builder = L.builder_at_end context body_bb in
+    let elmptr = build_idx listptr n "list_index_result" body_builder in
+
+    let fn_p = build_getctypefn_cobj ctype_print_idx elmptr body_builder in
+    ignore(L.build_call fn_p [|elmptr|] "print_cob" body_builder);
+    L.build_br iter_bb body_builder;
+
+    let merge_bb = L.append_block context "merge" fn in
+    ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
+    
+    let end_builder = L.builder_at_end context merge_bb in
+    ignore(L.build_ret (L.const_int int_t 0) end_builder);  (* or can ret void? *)
+  in
+
+
+ let _ =
+    let (fn, b) = (list_print_fn, list_print_b) in
+    ignore(build_list_print_fn fn b);
+  in
 
   (* define exit *)
   let exit_t : L.lltype =   (* define the type that the printf function should be *)
