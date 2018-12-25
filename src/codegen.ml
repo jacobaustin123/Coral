@@ -1140,7 +1140,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         (match (lookup namespace (Bind(name, ty))) with
           | RawAddr(addr) -> (Raw(L.build_load addr name the_state.b),the_state)
           | BoxAddr(addr, needs_update) ->
-            let the_state = check_defined addr ("RuntimeError: undefined variable " ^ name) the_state in (* maybe could be optimized sometimes *)
+            let the_state = check_defined addr ("RuntimeError: name '" ^ name ^ "' is not defined") the_state in (* maybe could be optimized sometimes *)
             let the_state = rebox_if_needed (BoxAddr(addr, needs_update)) name the_state in
             (Box(L.build_load addr name the_state.b),the_state)
         )
