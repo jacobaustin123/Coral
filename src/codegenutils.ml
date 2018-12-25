@@ -57,11 +57,11 @@ type unop_builder = ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltyp
 (* operator generation! *)
 type oprt =
   | Oprt of
-      string * binop_builder option * binop_builder option * binop_builder option * binop_builder option * binop_builder option
+      string * binop_builder option * binop_builder option * binop_builder option * binop_builder option * binop_builder option * binop_builder option
   | Uoprt of
-      string * unop_builder option * unop_builder option * unop_builder option * unop_builder option * unop_builder option
+      string * unop_builder option * unop_builder option * unop_builder option * unop_builder option * unop_builder option * unop_builder option
   | Loprt of
-      string * listop_builder option * listop_builder option * listop_builder option * listop_builder option * listop_builder option
+      string * listop_builder option * listop_builder option * listop_builder option * listop_builder option * listop_builder option * listop_builder option
 
 (* operators after they've been built *)
 type built_oprt =

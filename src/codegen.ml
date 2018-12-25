@@ -12,7 +12,7 @@ open Codegenutils
 let exceptions = ref true
 
 (* fields for lists, current irrelevant because lists have fixed size *)
-let initial_list_size = 10
+let initial_list_size = 0
 let list_growth_factor = 2
 
 
@@ -52,6 +52,10 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   (* define cobj_list and ctype_list structs *)
   let clist_t = L.named_struct_type context "CList" in (*define a named struct*)
   let clist_pt = L.pointer_type clist_t in
+
+  (* define cobj_list and ctype_list structs *)
+  let cstring_t = L.named_struct_type context "CString" in (*define a named struct*)
+  let cstring_pt = L.pointer_type cstring_t in
 
   (* define ctype and ctype structs *)
   let ctype_t = L.named_struct_type context "CType" in (*define a named struct*)
@@ -141,6 +145,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   (* set ctype and cobj struct bodies *)
   ignore(L.struct_set_body cobj_t [| char_pt; ctype_pt |] false);
   ignore(L.struct_set_body clist_t [| char_pt; int_t; int_t |] false);
+  ignore(L.struct_set_body cstring_t [| char_pt; int_t; int_t |] false);
+
   ignore(L.struct_set_body ctype_t [|
   	ctype_add_pt;
   	ctype_sub_pt;
@@ -169,6 +175,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
      | "bool" -> bool_t
      | "char" -> char_t
      | "list" -> clist_t
+     | "string" -> cstring_t
    in
 
    let build_ctype_fn fname ftype = (* ftype = "ctype_add_t" etc *)
@@ -236,36 +243,37 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   in
 
   let built_ops =
-  	 let typs = ["int"; "float"; "bool"; "char"; "list"] in
+  	 let typs = ["int"; "float"; "bool"; "char"; "list"; "string"] in
 
   	 let ops = [
-  	   Oprt("add", Some((L.build_add), int_t), Some((L.build_fadd), float_t), None, None, None);
-       Oprt("sub", Some((L.build_sub), int_t), Some((L.build_fsub), float_t), None, None, None);
-       Oprt("mul", Some((L.build_mul), int_t), Some((L.build_fmul), float_t), None, None, None);
-       Oprt("div", Some((L.build_sdiv), int_t), Some((L.build_fdiv), float_t), None, None, None);
-       Oprt("exp", None, None, None, None, None);
-       Oprt("eq", Some((L.build_icmp L.Icmp.Eq), bool_t), Some((L.build_fcmp L.Fcmp.Ueq), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t), None);
-       Oprt("neq", Some((L.build_icmp L.Icmp.Ne), bool_t), Some((L.build_fcmp L.Fcmp.Une), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t), None);
-       Oprt("lesser", Some((L.build_icmp L.Icmp.Slt), bool_t), Some((L.build_fcmp L.Fcmp.Ult), bool_t), Some((L.build_icmp L.Icmp.Slt), bool_t), Some((L.build_icmp L.Icmp.Slt), bool_t), None);
-       Oprt("leq", Some((L.build_icmp L.Icmp.Sle), bool_t), Some((L.build_fcmp L.Fcmp.Ule), bool_t), Some((L.build_icmp L.Icmp.Sle), bool_t), Some((L.build_icmp L.Icmp.Sle), bool_t), None);
-       Oprt("greater", Some((L.build_icmp L.Icmp.Sgt), bool_t), Some((L.build_fcmp L.Fcmp.Ugt), bool_t), Some((L.build_icmp L.Icmp.Sgt), bool_t), Some((L.build_icmp L.Icmp.Sgt), bool_t), None);
-       Oprt("geq", Some((L.build_icmp L.Icmp.Sge), bool_t), Some((L.build_fcmp L.Fcmp.Uge), bool_t), Some((L.build_icmp L.Icmp.Sge), bool_t), Some((L.build_icmp L.Icmp.Sge), bool_t), None);
-       Oprt("and", Some((L.build_and), int_t), None, Some((L.build_and), bool_t), Some((L.build_add), char_t), None);
-       Oprt("or", Some((L.build_or), int_t), None, Some((L.build_or), bool_t), Some((L.build_or), char_t), None);
-       Uoprt("neg", Some((L.build_neg), int_t), Some((L.build_fneg), float_t), Some((L.build_neg), bool_t), None, None);
-       Uoprt("not", Some((L.build_not), int_t), None, Some((L.build_not), bool_t), Some((L.build_not), char_t), None);
-       Loprt("idx", None, None, None, None, Some((build_idx), int_t));
-       Loprt("idx_parent", None, None, None, None, Some((build_idx_parent), int_t))
+  	   Oprt("add", Some((L.build_add), int_t), Some((L.build_fadd), float_t), None, None, None, None);
+       Oprt("sub", Some((L.build_sub), int_t), Some((L.build_fsub), float_t), None, None, None, None);
+       Oprt("mul", Some((L.build_mul), int_t), Some((L.build_fmul), float_t), None, None, None, None);
+       Oprt("div", Some((L.build_sdiv), int_t), Some((L.build_fdiv), float_t), None, None, None, None);
+       Oprt("exp", None, None, None, None, None, None);
+       Oprt("eq", Some((L.build_icmp L.Icmp.Eq), bool_t), Some((L.build_fcmp L.Fcmp.Ueq), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t), None, None);
+       Oprt("neq", Some((L.build_icmp L.Icmp.Ne), bool_t), Some((L.build_fcmp L.Fcmp.Une), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t), None, None);
+       Oprt("lesser", Some((L.build_icmp L.Icmp.Slt), bool_t), Some((L.build_fcmp L.Fcmp.Ult), bool_t), Some((L.build_icmp L.Icmp.Slt), bool_t), Some((L.build_icmp L.Icmp.Slt), bool_t), None, None);
+       Oprt("leq", Some((L.build_icmp L.Icmp.Sle), bool_t), Some((L.build_fcmp L.Fcmp.Ule), bool_t), Some((L.build_icmp L.Icmp.Sle), bool_t), Some((L.build_icmp L.Icmp.Sle), bool_t), None, None);
+       Oprt("greater", Some((L.build_icmp L.Icmp.Sgt), bool_t), Some((L.build_fcmp L.Fcmp.Ugt), bool_t), Some((L.build_icmp L.Icmp.Sgt), bool_t), Some((L.build_icmp L.Icmp.Sgt), bool_t), None, None);
+       Oprt("geq", Some((L.build_icmp L.Icmp.Sge), bool_t), Some((L.build_fcmp L.Fcmp.Uge), bool_t), Some((L.build_icmp L.Icmp.Sge), bool_t), Some((L.build_icmp L.Icmp.Sge), bool_t), None, None);
+       Oprt("and", Some((L.build_and), int_t), None, Some((L.build_and), bool_t), Some((L.build_add), char_t), None, None);
+       Oprt("or", Some((L.build_or), int_t), None, Some((L.build_or), bool_t), Some((L.build_or), char_t), None, None);
+       Uoprt("neg", Some((L.build_neg), int_t), Some((L.build_fneg), float_t), Some((L.build_neg), bool_t), None, None, None);
+       Uoprt("not", Some((L.build_not), int_t), None, Some((L.build_not), bool_t), Some((L.build_not), char_t), None, None);
+       Loprt("idx", None, None, None, None, Some((build_idx), int_t), Some((build_idx), int_t));
+       Loprt("idx_parent", None, None, None, None, Some((build_idx_parent), int_t), None)
        ] in
 
   	 List.map (fun t -> let bops = List.map (function
-  	    | Oprt(o, i, f, b, c, l) ->
+  	    | Oprt(o, i, f, b, c, l, s) ->
           let tfn = match t with
             | "int" -> i
             | "float" -> f
             | "bool" -> b
             | "char" -> c
             | "list" -> l
+            | "string" -> s
 		      in
 		      let bop = match tfn with
 			      | Some tfn ->
@@ -286,13 +294,14 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 				      in BOprt(o, Some(((fn, bd), tfn)))
 			      | None -> BOprt(o, None)
           in bop
-        | Uoprt(o, i, f, b, c, l) ->
+        | Uoprt(o, i, f, b, c, l, s) ->
           let tfn = match t with
             | "int" -> i
             | "float" -> f
             | "bool" -> b
             | "char" -> c
             | "list" -> l
+            | "string" -> s
           in
 		      let bop = match tfn with
 			      | Some tfn ->
@@ -302,13 +311,14 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 				      in BUoprt(o, Some(((fn, bd), tfn)))
 			      | None -> BUoprt(o, None)
 		      in bop
- 	      | Loprt(o, i, f, b, c, l) ->
+ 	      | Loprt(o, i, f, b, c, l, s) ->
           let tfn = match t with
             | "int" -> i
             | "float" -> f
             | "bool" -> b
             | "char" -> c
             | "list" -> l
+            | "string" -> s
 		      in
 		      let bop = match tfn with
 			      | Some tfn ->
@@ -348,7 +358,6 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     |]) the_module in
 
 
-
   let build_fnptr_of_cfo cobj_p b = 
     let x2 = L.build_struct_gep cobj_p cobj_data_idx "x2" b in
     let x3 = L.build_load x2 "x3" b in
@@ -385,6 +394,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   let (float_print_fn, float_print_b) = build_special_ctype_fn FPrint "float" in
   let (bool_print_fn, bool_print_b) = build_special_ctype_fn FPrint "bool" in
   let (list_print_fn, list_print_b) = build_special_ctype_fn FPrint "list" in
+  let (string_print_fn, string_print_b) = build_special_ctype_fn FPrint "string" in
 
   let get_print_fn_lval = function
     | "int" -> int_print_fn
@@ -392,6 +402,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     | "char" -> char_print_fn
     | "bool" -> bool_print_fn
     | "list" -> list_print_fn
+    | "string" -> string_print_fn
     | _ -> L.const_pointer_null ctype_print_pt
 
   in let get_print_builder = function
@@ -400,6 +411,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     | "char" -> char_print_b
     | "bool" -> bool_print_b
     | "list" -> list_print_b
+    | "string" -> string_print_b
   in
 
   (* Heapify *)
@@ -407,7 +419,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   let (float_heapify_fn, float_heapify_b) = build_special_ctype_fn FHeapify "float" in
   let (bool_heapify_fn, bool_heapify_b) = build_special_ctype_fn FHeapify "bool" in
   let (func_heapify_fn, func_heapify_b) = build_special_ctype_fn FHeapify "func" in
-  let (list_heapify_fn, list_heapify_b) = build_special_ctype_fn FHeapify "func" in
+  let (list_heapify_fn, list_heapify_b) = build_special_ctype_fn FHeapify "list" in
+  let (string_heapify_fn, string_heapify_b) = build_special_ctype_fn FHeapify "string" in
 
   let get_heapify_fn_lval = function
     | "int" -> int_heapify_fn
@@ -415,11 +428,12 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     | "bool" -> bool_heapify_fn
     | "func" -> func_heapify_fn
     | "list" -> list_heapify_fn
+    | "string" -> string_heapify_fn
     | _ -> L.const_pointer_null ctype_heapify_pt
   in
 
   (* define the default CTypes *)
-  let [ctype_int; ctype_float; ctype_bool; ctype_char; ctype_list] =
+  let [ctype_int; ctype_float; ctype_bool; ctype_char; ctype_list; ctype_string] =
   	List.map (fun (t, bops) -> L.define_global ("ctype_" ^ t) (L.const_named_struct ctype_t (Array.of_list ((List.map (function
   	  | BOprt(fn, o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
@@ -436,7 +450,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     | Int -> Some ctype_int
     | Float -> Some ctype_float
     | Bool -> Some ctype_bool
-    | String -> Some ctype_list
+    | String -> Some ctype_string
     | Dyn -> None
     | FuncType -> Some ctype_func
     | Arr -> Some ctype_list
@@ -449,7 +463,9 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     | dt when dt = bool_t -> ctype_bool
     | dt when dt = char_t -> ctype_char
     | dt when dt = clist_t -> ctype_list
+    | dt when dt = cstring_t -> ctype_string
   in
+
   let ctype_of_typ = function  (* only for optimized Raws hence limited matching *)
       | Int -> ctype_int
       | Float -> ctype_float
@@ -470,7 +486,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let objptr = L.build_malloc cobj_t "__new_objptr" builder in (* objptr: cobj_pt* *)
     let datafieldptr = L.build_struct_gep objptr cobj_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
     let ctypefieldptr = L.build_struct_gep objptr cobj_type_idx "ctypefieldptr" builder in
-    (objptr,datafieldptr,ctypefieldptr)
+    (objptr, datafieldptr, ctypefieldptr)
   in
     
   let build_new_cobj data_type builder =
@@ -503,7 +519,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let len = L.const_int int_t length in
 
     (* cap *)
-    let capacity = max length initial_list_size in
+    let capacity = length in (* max length initial_list_size *)
     let cap = L.const_int int_t capacity in
 
     (* dataptr: mallocs empty CObj array *)
@@ -540,6 +556,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let capfieldptr = L.build_struct_gep dataptr_of_cobj clist_cap_idx "capfieldptr" builder in  (* capfieldptr: i32* *)
     ignore(L.build_store cap capfieldptr builder);
   in
+
 
   (** manually making the ctype_ functions **)
   (* does alloca, store, then load *)  (* note you should not use this if youre not using the values right away !!!!!! *)
@@ -674,6 +691,11 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     ignore(L.build_ret (L.const_int int_t 0) b);
   in
 
+ let _ =
+    let (fn, b) = (string_heapify_fn, string_heapify_b) in
+    ignore(L.build_ret (L.const_int int_t 0) b);
+  in
+
   (* define printf *)
   let printf_t : L.lltype =   (* define the type that the printf function should be *)
       L.var_arg_function_type int_t [| char_pt |] in
@@ -755,6 +777,54 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
  let _ =
     let (fn, b) = (list_print_fn, list_print_b) in
     ignore(build_list_print_fn fn b);
+  in
+
+(* builds the print function for lists. basically just iterates over all the objects and calls their print functions *)
+  let build_string_print_fn fn b =   (* data_type = int_t etc *)
+    let formals_llvalues = (Array.to_list (L.params fn)) in
+    let [remote_self_p] = formals_llvalues in
+    let objptr = boilerplate_till_load remote_self_p "self_p" b in
+    (* the box dataptr_addr points to the raw data we want to copy *)
+
+    let listptr = build_getlist_cobj objptr b in
+    let nptr = L.build_alloca int_t "nptr" b in
+    ignore(L.build_store (L.const_int int_t (0)) nptr b);
+    let n = L.build_load nptr "n" b in
+    let ln = build_getlen_clist listptr b in
+
+    (* iter block *)
+    let iter_bb = L.append_block context "iter" fn in
+    ignore(L.build_br iter_bb b);
+
+    let iter_builder = L.builder_at_end context iter_bb in
+    let n = L.build_load nptr "n" iter_builder in
+    let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
+    ignore(L.build_store nnext nptr iter_builder);
+
+    let iter_complete = (L.build_icmp L.Icmp.Sge) n ln "iter_complete" iter_builder in (* true if n exceeds list length *)
+
+    (* body of for loop *)
+    let body_bb = L.append_block context "list_print_body" fn in
+    let body_builder = L.builder_at_end context body_bb in
+    let elmptr = build_idx listptr n "list_index_result" body_builder in
+
+    let fn_p = build_getctypefn_cobj ctype_print_idx elmptr body_builder in
+    ignore(L.build_call fn_p [|elmptr|] "print_cob" body_builder);
+
+    L.build_br iter_bb body_builder;
+
+    let merge_bb = L.append_block context "merge" fn in
+    ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
+    
+    let end_builder = L.builder_at_end context merge_bb in
+
+    ignore(L.build_ret (L.const_int int_t 0) end_builder);  (* or can ret void? *)
+  in
+
+
+ let _ =
+    let (fn, b) = (string_print_fn, string_print_b) in
+    ignore(build_string_print_fn fn b);
   in
 
   (* define exit *)
@@ -1130,7 +1200,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
             let cobj_of_char_ptr = build_new_cobj_init char_t (L.const_int char_t (Char.code ch)) the_state.b in
             cobj_of_char_ptr :: l) [] (String.to_seq i)) in
 
-          let (objptr, dataptr) = build_new_cobj clist_t the_state.b in
+          let (objptr, dataptr) = build_new_cobj cstring_t the_state.b in 
           let _ = build_new_clist dataptr elements the_state.b in
 
             (Box(objptr), the_state)
