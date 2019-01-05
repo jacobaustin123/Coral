@@ -1072,13 +1072,15 @@ let add_lists fn b =
   (* let names_of_bindlist bindlist =
     List.map name_of_bind bindlist
   in *)
-(* helper fn: seq 4 == [0;1;2;3] *)
+  (* helper fn: seq 4 == [0;1;2;3] *)
   let seq len =
     let rec aux len acc =
       if len<0 then acc else aux (len-1) (len::acc)
     in aux (len-1) []
   in
 
+  (* lookup: finds the address of allocated variables in memory. searches the locals
+  list first and then the globals list *)
   let lookup namespace bind = (*tstp (string_of_sbind bind);*)
       let bind = match bind with
         | Bind(n, Int)| Bind(n, Float)| Bind(n, Bool) | Bind(n, String) -> bind
@@ -1087,6 +1089,8 @@ let add_lists fn b =
         with Not_found -> lookup_global_binding bind
   in
 
+  (* build_temp_box: builds a temporary cobj with given type and data. similar to
+  build_new_cobj_init *)
   let build_temp_box rawval raw_ty b =
       if raw_ty = Dyn then raise (Failure "CodegenError: attempting to build temp box for dynamic object.")
       else tstp ("Building temp box for " ^ string_of_typ raw_ty);
@@ -1102,6 +1106,9 @@ let add_lists fn b =
       ignore(L.build_store (ctype_of_typ raw_ty) typeptr_addr b);
       Box(box_ptr)
   in
+
+  (* change_state: utility function which handles modifying the state record in an elegant and 
+  self-documenting way *)
   let rec change_state old = function
       | S_rettyp(ret_typ) -> {ret_typ=ret_typ;namespace=old.namespace;func=old.func;b=old.b;optim_funcs=old.optim_funcs;generic_func=old.generic_func}
       | S_names(namespace) -> {ret_typ=old.ret_typ;namespace=namespace;func=old.func;b=old.b;optim_funcs=old.optim_funcs;generic_func=old.generic_func}
@@ -1116,6 +1123,8 @@ let add_lists fn b =
       change_state old (S_names(new_namespace))
     | S_list(updates) -> List.fold_left change_state old updates
   in
+
+  (* rebox_if_needed: used for handling heapify for objects which need to be copied and stored in memory *)
   let rebox_if_needed boxaddr name the_state =
     match boxaddr with 
       | BoxAddr(addr, true) -> tstp ("Boxing " ^ name);
@@ -1127,7 +1136,7 @@ let add_lists fn b =
       | BoxAddr(_, false) -> the_state  (* do nothing *)
     in
 
-  (* check if addr cobj had been defined (is data pointer null) *)
+  (* check if addr cobj had been defined (is data pointer is null) *)
   let check_defined addr message the_state = 
     if not !exceptions then the_state else
 
@@ -1249,6 +1258,7 @@ let add_lists fn b =
 
   in
 
+  (* performs bounds checking on a given list, checking both lower and upper bounds *)
   let check_bounds list_ptr n_ptr message the_state = 
     if not !exceptions then the_state else
 
@@ -1287,7 +1297,8 @@ let add_lists fn b =
     (Box(result), the_state)
   in
 
-  (* safe getidx for lists, with type checking *)
+  (* safe getidx_parent for lists, with type checking. this is used to get a pointer to
+  the pointer to a given idx in a list, which can be used for assignment *)
   let build_getidx_parent_list list_pointer index_pointer the_state =
     let fn_p = build_getctypefn_cobj ctype_idx_parent_idx list_pointer the_state.b in
     let the_state = check_null fn_p "RuntimeError: unsupported operand type(s) for list access" the_state in
@@ -1295,20 +1306,6 @@ let add_lists fn b =
     let the_state = check_bounds list_pointer index_pointer "RuntimeError: list index out of bounds" the_state in
     let result = L.build_call fn_p [| list_pointer ; index_pointer |] "parent_binop_result" the_state.b in
     (Box(result), the_state)
-
-(*   (* safe getidx for lists, used to get the parent of the index for assignment *)
-  let build_getidx_parent_list list_pointer index_pointer the_state =
-    let the_state = check_null fn_p ("RuntimeError: unsupported operand type(s) for list access") the_state in
-    let the_state = check_explicit_type Int index_pointer "RuntimeError: unsupported operand type(s) for list access" the_state in
-    let the_state = check_bounds list_pointer index_pointer "RuntimeError: list index out of bounds" the_state in
-    let n = build_getdata_cobj int_t index_pointer the_state.b in 
-
-    let listptr = build_getlist_cobj list_pointer the_state.b in 
-    let gep_addr = L.build_struct_gep listptr clist_data_idx "__gep_addr" the_state.b in
-    let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (L.pointer_type (L.pointer_type cobj_pt)) "__gep_addr_as_cobjptrptrptr" the_state.b in
-    let gep_addr_as_cobjptrptr = L.build_load gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" the_state.b in
-    let result = L.build_gep gep_addr_as_cobjptrptr [| n |] "__gep_addr_as_cobjptrptr" the_state.b in (* other_p is offset of sought element *)
-    (Box(result), the_state) *)
   
   in
 
@@ -1324,6 +1321,7 @@ let add_lists fn b =
 
   in
 
+  (* expr: main function for evaluating expressions handed to Codegen from semant *)
   let rec expr the_state typed_e = 
       let (namespace,the_function) = (the_state.namespace,the_state.func) in
       let (e, ty) = typed_e in
@@ -1422,6 +1420,7 @@ let add_lists fn b =
             ) in
               (Raw(binop_instruction v1 v2 "binop_result" the_state.b),the_state)
 
+          (* if one of the two is boxed, boxx both of them. this could be optimized in the future *)
           | (Box(boxval),Raw(rawval)) -> 
             tstp "binop (box, raw)"; generic_binop (Box(boxval)) (build_temp_box rawval ty2 the_state.b)
           | (Raw(rawval),Box(boxval)) -> 
@@ -1626,6 +1625,7 @@ let add_lists fn b =
   and rip_from_inner_state old inner =
     change_state old (S_list([S_names(inner.namespace);S_optimfuncs(inner.optim_funcs)])) (* grab names/optimfuncs from inner *)
 
+  (* stmt: main function used for evaluating statements handed to Codegen from semant *)
   and stmt the_state s =   (* namespace comes first bc never gets modified unless descending so it works better for fold_left in SBlock *)
       let (namespace,the_function) = (the_state.namespace, the_state.func) in
       match s with
@@ -1888,6 +1888,8 @@ let add_lists fn b =
         let the_state = change_state the_state (S_optimfuncs(fn_state.optim_funcs)) in (* grab optimfuncs from inner *)
         the_state  (* SFunc() returns the original builder *)
         *)
+
+    (* used to handle heapify calls *)
     | STransform (name, from_ty, to_ty) -> 
       tstp ("Transforming " ^ name ^ ": " ^ (string_of_typ from_ty) ^ " -> " ^ (string_of_typ to_ty));
       (match (from_ty, to_ty) with
