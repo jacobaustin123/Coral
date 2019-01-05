@@ -907,7 +907,7 @@ let build_new_clist_init dataptr_of_cobj listptr_as_i8ptr length builder =
       let body_builder = L.builder_at_end context body_bb in
       let elmptr = build_idx listptr n "list_index_result" body_builder in
 
-      let gep_addr = L.build_gep dataptr [|L.const_int int_t 1|] "__elem_ptr" body_builder in
+      let gep_addr = L.build_gep dataptr [|n|] "__elem_ptr" body_builder in
       ignore(L.build_store elmptr gep_addr body_builder);
 
       ignore(L.build_br iter_bb body_builder);
@@ -916,12 +916,13 @@ let build_new_clist_init dataptr_of_cobj listptr_as_i8ptr length builder =
       ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
       
       let end_builder = L.builder_at_end context merge_bb in 
-      (gep_addr, end_builder)
+      end_builder
 
     in
 
-    let (dataptr1, builder1) = load_list self_data dataptr fn b in
-    let (dataptr2, builder2) = load_list other_data dataptr1 fn builder1 in
+    let builder1 = load_list self_data dataptr fn b in
+    let dataptr1 = L.build_gep dataptr [|self_ln|] "__next_dataptr" builder1 in
+    let builder2 = load_list other_data dataptr1 fn builder1 in
     let (newobjptr, newdataptr) = build_new_cobj clist_t builder2 in
 
     let _ = build_new_clist_init newdataptr dataptr_as_i8ptr total builder2 in
