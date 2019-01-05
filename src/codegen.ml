@@ -861,19 +861,33 @@ let build_new_clist_init dataptr_of_cobj listptr length builder =
     ignore(L.build_store cap capfieldptr builder);
   in
 
+  let list_binop data_type fn b =
+    let formals_llvalues = (Array.to_list (L.params fn)) in
+    let [ remote_self_p; remote_other_p ] = formals_llvalues in
+
+    (* boilerplate *)
+    let self_p = boilerplate_till_load remote_self_p "self_p" b in
+    let other_p = boilerplate_till_load remote_other_p "other_p" b in
+
+    (* get data *)
+    let self_data = build_getlist_cobj self_p b in
+    let other_data = build_getlist_cobj other_p b in
+    (self_data, other_data)
+  in
+
   let build_list_add_fn fn b = 
-    let (self_data, other_data) = boilerplate_binop clist_t fn b in
+    let (self_data, other_data) = list_binop clist_t fn b in
    
-    let self_listptr = build_getlist_cobj self_data b in
+    (* let self_listptr = build_getlist_cobj self_data b in *)
     (* let other_listptr = build_getlist_cobj other_data b in *)
 
-    (* let self_ln = build_getlen_clist self_listptr b in
-    let other_ln = build_getlen_clist other_listptr b in
+    let self_ln = build_getlen_clist self_data b in
+    let other_ln = build_getlen_clist other_data b in
 
     let total = L.build_add self_ln other_ln "total_length" b in
     let dataptr = L.build_array_malloc cobj_pt total "__new_dataptr" b in
     let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" b in
-
+    
     let load_list listptr dataptr fn b =
       let nptr = L.build_alloca int_t "nptr" b in
       ignore(L.build_store (L.const_int int_t 0) nptr b); 
@@ -888,11 +902,11 @@ let build_new_clist_init dataptr_of_cobj listptr length builder =
 
       let iter_complete = (L.build_icmp L.Icmp.Sge) n total "iter_complete" iter_builder in (* true if n exceeds list length *)
 
-      let body_bb = L.append_block context "list_print_body" fn in
+      let body_bb = L.append_block context "list_add_body" fn in
       let body_builder = L.builder_at_end context body_bb in
       let elmptr = build_idx listptr n "list_index_result" body_builder in
-      
-      let gep_addr = L.build_gep dataptr [|L.const_int int_t 0; n|] "__elem_ptr" body_builder in
+
+      let gep_addr = L.build_gep dataptr [|L.const_int int_t 0; n|] "__elem_ptr" body_builder in pm();
       ignore(L.build_store elmptr gep_addr body_builder);
 
       L.build_br iter_bb body_builder;
@@ -905,11 +919,11 @@ let build_new_clist_init dataptr_of_cobj listptr length builder =
 
     in
 
-    let (dataptr1, builder1) = load_list self_listptr dataptr fn b in
-    let (dataptr2, builder2) = load_list other_listptr dataptr1 fn builder1 in *)
-    let (newobjptr, newdataptr) = build_new_cobj clist_t b in
+    let (dataptr1, builder1) = load_list self_data dataptr_as_i8ptr fn b in
+    let (dataptr2, builder2) = load_list other_data dataptr1 fn builder1 in
+    let (newobjptr, newdataptr) = build_new_cobj clist_t builder2 in
 
-    (* let _ = build_new_clist_init newdataptr dataptr total builder2 in *)
+    let _ = build_new_clist_init newdataptr dataptr total builder2 in
     ignore(L.build_ret newobjptr b); 
 
   in 
