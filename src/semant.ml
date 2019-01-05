@@ -6,6 +6,16 @@ open Utilities
 syntax checking, and other features. expr objects are converted to sexpr, and stmt objects are converted
 to sstmts. *)
 
+let globals_to_list globals = 
+  let current = StringMap.bindings globals in
+  let bindings = List.map (fun (name, (_, typ, _)) -> (name, typ)) current in
+  bindings
+
+let make_transforms globals = 
+  let entry = List.map (fun (name, typ) -> STransform(name, typ, Dyn)) globals in
+  let exit = List.map (fun (name, typ) -> STransform(name, Dyn, typ)) globals in
+  SBlock(SBlock(entry) :: [SBlock(exit)])
+
 (* binop: evaluate types of two binary operations and check if the binary operation is valid.
 This currently is quite restrictive and does not permit automatic type casting like in Python.
 This may be changed in the future. The commented-out line would allow that feature *)
@@ -150,7 +160,8 @@ and exp map = function
       
       | None -> print_endline "SWarning: called unknown/undefined function"; (* TODO probably not necessary, may be a problem for recursion *)
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr map e' in e' :: acc) [] args) in
-          (Dyn, (SCall(e, eout, SNop)), None)
+          let transforms = make_transforms (globals_to_list map) in
+          (Dyn, (SCall(e, eout, transforms)), None)
         )
 
   | _ as temp -> print_endline ("SNotImplementedError: '" ^ (expr_to_string temp) ^ 
@@ -232,7 +243,8 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
       
       | None -> if not the_state.noeval then print_endline "SNotImplementedError: calling weakly defined functions has not been implemented";
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals the_state e' in e'' :: acc) [] args) in
-          (Dyn, (SCall(e, eout, SNop)), None)
+          let transforms = make_transforms (globals_to_list globals) in
+          (Dyn, (SCall(e, eout, transforms)), None)
         )
 
     | _ as other -> exp locals other
