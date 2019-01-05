@@ -238,7 +238,6 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
    let gep_addr_as_cobjptrptr = L.build_load gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
    let parent = L.build_gep gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
    parent
-
   in
 
   let built_ops =
@@ -260,8 +259,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
        Oprt("or", Some((L.build_or), int_t), None, Some((L.build_or), bool_t), Some((L.build_or), char_t), None, None);
        Uoprt("neg", Some((L.build_neg), int_t), Some((L.build_fneg), float_t), Some((L.build_neg), bool_t), None, None, None);
        Uoprt("not", Some((L.build_not), int_t), None, Some((L.build_not), bool_t), Some((L.build_not), char_t), None, None);
-       Loprt("idx", None, None, None, None, Some((build_idx), int_t), Some((build_idx), int_t));
-       Loprt("idx_parent", None, None, None, None, Some((build_idx_parent), int_t), None)
+       Oprt("idx", None, None, None, None, Some((build_idx), int_t), Some((build_idx), int_t));
+       Oprt("idx_parent", None, None, None, None, Some((build_idx_parent), int_t), None)
        ] in
 
   	 List.map (fun t -> let bops = List.map (function
@@ -289,7 +288,9 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
                 | "greater" -> ctype_greater_t
                 | "geq" -> ctype_geq_t
                 | "and" -> ctype_and_t
-                | "or" -> ctype_or_t) o)
+                | "or" -> ctype_or_t
+                | "idx" -> ctype_idx_t
+                | "idx_parent" -> ctype_idx_parent_t) o)
 				      in BOprt(o, Some(((fn, bd), tfn)))
 			      | None -> BOprt(o, None)
           in bop
@@ -309,24 +310,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
                 | "not" -> ctype_not_t) o)
 				      in BUoprt(o, Some(((fn, bd), tfn)))
 			      | None -> BUoprt(o, None)
-		      in bop
- 	      | Loprt(o, i, f, b, c, l, s) ->
-          let tfn = match t with
-            | "int" -> i
-            | "float" -> f
-            | "bool" -> b
-            | "char" -> c
-            | "list" -> l
-            | "string" -> s
-		      in
-		      let bop = match tfn with
-			      | Some tfn ->
-			        let (fn, bd) = build_ctype_fn (t ^ "_" ^ o) ((function
-                | "idx" -> ctype_idx_t
-                | "idx_parent" -> ctype_idx_parent_t) o)
-				      in BLoprt(o, Some(((fn, bd), tfn)))
-			      | None -> BLoprt(o, None)
-          in bop) ops
+		      in bop) ops
         in (t, bops)) typs
       in
 
@@ -448,19 +432,15 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   	    | Some(((fn, bd), tfn)) -> fn
   	    | None -> (match fn with
           | "add" -> get_add_fn_lval t
+          | "idx" -> L.const_pointer_null ctype_idx_pt
+          | "idx_parent" -> L.const_pointer_null ctype_idx_parent_pt
           | _ ->  L.const_pointer_null ctype_add_pt))
   	  | BUoprt(fn, o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
-  	    | None -> L.const_pointer_null ctype_neg_pt)
-  	  | BLoprt(fn, o) -> (match o with
-  	    | Some(((fn, bd), tfn)) -> fn
-        | None -> (match fn with 
-          | "idx" -> L.const_pointer_null ctype_idx_pt 
-          | "idx_parent" -> L.const_pointer_null ctype_idx_parent_pt))) bops) 
+  	    | None -> L.const_pointer_null ctype_neg_pt)) bops)
             @ ([L.const_pointer_null ctype_call_pt; 
                 get_heapify_fn_lval t ; 
-                get_print_fn_lval t])))) the_module) built_ops
-  	    in
+                get_print_fn_lval t])))) the_module) built_ops in
 
   let ctype_of_ASTtype = function
     | Int -> Some ctype_int
@@ -633,28 +613,29 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
   (* creates the ctype functions for all standard (not-special functions *)
   List.iter (fun (t, bops) -> List.iter (function
-    | BOprt(_, o) -> (match o with
-      | Some(((fn, bd), tfn)) ->
-        let (tf, tp) = tfn in
-        let (self_data, other_data) = boilerplate_binop (get_t t) fn bd in
-        let result_data = tf self_data other_data "result_data" bd in
-        let result = build_new_cobj_init tp result_data bd in
-        ignore(L.build_ret result bd)
-      | None -> ())
-    | BUoprt(_, o) -> (match o with
+    | BOprt(fn, o) -> (match fn with
+      | "idx" | "idx_parent" -> (match o with
+        | Some(((fn, bd), tfn)) ->
+          let (tf, tp) = tfn in
+          let (self_data, other_data) = boilerplate_lop (get_t t) fn bd in
+          let result_data = tf self_data other_data "result_data" bd in
+          let result = result_data in
+          ignore(L.build_ret result bd)
+        | None -> ())
+      | _ -> (match o with
+        | Some(((fn, bd), tfn)) ->
+          let (tf, tp) = tfn in
+          let (self_data, other_data) = boilerplate_binop (get_t t) fn bd in
+          let result_data = tf self_data other_data "result_data" bd in
+          let result = build_new_cobj_init tp result_data bd in
+          ignore(L.build_ret result bd)
+        | None -> ()))
+    | BUoprt(fn, o) -> (match o with
       | Some(((fn, bd), tfn)) ->
         let (tf, tp) = tfn in
         let (self_data) = boilerplate_uop (get_t t) fn bd in
         let result_data = tf self_data "result_data" bd in
         let result = build_new_cobj_init tp result_data bd in
-        ignore(L.build_ret result bd)
-      | None -> ())
-    | BLoprt(_, o) -> (match o with
-      | Some(((fn, bd), tfn)) ->
-        let (tf, tp) = tfn in
-        let (self_data, other_data) = boilerplate_lop (get_t t) fn bd in
-        let result_data = tf self_data other_data "result_data" bd in
-        let result = result_data in
         ignore(L.build_ret result bd)
       | None -> ())) bops) built_ops;
 
