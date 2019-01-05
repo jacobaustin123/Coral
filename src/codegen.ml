@@ -453,7 +453,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   	  | BOprt(fn, o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
   	    | None -> (match fn with 
-          | "add" -> get_add_fn_lval t
+          (* | "add" -> get_add_fn_lval t *)
           | _ -> L.const_pointer_null ctype_add_pt)) 
   	  | BUoprt(fn, o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
@@ -872,7 +872,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   let build_list_add_fn fn b = 
     let (self_data, other_data) = boilerplate_binop clist_t fn b in
     
-    let self_listptr = build_getlist_cobj self_data b in
+    (* let self_listptr = build_getlist_cobj self_data b in
     let other_listptr = build_getlist_cobj other_data b in
 
     let self_ln = build_getlen_clist self_listptr b in
@@ -914,11 +914,11 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     in
 
     let (dataptr1, builder1) = load_list self_listptr dataptr fn b in
-    let (dataptr2, builder2) = load_list other_listptr dataptr1 fn builder1 in
-    let (newobjptr, newdataptr) = build_new_cobj clist_t builder2 in
+    let (dataptr2, builder2) = load_list other_listptr dataptr1 fn builder1 in *)
+    let (newobjptr, newdataptr) = build_new_cobj clist_t b in
 
-    let _ = build_new_clist_init newdataptr dataptr total builder2 in
-    ignore(L.build_ret newobjptr builder2); 
+    (* let _ = build_new_clist_init newdataptr dataptr total builder2 in *)
+    ignore(L.build_ret newobjptr b); 
 
   in 
 
