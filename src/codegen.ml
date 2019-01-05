@@ -389,7 +389,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     match *)
 
   let (list_add_fn, list_add_b) = build_special_ctype_fn FAdd "list" in
-  let (string_add_fn, string_add_b) = build_special_ctype_fn FAdd "string" in
+  (* let (string_add_fn, string_add_b) = build_special_ctype_fn FAdd "string" in *)
 
   let get_add_fn_lval = function
     | "list" -> list_add_fn
@@ -398,7 +398,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
   in let get_add_builder = function
     | "list" -> list_add_b
-    | "string" -> string_add_b
+    (* | "string" -> string_add_b *)
     | _ -> raise (Failure "CodegenError: unexpected builder requested for add function")
 
   in
