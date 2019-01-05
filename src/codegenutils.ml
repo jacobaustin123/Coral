@@ -7,8 +7,8 @@ let pt some_lltype = Printf.eprintf "pt: %s%s\n" "---->" (L.string_of_lltype som
 let pv some_llvalue = Printf.eprintf "pv: %s%s\n" "---->" (L.string_of_llvalue some_llvalue)
 let tst() = (*Printf.eprintf "!!!!!!!!!!\n";*)()
 let tstp str = Printf.eprintf "%s\n" str
-let pbind bind = tstp (string_of_sbind bind);()
-
+let pbind bind = tstp (string_of_sbind bind); ()
+let _ = L.enable_pretty_stacktrace()
 (* Maps *)
 module StringMap = Map.Make(String)
 module BindMap = Map.Make(struct type t = Ast.bind let compare = Pervasives.compare end)
