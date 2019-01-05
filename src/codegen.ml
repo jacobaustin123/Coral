@@ -1816,17 +1816,18 @@ let add_lists fn b =
                 | Box(v) -> (match the_state.ret_typ with
                     | Dyn -> tstp "dynamic return of box"; (v, the_state)
                     | _ -> tstp ("explicit return of box for type " ^ (string_of_typ the_state.ret_typ)); 
-                      if the_state.ret_typ = FuncType || the_state.ret_typ = Arr || the_state.ret_typ = String then let _ = (tstp "returning an explicit cobj type") in (v, the_state) else (* deal with FuncType more elegantly in the future *)
-                      let _ = (tstp "extracting data for explicit return type") in
                       let the_state = check_explicit_type the_state.ret_typ v ("RuntimeError: invalid return type (expected " ^ (string_of_typ the_state.ret_typ) ^ ")") the_state in
-                      let data = build_getdata_cobj (ltyp_of_typ the_state.ret_typ) v the_state.b in (data, the_state)
+                      if the_state.ret_typ = FuncType || the_state.ret_typ = Arr || the_state.ret_typ = String then 
+                        let _ = (tstp "returning an explicit cobj type") in (v, the_state) 
+                      else let _ = (tstp "extracting data for explicit return type") in
+                        let data = build_getdata_cobj (ltyp_of_typ the_state.ret_typ) v the_state.b in (data, the_state)
                 )
-            ) in (L.build_ret data the_state.b); the_state
+            ) in ignore(L.build_ret data the_state.b); the_state
           )
           | true -> tstp "generic function return"; let (data, the_state) = (match res with
             | Box(v) -> (v, the_state)
             | Raw(v) -> (match (build_temp_box v ty the_state.b) with Box(v) -> (v, the_state))
-            ) in (L.build_ret data the_state.b); the_state
+            ) in ignore(L.build_ret data the_state.b); the_state
         ) in the_state
 
     | SFunc sfdecl -> the_state (*
@@ -1907,7 +1908,7 @@ let add_lists fn b =
          ignore(L.build_store data raw_addr the_state.b);
          the_state
       
-       | (String, Dyn) | (Dyn, String) ->
+       | (String, Dyn) | (Dyn, String) | (Arr, Dyn) | (Dyn, Arr) ->
           let BoxAddr(box_addr1, _) = lookup namespace (Bind(name, from_ty)) (* no need to check needs_update flag bc this is assignment *)
           and BoxAddr(box_addr2, _) = lookup namespace (Bind(name, to_ty)) in
           let cobj_addr = L.build_load box_addr1 "load_cobj" the_state.b in
