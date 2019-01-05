@@ -202,9 +202,6 @@ module TypeMap = Map.Make(struct type t = stmt * typ list let compare = Pervasiv
 (* map with string keys, used for variable lookup *)
 module StringMap = Map.Make(String)
 
-(* map with Func keys, used for storing globals for generic functions *)
-module GlobalsMap = Map.Make(struct type t = stmt let compare = Pervasives.compare end)
-
 (* merge: merge function used to reconcile the global lookup map after a conditional branch. *)
 let merge m1 m2 = StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge two lists while keeping type inference intact *)
     | Some (a, b, c), Some (d, e, f) -> Some (compare_types a d, compare_types b e, compare_data c f)
@@ -249,9 +246,7 @@ let equals m1 m2 = (StringMap.equal (fun x y -> (compare x y) = 0) m1 m2) (* che
 
 type flag = {
   stack : bool TypeMap.t;
-  globals : (bind list ref) GlobalsMap.t;
   noeval : bool; (* in a SFunc doing a generic analysis *)
   cond : bool; (* in a conditional branch? *)
   forloop : bool; (* in a for loop? *)
-  current_func : stmt option;
 }

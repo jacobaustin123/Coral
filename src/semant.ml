@@ -10,17 +10,6 @@ to sstmts. *)
 This currently is quite restrictive and does not permit automatic type casting like in Python.
 This may be changed in the future. The commented-out line would allow that feature *)
 
-let add_global bind the_state = 
-  match the_state.current_func with
-    | Some func -> let current = GlobalsMap.find func the_state.globals in current := bind :: !current
-    | None -> raise (Failure "CodegenError: add_global called outside of function")
-
-let generate_transforms the_state =
-    match the_state.current_func with
-    | Some func -> let globals = GlobalsMap.find func the_state.globals in
-        List.map (fun (Bind(x, t)) -> STransform(x, t, Dyn))
-    | None -> raise (Failure "CodegenError: generate_transforms called outside of function")
-
 let binop t1 t2 op = 
   let except = (Failure ("STypeError: unsupported operand type(s) for binary " ^ binop_to_string op ^ ": '" ^ type_to_string t1 ^ "' and '" ^ type_to_string t2 ^ "'")) in
   match (t1, t2) with
@@ -139,10 +128,7 @@ and exp map = function
             let stack = TypeMap.empty in
             let stack' = TypeMap.add (x, types) true stack in
 
-            let globals_map = GlobalsMap.empty in
-            let globals_map' = GlobalsMap.add x (ref []) globals_map in
-
-            let (map2, block, data, locals) = (func_stmt map map1 {stack = stack'; globals = globals_map'; cond = false; forloop = false; noeval = false; current_func = Some(x);} body) in
+            let (map2, block, data, locals) = (func_stmt map map1 {stack = stack'; cond = false; forloop = false; noeval = false; } body) in
 
             (match data with (* match return type with *)
               | Some (typ2, e', d) -> (* it did return something *)
@@ -188,7 +174,7 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
     if StringMap.mem x locals then 
     let (typ, t', data) = StringMap.find x locals in 
     (t', SVar(x), data) 
-    else if the_state.noeval then let _ = add_global (Bind(x, t)) the_state in (t, SVar(x), None) else
+    else if the_state.noeval then (t, SVar(x), None) else
     raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
 
   | ListAccess(e, x) ->
@@ -227,9 +213,8 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
             let (_, types) = split_sbind bindout in (* avoid recursive calls by checking if the type has already been called. *)
             if TypeMap.mem (x, types) the_state.stack then (Dyn, SCall(e, (List.rev exprout), SNop), None) 
             else let stack' = TypeMap.add (x, types) true the_state.stack in
-            let globals_map' = GlobalsMap.add x (ref []) the_state.globals in
 
-            let (map2, block, data, locals) = (func_stmt globals map'' {noeval = false; cond = false; forloop = false; stack = stack'; current_func = Some(x); globals = globals_map'; } body) in
+            let (map2, block, data, locals) = (func_stmt globals map'' { noeval = false; cond = false; forloop = false; stack = stack'; } body) in
             (match data with
               | Some (typ2, e', d) -> let Bind(n1, btype) = name in if btype <> Dyn && btype <> typ2 then 
                   if typ2 <> Dyn then raise (Failure ("STypeError: invalid return type")) else 
@@ -411,9 +396,8 @@ and func_stmt globals locals the_state = function
         ) (semantmap, []) b in
 
     let bindout = List.rev bind in
-    let globals_map = GlobalsMap.empty in
 
-    let (map2, block, data, locals) = (func_stmt StringMap.empty map'' {forloop = false; cond = false; noeval = true; stack = TypeMap.empty; globals = globals_map; current_func = Some (Func(a, b, c));} c) in
+    let (map2, block, data, locals) = (func_stmt StringMap.empty map'' { forloop = false; cond = false; noeval = true; stack = TypeMap.empty;} c) in
 
     (match data with
       | Some (typ2, e', d) ->
@@ -530,7 +514,7 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
       ) (semantmap, []) b in
 
     let bindout = List.rev binds in
-    let (map2, block, data, locals) = (func_stmt StringMap.empty map'' {noeval = true; forloop = false; cond = false; stack = TypeMap.empty; globals = GlobalsMap.empty; current_func = Some (Func(a, b, c)); } c) in
+    let (map2, block, data, locals) = (func_stmt StringMap.empty map'' {noeval = true; forloop = false; cond = false; stack = TypeMap.empty;} c) in
       (match data with
         | Some (typ2, e', d) ->
             if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
