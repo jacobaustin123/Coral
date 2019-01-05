@@ -389,6 +389,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     match *)
 
   let (list_add_fn, list_add_b) = build_special_ctype_fn FAdd "list" in
+<<<<<<< Updated upstream
   (* let (string_add_fn, string_add_b) = build_special_ctype_fn FAdd "string" in *)
 
   let get_add_fn_lval = function
@@ -401,6 +402,13 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     (* | "string" -> string_add_b *)
     | _ -> raise (Failure "CodegenError: unexpected builder requested for add function")
 
+=======
+
+  let get_add_fn_lval = function
+    | "list" -> list_add_fn
+    | _ -> L.const_pointer_null ctype_add_pt
+
+>>>>>>> Stashed changes
   in
 
   (* Print *)
@@ -452,9 +460,15 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   	List.map (fun (t, bops) -> L.define_global ("ctype_" ^ t) (L.const_named_struct ctype_t (Array.of_list ((List.map (function
   	  | BOprt(fn, o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
+<<<<<<< Updated upstream
   	    | None -> (match fn with 
           (* | "add" -> get_add_fn_lval t *)
           | _ -> L.const_pointer_null ctype_add_pt)) 
+=======
+  	    | None -> (match fn with
+          | "add" -> get_add_fn_lval t
+          | _ ->  L.const_pointer_null ctype_add_pt))
+>>>>>>> Stashed changes
   	  | BUoprt(fn, o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
   	    | None -> L.const_pointer_null ctype_neg_pt)
@@ -849,8 +863,12 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     ignore(build_string_print_fn fn b);
   in
 
+<<<<<<< Updated upstream
 
   let build_new_clist_init dataptr_of_cobj listptr length builder =
+=======
+let build_new_clist_init dataptr_of_cobj listptr length builder =
+>>>>>>> Stashed changes
     let len = length in
     let cap = length in
 
@@ -947,6 +965,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       | _ -> cobj_pt
       (** todo lists and stuff **)
   in
+
   let const_of_typ = function
       | Int -> L.const_null int_t
       | Float -> L.const_null float_t
