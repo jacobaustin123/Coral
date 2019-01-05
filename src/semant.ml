@@ -182,11 +182,11 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
     let t3 = binop t1 t2 op in (t3, SBinop(e1, op, e2), None)
 
   | Var(Bind(x, t)) -> 
-    if StringMap.mem x locals then 
-    let (typ, t', data) = StringMap.find x locals in 
-    (t', SVar(x), data) 
-    else if the_state.noeval then (t, SVar(x), None) else
-    raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
+    if StringMap.mem x locals then
+      if (StringMap.mem x globals) && the_state.noeval then (Dyn, SVar(x), None)
+      else let (typ, t', data) = StringMap.find x locals in (t', SVar(x), data)
+    else if the_state.noeval then (Dyn, SVar(x), None) 
+    else raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
 
   | ListAccess(e, x) ->
     let (t1, e1, _) = func_expr globals locals the_state e in
