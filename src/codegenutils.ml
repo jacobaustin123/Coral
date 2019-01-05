@@ -14,7 +14,6 @@ module StringMap = Map.Make(String)
 module BindMap = Map.Make(struct type t = Ast.bind let compare = Pervasives.compare end)
 module SfdeclMap = Map.Make(struct type t = Sast.sfunc_decl let compare = Pervasives.compare end)
 
-
 (* A wrapper for an Llvalue representing data *)
 type dataunit =
     |Raw of L.llvalue     (* where llvalue = i32 or other prim *)
@@ -70,13 +69,10 @@ type built_oprt =
   | BLoprt of string * (((L.llvalue * L.llbuilder) * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)) option)
 
 
-type special_ctype_fn = FPrint | FHeapify | FCall
+type special_ctype_fn = FPrint | FHeapify | FCall | FAdd
 
 let string_of_special_ctype_fn = function
-    |FPrint -> "print"
-    |FHeapify -> "heapify"
-    |FCall -> "call"
-
-
-
-
+    | FPrint -> "print"
+    | FHeapify -> "heapify"
+    | FCall -> "call"
+    | FAdd -> "add"

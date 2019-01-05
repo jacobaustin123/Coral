@@ -24,10 +24,12 @@ setup.log
 
 # for testing, not source code
 gcd.coral
-testall.log
+*.log
 source.*
 main
 *.diff
 *.out
+
 # IntelliJ nonsense
 .idea/*
+.vscode

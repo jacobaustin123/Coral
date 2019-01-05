@@ -231,7 +231,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
      let cobjptr = L.build_load gep_addr_as_cobjptrptr "__cobjptr" b in
      cobjptr
   in
-
+ 
   let build_idx_parent self_p other_p name b =
    (* get elememnt *)
    let gep_addr = L.build_struct_gep self_p clist_data_idx "__gep_addr" b in
@@ -332,7 +332,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       in
 
   (* Functions! *)
-  let (func_call_fn,func_call_b) = build_ctype_fn "func_call" ctype_call_t in
+  let (func_call_fn, func_call_b) = build_ctype_fn "func_call" ctype_call_t in
 
   let ctype_func = L.define_global "ctype_func" (L.const_named_struct ctype_t [|
         L.const_pointer_null ctype_add_pt; (* ctype_add_pt *)
@@ -370,8 +370,9 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         | FPrint -> ("print", ctype_print_t)
         | FHeapify -> ("heapify", ctype_heapify_t)
         | FCall -> ("call", ctype_call_t)
+        | FAdd -> ("add", ctype_add_t)
       ) in
-      let (the_fn,the_bld) = build_ctype_fn (ty_str ^ "_" ^ name) fn_ty in
+      let (the_fn, the_bld) = build_ctype_fn (ty_str ^ "_" ^ name) fn_ty in
       (the_fn,the_bld)
   in
   
@@ -387,6 +388,20 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   let get_special_fn spec_ty ty = 
     match *)
 
+  let (list_add_fn, list_add_b) = build_special_ctype_fn FAdd "list" in
+  let (string_add_fn, string_add_b) = build_special_ctype_fn FAdd "string" in
+
+  let get_add_fn_lval = function
+    | "list" -> list_add_fn
+    (* | "string" -> string_add_fn *)
+    | _ -> L.const_pointer_null ctype_add_pt
+
+  in let get_add_builder = function
+    | "list" -> list_add_b
+    | "string" -> string_add_b
+    | _ -> raise (Failure "CodegenError: unexpected builder requested for add function")
+
+  in
 
   (* Print *)
   let (int_print_fn, int_print_b) = build_special_ctype_fn FPrint "int" in
@@ -437,13 +452,20 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   	List.map (fun (t, bops) -> L.define_global ("ctype_" ^ t) (L.const_named_struct ctype_t (Array.of_list ((List.map (function
   	  | BOprt(fn, o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
-  	    | None -> L.const_pointer_null ctype_add_pt)
+  	    | None -> (match fn with 
+          | "add" -> get_add_fn_lval t
+          | _ -> L.const_pointer_null ctype_add_pt)) 
   	  | BUoprt(fn, o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
   	    | None -> L.const_pointer_null ctype_neg_pt)
   	  | BLoprt(fn, o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
-        | None -> match fn with "idx" -> L.const_pointer_null ctype_idx_pt | "idx_parent" -> L.const_pointer_null ctype_idx_parent_pt)) bops) @ ([L.const_pointer_null ctype_call_pt; get_heapify_fn_lval t ; get_print_fn_lval t])))) the_module) built_ops
+        | None -> (match fn with 
+          | "idx" -> L.const_pointer_null ctype_idx_pt 
+          | "idx_parent" -> L.const_pointer_null ctype_idx_parent_pt))) bops) 
+            @ ([L.const_pointer_null ctype_call_pt; 
+                get_heapify_fn_lval t ; 
+                get_print_fn_lval t])))) the_module) built_ops
   	    in
 
   let ctype_of_ASTtype = function
@@ -561,10 +583,10 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   (** manually making the ctype_ functions **)
   (* does alloca, store, then load *)  (* note you should not use this if youre not using the values right away !!!!!! *)
   let boilerplate_till_load remote_cobj_p prettyname b =
-    ignore(L.set_value_name ("remote_"^prettyname) remote_cobj_p);
-    let cobj_pp = L.build_alloca cobj_pt (prettyname^"_p") b in
+    ignore(L.set_value_name ("remote_" ^ prettyname) remote_cobj_p);
+    let cobj_pp = L.build_alloca cobj_pt (prettyname ^ "_p") b in
     ignore(L.build_store remote_cobj_p cobj_pp b);
-    let cobj_p = L.build_load cobj_pp (prettyname^"_p") b in
+    let cobj_p = L.build_load cobj_pp (prettyname ^ "_p") b in
     cobj_p
   in
 
@@ -745,8 +767,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     (* iter block *)
     let iter_bb = L.append_block context "iter" fn in
     ignore(L.build_br iter_bb b);
-
     let iter_builder = L.builder_at_end context iter_bb in
+    
     let n = L.build_load nptr "n" iter_builder in
     let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
     ignore(L.build_store nnext nptr iter_builder);
@@ -825,6 +847,84 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
  let _ =
     let (fn, b) = (string_print_fn, string_print_b) in
     ignore(build_string_print_fn fn b);
+  in
+
+
+  let build_new_clist_init dataptr_of_cobj listptr length builder =
+    let len = length in
+    let cap = length in
+
+    (* store dataptr the struct *)
+    let datafieldptr = L.build_struct_gep dataptr_of_cobj clist_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
+    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in
+    let listptr_as_i8ptrptr = L.build_bitcast listptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in
+    ignore(L.build_store listptr_as_i8ptrptr datafieldptr_as_i8ptrptr builder);
+
+    (* store len in the struct *)
+    let lenfieldptr = L.build_struct_gep dataptr_of_cobj clist_len_idx "lenfieldptr" builder in  (* lenfieldptr: i32* *)
+    ignore(L.build_store len lenfieldptr builder);
+
+    (* store cap in the struct *)
+    let capfieldptr = L.build_struct_gep dataptr_of_cobj clist_cap_idx "capfieldptr" builder in  (* capfieldptr: i32* *)
+    ignore(L.build_store cap capfieldptr builder);
+  in
+
+  let build_list_add_fn fn b = 
+    let (self_data, other_data) = boilerplate_binop clist_t fn b in
+    
+    let self_listptr = build_getlist_cobj self_data b in
+    let other_listptr = build_getlist_cobj other_data b in
+
+    let self_ln = build_getlen_clist self_listptr b in
+    let other_ln = build_getlen_clist other_listptr b in
+
+    let total = L.build_add self_ln other_ln "total_length" b in
+    let dataptr = L.build_array_malloc cobj_pt total "__new_dataptr" b in
+    let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" b in
+
+    let load_list listptr dataptr fn b =
+      let nptr = L.build_alloca int_t "nptr" b in
+      ignore(L.build_store (L.const_int int_t 0) nptr b); 
+
+      let iter_bb = L.append_block context "iter" fn in
+      ignore(L.build_br iter_bb b);
+      let iter_builder = L.builder_at_end context iter_bb in
+
+      let n = L.build_load nptr "n" iter_builder in
+      let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
+      ignore(L.build_store nnext nptr iter_builder);
+
+      let iter_complete = (L.build_icmp L.Icmp.Sge) n total "iter_complete" iter_builder in (* true if n exceeds list length *)
+
+      let body_bb = L.append_block context "list_print_body" fn in
+      let body_builder = L.builder_at_end context body_bb in
+      let elmptr = build_idx listptr n "list_index_result" body_builder in
+      
+      let gep_addr = L.build_gep dataptr [|L.const_int int_t 0; n|] "__elem_ptr" body_builder in
+      ignore(L.build_store elmptr gep_addr body_builder);
+
+      L.build_br iter_bb body_builder;
+
+      let merge_bb = L.append_block context "merge" fn in
+      ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
+      
+      let end_builder = L.builder_at_end context merge_bb in 
+      (gep_addr, end_builder)
+
+    in
+
+    let (dataptr1, builder1) = load_list self_listptr dataptr fn b in
+    let (dataptr2, builder2) = load_list other_listptr dataptr1 fn builder1 in
+    let (newobjptr, newdataptr) = build_new_cobj clist_t builder2 in
+
+    let _ = build_new_clist_init newdataptr dataptr total builder2 in
+    ignore(L.build_ret newobjptr builder2); 
+
+  in 
+
+  let _ =
+    let (fn, b) = (list_add_fn, list_add_b) in
+    ignore(build_list_add_fn fn b);
   in
 
   (* define exit *)
