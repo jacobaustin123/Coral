@@ -934,7 +934,6 @@ let add_lists fn b =
   (* builds the addition function for lists *)
   let build_list_add_fn fn b = 
     let (builder, dataptr_as_i8ptr, total) = add_lists fn b in
-
     let (newobjptr, newdataptr) = build_new_cobj clist_t builder in
 
     let _ = build_new_clist_init newdataptr dataptr_as_i8ptr total builder in
@@ -1816,8 +1815,9 @@ let add_lists fn b =
                 )
                 | Box(v) -> (match the_state.ret_typ with
                     | Dyn -> tstp "dynamic return of box"; (v, the_state)
-                    | _ -> tstp "explicit return of box"; 
-                      if ty = FuncType || ty = Arr then (v, the_state) else (* deal with FuncType more elegantly in the future *)
+                    | _ -> tstp ("explicit return of box for type " ^ (string_of_typ the_state.ret_typ)); 
+                      if the_state.ret_typ = FuncType || the_state.ret_typ = Arr then let _ = (tstp "returning an explicit cobj type") in (v, the_state) else (* deal with FuncType more elegantly in the future *)
+                      let _ = (tstp "extracting data for explicit return type") in
                       let the_state = check_explicit_type the_state.ret_typ v ("RuntimeError: invalid return type (expected " ^ (string_of_typ the_state.ret_typ) ^ ")") the_state in
                       let data = build_getdata_cobj (ltyp_of_typ the_state.ret_typ) v the_state.b in (data, the_state)
                 )

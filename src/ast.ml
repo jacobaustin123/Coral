@@ -79,7 +79,7 @@ let rec string_of_typ = function
   | Bool -> "bool"
   | String -> "str"
   | Dyn -> "dyn"
-  | Arr -> "[]"
+  | Arr -> "list"
   | FuncType -> "func"
   | Null -> "null"
 

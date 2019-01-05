@@ -283,7 +283,7 @@ and assign map data bind =
 and check_array map e b = 
   let (typ, e', data) = expr map e in
   (match typ with
-  | Arr | Dyn -> assign map (Dyn, e', data) b
+  | String | Arr | Dyn -> assign map (Dyn, e', data) b
   | _ -> raise (Failure ("STypeError: invalid array type in for loop.")))
 
 
