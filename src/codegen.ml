@@ -782,7 +782,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     ignore(L.build_call fn_p [|elmptr|] "print_cob" body_builder);
     ignore(L.build_call printf_func [| fs2 ; L.const_int int_t 0 |] "printf" body_builder);
 
-    L.build_br iter_bb body_builder;
+    ignore(L.build_br iter_bb body_builder);
 
     let merge_bb = L.append_block context "merge" fn in
     ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
@@ -831,7 +831,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let fn_p = build_getctypefn_cobj ctype_print_idx elmptr body_builder in
     ignore(L.build_call fn_p [|elmptr|] "print_cob" body_builder);
 
-    L.build_br iter_bb body_builder;
+    ignore(L.build_br iter_bb body_builder);
 
     let merge_bb = L.append_block context "merge" fn in
     ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
@@ -1069,9 +1069,9 @@ let add_lists fn b =
 
 
   (* useful utility functions! *)
-  let names_of_bindlist bindlist =
+  (* let names_of_bindlist bindlist =
     List.map name_of_bind bindlist
-  in
+  in *)
 (* helper fn: seq 4 == [0;1;2;3] *)
   let seq len =
     let rec aux len acc =
@@ -1518,9 +1518,9 @@ let add_lists fn b =
 
                 (* now lets build the body of the optimized function *)
             let fn_builder = L.builder_at_end context (L.entry_block optim_func) in  
-            let int_format_str = L.build_global_stringptr "%d\n" "fmt" the_state.b
+            (* let int_format_str = L.build_global_stringptr "%d\n" "fmt" the_state.b
             and string_format_str = L.build_global_stringptr "%d\n" "fmt" the_state.b
-            and float_format_str = L.build_global_stringptr "%c\n" "fmt" the_state.b in  
+            and float_format_str = L.build_global_stringptr "%c\n" "fmt" the_state.b in   *)
             (* List.iter (fun (Bind (n, t)) -> print_endline (n ^ ": " ^ string_of_typ t)) sfdecl.sformals; *)
             let fn_namespace = build_binding_list (Some(fn_builder)) (typed_formals @ sfdecl.slocals) in
             let vals_to_store = Array.to_list (L.params optim_func) in
@@ -1741,7 +1741,7 @@ let add_lists fn b =
         let body_state = change_state the_state (S_b(L.builder_at_end context body_bb)) in
         let body_state = add_terminal (stmt body_state body) (L.build_br pred_bb) in
         let the_state = rip_from_inner_state the_state body_state in
-        let pred_builder = L.builder_at_end context pred_bb in
+        (* let pred_builder = L.builder_at_end context pred_bb in *)
         (* eval the boolean predicate *)
         let pred_state = change_state the_state (S_b(L.builder_at_end context pred_bb)) in
         let (_, t) = predicate in
@@ -1792,7 +1792,7 @@ let add_lists fn b =
                   ignore(L.build_store rawdata var_addr the_state.b); the_state
           ) in
 
-         add_terminal (stmt the_state body) (L.build_br iter_bb);
+         ignore(add_terminal (stmt the_state body) (L.build_br iter_bb));
          let merge_bb = L.append_block context "merge" the_function in
            ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
          let the_state = change_state the_state (S_b(L.builder_at_end context merge_bb)) in
