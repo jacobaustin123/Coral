@@ -504,7 +504,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let ctypefieldptr = L.build_struct_gep objptr cobj_type_idx "ctypefieldptr" builder in
     (objptr, datafieldptr, ctypefieldptr)
   in
-    
+
+  (* builds a new cobj of a given type and returns a pointer to the cobj and a pointer to its data *)
   let build_new_cobj data_type builder =
     (* malloc the new object and its data *)
     let objptr = L.build_malloc cobj_t "__new_objptr" builder in (* objptr: cobj_pt *)
@@ -523,12 +524,14 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     (objptr, dataptr)
   in
 
+  (* builds a new cobj of a given type with specified data stored in it *)
   let build_new_cobj_init data_type value b =
       let (objptr, dataptr) = build_new_cobj data_type b in
       ignore(L.build_store value dataptr b);
       objptr
   in
 
+  (* builds a new clist given the dataptr of a preexisting cobj and an OCaml list of pointers to the elements to be stored *)
   let build_new_clist dataptr_of_cobj elm_pts builder =
     (* len *)
     let length = List.length elm_pts in
@@ -628,6 +631,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     (self_data, other_data)
   in
 
+  (* creates the ctype functions for all standard (not-special functions *)
   List.iter (fun (t, bops) -> List.iter (function
     | BOprt(_, o) -> (match o with
       | Some(((fn, bd), tfn)) ->
@@ -795,7 +799,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     ignore(build_list_print_fn fn b);
   in
 
-(* builds the print function for lists. basically just iterates over all the objects and calls their print functions *)
+(* builds the print function for strings. basically just iterates over all the objects and calls their print functions *)
   let build_string_print_fn fn b =   (* data_type = int_t etc *)
     let formals_llvalues = (Array.to_list (L.params fn)) in
     let [remote_self_p] = formals_llvalues in
@@ -843,92 +847,98 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     ignore(build_string_print_fn fn b);
   in
 
+(* builds a new clist with a pointer to an existing array of cobj pointers. used for adding lists *)
 let build_new_clist_init dataptr_of_cobj listptr_as_i8ptr length builder =
-    let len = length in
-    let cap = length in
+  let len = length in
+  let cap = length in
 
-    (* store dataptr the struct *)
-    let datafieldptr = L.build_struct_gep dataptr_of_cobj clist_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
-    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in
-    (* let listptr_as_i8ptrptr = L.build_bitcast listptr_as_i8ptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in *)
-    ignore(L.build_store listptr_as_i8ptr datafieldptr_as_i8ptrptr builder);
+  (* store dataptr the struct *)
+  let datafieldptr = L.build_struct_gep dataptr_of_cobj clist_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
+  let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in
+  (* let listptr_as_i8ptrptr = L.build_bitcast listptr_as_i8ptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in *)
+  ignore(L.build_store listptr_as_i8ptr datafieldptr_as_i8ptrptr builder);
 
-    (* store len in the struct *)
-    let lenfieldptr = L.build_struct_gep dataptr_of_cobj clist_len_idx "lenfieldptr" builder in  (* lenfieldptr: i32* *)
-    ignore(L.build_store len lenfieldptr builder);
+  (* store len in the struct *)
+  let lenfieldptr = L.build_struct_gep dataptr_of_cobj clist_len_idx "lenfieldptr" builder in  (* lenfieldptr: i32* *)
+  ignore(L.build_store len lenfieldptr builder);
 
-    (* store cap in the struct *)
-    let capfieldptr = L.build_struct_gep dataptr_of_cobj clist_cap_idx "capfieldptr" builder in  (* capfieldptr: i32* *)
-    ignore(L.build_store cap capfieldptr builder);
+  (* store cap in the struct *)
+  let capfieldptr = L.build_struct_gep dataptr_of_cobj clist_cap_idx "capfieldptr" builder in  (* capfieldptr: i32* *)
+  ignore(L.build_store cap capfieldptr builder);
+in
+
+let list_binop fn b =
+  let formals_llvalues = (Array.to_list (L.params fn)) in
+  let [ remote_self_p; remote_other_p ] = formals_llvalues in
+
+  (* boilerplate *)
+  let self_p = boilerplate_till_load remote_self_p "self_p" b in
+  let other_p = boilerplate_till_load remote_other_p "other_p" b in
+
+  (* get data *)
+  let self_data = build_getlist_cobj self_p b in
+  let other_data = build_getlist_cobj other_p b in
+  (self_data, other_data)
+in
+
+let add_lists fn b = 
+  let (self_data, other_data) = list_binop fn b in
+
+  let self_ln = build_getlen_clist self_data b in
+  let other_ln = build_getlen_clist other_data b in
+
+  let total = L.build_add self_ln other_ln "total_length" b in
+  (* let dataptr = L.build_malloc (L.array_type cobj_pt 10) "__new_dataptr1" b in *)
+
+  let dataptr = L.build_array_malloc cobj_pt total "__new_dataptr" b in
+  let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" b in
+
+  let load_list listptr dataptr fn b =
+    let nptr = L.build_alloca int_t "nptr" b in
+    ignore(L.build_store (L.const_int int_t 0) nptr b); 
+
+    let iter_bb = L.append_block context "iter" fn in
+    ignore(L.build_br iter_bb b);
+    let iter_builder = L.builder_at_end context iter_bb in
+
+    let n = L.build_load nptr "n" iter_builder in
+    let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
+    ignore(L.build_store nnext nptr iter_builder);
+
+    let iter_complete = (L.build_icmp L.Icmp.Sge) n total "iter_complete" iter_builder in (* true if n exceeds list length *)
+
+    let body_bb = L.append_block context "list_add_body" fn in
+    let body_builder = L.builder_at_end context body_bb in
+    let elmptr = build_idx listptr n "list_index_result" body_builder in
+
+    let gep_addr = L.build_gep dataptr [|n|] "__elem_ptr" body_builder in
+    ignore(L.build_store elmptr gep_addr body_builder);
+
+    ignore(L.build_br iter_bb body_builder);
+
+    let merge_bb = L.append_block context "merge" fn in
+    ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
+    
+    let end_builder = L.builder_at_end context merge_bb in 
+    end_builder
+
   in
 
-  let list_binop fn b =
-    let formals_llvalues = (Array.to_list (L.params fn)) in
-    let [ remote_self_p; remote_other_p ] = formals_llvalues in
+  let builder1 = load_list self_data dataptr fn b in
+  let dataptr1 = L.build_gep dataptr [|self_ln|] "__next_dataptr" builder1 in
+  let builder2 = load_list other_data dataptr1 fn builder1 in
+  (builder2, dataptr_as_i8ptr, total)
 
-    (* boilerplate *)
-    let self_p = boilerplate_till_load remote_self_p "self_p" b in
-    let other_p = boilerplate_till_load remote_other_p "other_p" b in
-
-    (* get data *)
-    let self_data = build_getlist_cobj self_p b in
-    let other_data = build_getlist_cobj other_p b in
-    (self_data, other_data)
   in
 
+  (* builds the addition function for lists *)
   let build_list_add_fn fn b = 
-    let (self_data, other_data) = list_binop fn b in
-   
-    (* let self_listptr = build_getlist_cobj self_data b in *)
-    (* let other_listptr = build_getlist_cobj other_data b in *)
+    let (builder, dataptr_as_i8ptr, total) = add_lists fn b in
 
-    let self_ln = build_getlen_clist self_data b in
-    let other_ln = build_getlen_clist other_data b in
+    let (newobjptr, newdataptr) = build_new_cobj clist_t builder in
 
-    let total = L.build_add self_ln other_ln "total_length" b in
-    (* let dataptr = L.build_malloc (L.array_type cobj_pt 10) "__new_dataptr1" b in *)
-
-    let dataptr = L.build_array_malloc cobj_pt total "__new_dataptr" b in
-    let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" b in
-
-    let load_list listptr dataptr fn b =
-      let nptr = L.build_alloca int_t "nptr" b in
-      ignore(L.build_store (L.const_int int_t 0) nptr b); 
-
-      let iter_bb = L.append_block context "iter" fn in
-      ignore(L.build_br iter_bb b);
-      let iter_builder = L.builder_at_end context iter_bb in
-
-      let n = L.build_load nptr "n" iter_builder in
-      let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
-      ignore(L.build_store nnext nptr iter_builder);
-
-      let iter_complete = (L.build_icmp L.Icmp.Sge) n total "iter_complete" iter_builder in (* true if n exceeds list length *)
-
-      let body_bb = L.append_block context "list_add_body" fn in
-      let body_builder = L.builder_at_end context body_bb in
-      let elmptr = build_idx listptr n "list_index_result" body_builder in
-
-      let gep_addr = L.build_gep dataptr [|n|] "__elem_ptr" body_builder in
-      ignore(L.build_store elmptr gep_addr body_builder);
-
-      ignore(L.build_br iter_bb body_builder);
-
-      let merge_bb = L.append_block context "merge" fn in
-      ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
-      
-      let end_builder = L.builder_at_end context merge_bb in 
-      end_builder
-
-    in
-
-    let builder1 = load_list self_data dataptr fn b in
-    let dataptr1 = L.build_gep dataptr [|self_ln|] "__next_dataptr" builder1 in
-    let builder2 = load_list other_data dataptr1 fn builder1 in
-    let (newobjptr, newdataptr) = build_new_cobj clist_t builder2 in
-
-    let _ = build_new_clist_init newdataptr dataptr_as_i8ptr total builder2 in
-    ignore(L.build_ret newobjptr builder2); 
+    let _ = build_new_clist_init newdataptr dataptr_as_i8ptr total builder in
+    ignore(L.build_ret newobjptr builder); 
 
   in 
 
@@ -937,60 +947,16 @@ let build_new_clist_init dataptr_of_cobj listptr_as_i8ptr length builder =
     ignore(build_list_add_fn fn b);
   in
 
- let build_string_add_fn fn b = 
-    let (self_data, other_data) = list_binop fn b in
-   
-    (* let self_listptr = build_getlist_cobj self_data b in *)
-    (* let other_listptr = build_getlist_cobj other_data b in *)
+  (* builds the addition function for strings *)
+  let build_string_add_fn fn b = 
+    let (builder, dataptr_as_i8ptr, total) = add_lists fn b in
 
-    let self_ln = build_getlen_clist self_data b in
-    let other_ln = build_getlen_clist other_data b in
+    let (newobjptr, newdataptr) = build_new_cobj cstring_t builder in
 
-    let total = L.build_add self_ln other_ln "total_length" b in
-    (* let dataptr = L.build_malloc (L.array_type cobj_pt 10) "__new_dataptr1" b in *)
-
-    let dataptr = L.build_array_malloc cobj_pt total "__new_dataptr" b in
-    let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" b in
-
-    let load_list listptr dataptr fn b =
-      let nptr = L.build_alloca int_t "nptr" b in
-      ignore(L.build_store (L.const_int int_t 0) nptr b); 
-
-      let iter_bb = L.append_block context "iter" fn in
-      ignore(L.build_br iter_bb b);
-      let iter_builder = L.builder_at_end context iter_bb in
-
-      let n = L.build_load nptr "n" iter_builder in
-      let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
-      ignore(L.build_store nnext nptr iter_builder);
-
-      let iter_complete = (L.build_icmp L.Icmp.Sge) n total "iter_complete" iter_builder in (* true if n exceeds list length *)
-
-      let body_bb = L.append_block context "list_add_body" fn in
-      let body_builder = L.builder_at_end context body_bb in
-      let elmptr = build_idx listptr n "list_index_result" body_builder in
-
-      let gep_addr = L.build_gep dataptr [|n|] "__elem_ptr" body_builder in
-      ignore(L.build_store elmptr gep_addr body_builder);
-
-      ignore(L.build_br iter_bb body_builder);
-
-      let merge_bb = L.append_block context "merge" fn in
-      ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
-      
-      let end_builder = L.builder_at_end context merge_bb in 
-      end_builder
-
-    in
-
-    let builder1 = load_list self_data dataptr fn b in
-    let dataptr1 = L.build_gep dataptr [|self_ln|] "__next_dataptr" builder1 in
-    let builder2 = load_list other_data dataptr1 fn builder1 in
-    let (newobjptr, newdataptr) = build_new_cobj cstring_t builder2 in
-
-    let _ = build_new_clist_init newdataptr dataptr_as_i8ptr total builder2 in
-    ignore(L.build_ret newobjptr builder2); in
-
+    let _ = build_new_clist_init newdataptr dataptr_as_i8ptr total builder in
+    ignore(L.build_ret newobjptr builder); 
+    
+  in
   
   let _ =
     let (fn, b) = (string_add_fn, string_add_b) in
