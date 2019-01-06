@@ -12,6 +12,8 @@ The **Coral** programming language: a gradually typed, Python-like language with
 * [Goals](#goals)
 * [Using the Coral Compiler and Interpreter](#using-the-coral-compiler-and-interpreter)
 * [Adding Type Annotations](#adding-type-annotations)
+* [Exceptions](#exceptions)
+* [Differences from Python](#differences-from-python)
 
 ## Examples
 
@@ -261,7 +263,39 @@ Without the type annotations on the gcd function, this code takes about 25 secon
 
 ## Exceptions
 
-Coral has both compile and runtime exceptions for type errors, undefined variables, and out of bounds list access.
+Coral has both compile and runtime exceptions for type errors, undefined variables, and out of bounds list access. Coral strives to raise as many of these errors as possible at compile time, using a robust type inferrence system. For example, the following errors will be caught by the compiler:
+
+**Function Argument Errors:**
+
+```python
+>>> def foo(x : int):
+...     return x
+...
+>>> print(foo(3.0))
+STypeError: invalid type assigned to x
+```
+
+**Function Return Type Errors:**
+
+```python
+>>> def foo(x) -> str:
+...     return x
+...
+>>> print(foo(3.0))
+STypeError: invalid return type
+```
+
+**Variable Assignment Errors:**
+
+```python
+>>> def foo():
+...     return "hello"
+...
+>>> x : int = foo()
+STypeError: invalid type assigned to x
+```
+
+Some errors cannot be caught by the compiler, and will only be caught at runtime. Runtime checks are only added to the LLVM IR when the code is not provably correct at compile-time. This saves needless computation at runtime.
 
 ```python
 >>> def dynamic(): 
@@ -278,4 +312,59 @@ Coral has both compile and runtime exceptions for type errors, undefined variabl
 RuntimeError: unsupported operand type(s) for binary *
 ```
 
-This only occurs in relatively obscure cases like the above, but in all cases type hints are respected and errors due to invalid usage are raised. Coral performs out-of-bounds checking at runtime for arrays, type checking for binary and unary operators, undefined objects, and other 
+This only occurs in relatively obscure cases like the above, but in all cases type hints are respected and errors due to invalid usage are raised. Coral also performs out-of-bounds checking at runtime for arrays, as in:
+
+```python
+>>> x = [1, 2, 3, 4, 5]
+>>> print(x[0])
+1
+>>> print(x[5])
+RuntimeError: list index out of bounds
+>>> print(x[-1])
+RuntimeError: list index out of bounds
+```
+
+## Differences from Python
+
+Coral strives to be syntactically identical to Python, and as close as possible to Python in runtime behavior. There are a few differences in behavior and many limitations, mostly due to the scope of the Coral project. These features could be added at a later date, and we welcome contributions.
+
+### No Closures
+
+Coral does not have closures when returning functions from functions (as first class objections). For example, in Python the following code works as expected:
+
+```python
+>>> def foo():
+...    x = 3
+...    def bar():
+...        return x
+...    return bar
+...
+>>> f = foo()
+>>> print(f())
+3
+```
+
+but in Coral this will throw an error warning about an undefined variable, i.e.
+
+```python
+>>> print(f())
+SNameError: name 'x' is not defined
+```
+
+### No Classes
+
+Coral does not have classes, structs, or any kind of object oriented programming model. These could easily be added using the same model as lists, but they have not been so far.
+
+### Unsupported Keywords
+
+Coral does not support several common Python keywords, including:
+
+```python
+elif, break, continue, pass, class, global, await, from, as, nonlocal, yield, async, raise, except, finally, is, lambda, try, with
+```
+
+These should be implemented, and we again welcome contributions to support these features. The primary limitation is adding support for them in the codegen/LLVM IR generation steps.
+
+## Acknowledgments
+
+This language was developed as a Programming Languages and Translators project in Fall 2018 at Columbia University by Jacob Austin, Matthew Bowers, Sanford Miller, and Rebecca Cawkwell.
