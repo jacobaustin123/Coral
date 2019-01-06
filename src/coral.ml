@@ -3,6 +3,10 @@ open Sast
 open Utilities
 open Interpret
 
+let () = Sys.set_signal Sys.sigint
+  (Sys.Signal_handle 
+    (fun _signum ->
+      try Sys.remove "source.ll"; Sys.remove "source.s"; exit 0 with _ -> exit 0))
 
 (* boolean flags used to handle command line arguments *)
 let debug = ref false
@@ -10,10 +14,19 @@ let run = ref true
 
 (* file path flags to handle compilation from a file *)
 let fpath = ref ""
-let set = ref false
+let fpath_set = ref false
 
 (* exceptions flag enables or disables runtime exceptions *)
 let exceptions = ref true
+
+(* assembly flag specifies whether to generate the .s assembly file instead of an executable *)
+let assembly = ref false
+
+(* emit_llvm flag specifies whether to generate the LLVM IR file instead of an executable *)
+let emit_llvm = ref false
+
+(* executable_name is name of executable file *)
+let executable_name = ref ""
 
 (* usage: usage message for function calls *)
 let usage = "usage: " ^ Sys.argv.(0) ^ " [file] [-d] [-r]"
@@ -23,6 +36,9 @@ let speclist =
 [
   ( "[file]", Arg.String (fun foo -> ()), ": compile from a file instead of the default interpreter");
   ( "-d", Arg.Set debug, ": print debugging information at compile time");
+  ( "-S", Arg.Set assembly, ": generate x86 assembly output instead of executable");
+  ( "-emit-llvm", Arg.Set emit_llvm, ": generate llvm ir output instead of compiling");
+  ( "-o", Arg.Set_string executable_name, ": specify the name of the generated executable or assembly file");
   ( "-no-compile", Arg.Clear run, ": run semantic checking on a file instead of compiling or running it");
   ( "-no-except", Arg.Clear exceptions, ": run compilation on a file without runtime checks");
 ]
@@ -152,7 +168,7 @@ let process_output_to_list = fun command ->
     process_otl_aux() in
   try process_otl_aux ()
   with End_of_file ->
-    let stat = Unix.close_process_in chan in (List.rev !res,stat)
+    let stat = Unix.close_process_in chan in (List.rev !res, stat)
 
 let cmd_to_list command =
   let (l, _) = process_output_to_list command in l
@@ -177,14 +193,37 @@ and strip_print ast = List.rev (List.fold_left (fun acc x -> (strip_stmt x) :: a
 (* codegen: command to run codegen to a generated sast, save it to a file (source.ll), compile and
 evaluate it, and return the output *)
 
-let codegen sast = 
+let codegen sast fname = 
   let output = 
   (try 
     let m = Codegen.translate sast !exceptions in
     Llvm_analysis.assert_valid_module m;
-    let oc = open_out "source.ll" in
+
+    let llvm_name = (match String.length !executable_name with
+      | 0 -> fname ^ ".ll"
+      | _ -> !executable_name) in
+
+    let oc = open_out llvm_name in
     Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc;
-    cmd_to_list "llc source.ll -o source.s && gcc source.s -o main && ./main"
+
+    let assembly_name = (match String.length !executable_name with
+      | 0 -> fname ^ ".s"
+      | _ -> !executable_name) in
+
+    let executable_name = (match String.length !executable_name with
+      | 0 -> "a.out"
+      | _ -> !executable_name) in
+
+    let output = match (!emit_llvm, !assembly) with
+      | (true, _) -> [] 
+      | (false, true) -> 
+        let output = cmd_to_list ("llc " ^ llvm_name ^ " -o " ^ assembly_name) in
+        Sys.remove llvm_name; output
+      | (false, false) -> 
+        let output = cmd_to_list ("llc " ^ llvm_name ^ " -o " ^ assembly_name ^ " && gcc " ^ assembly_name ^ " -o " ^ executable_name ^ " && ./" ^ executable_name) in
+        Sys.remove llvm_name; Sys.remove assembly_name; output
+    
+    in output
   with
     | Not_found -> raise (Failure ("CodegenError: variable not found!"))
   ) in output
@@ -226,7 +265,7 @@ let rec from_console map past run =
     let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
     
     if run then
-      let output = codegen sast in
+      let output = codegen sast "source" in
       List.iter print_endline output; flush stdout; 
       from_console map imported_program run
 
@@ -253,7 +292,7 @@ let rec from_file map fname run = (* todo combine with loop *)
     let () = Sys.chdir original_path in
 
     if run then 
-      let output = codegen sast in
+      let output = codegen sast (Filename.remove_extension (Filename.basename fname)) in
       List.iter print_endline output; flush stdout;
 
   with
@@ -265,10 +304,10 @@ let rec from_file map fname run = (* todo combine with loop *)
 anonymous argument (file path) and runs either the interpreter or the from_file compiler *)
 
 let () =
-  Arg.parse speclist (fun path -> if not !set then fpath := path; set := true; ) usage; (* parse command line arguments *)
+  Arg.parse speclist (fun path -> if not !fpath_set then fpath := path; fpath_set := true; ) usage; (* parse command line arguments *)
   let emptymap = StringMap.empty in 
 
-  if !set then from_file emptymap !fpath !run
+  if !fpath_set then from_file emptymap !fpath !run
   else
   ( 
     Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
