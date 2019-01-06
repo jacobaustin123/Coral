@@ -134,12 +134,12 @@ Coral also has a build-in **interpreter**. To use the interpreter, simply run ``
 > coral
 Welcome to the Coral programming language! 
 >>> def gcd(a, b)
-...     while a ! = b: 
+...     while a != b: 
 ...         if a > b: 
-...             a = a-b
+...             a = a - b
 ...         else: 
-...             b = b-a
-...     a
+...             b = b - a
+...     return a
 ...
 >>> gcd(5,10) 
 5.
@@ -185,11 +185,83 @@ STypeError: invalid return type
 ...
 >>> print(add([1,2,3]))
 6 
->>>print(add([1.0,2.0, 3.0]))
+>>> print(add([1.0,2.0, 3.0]))
 STypeError: invalid type assigned to x
 ```
 
 In cases where type inference is not possible due to a conditional branch, these errors will occur at runtime, like for example:
+
+```python
+>>> def dynamic() -> str: 
+...    if x == 3:
+...        return 3
+...    else: 
+...        return "hello" 
+...
+>>> x = 4
+>>> print(dynamic())
+hello
+>>> x = 3
+>>> print(dynamic())
+RuntimeError: invalid return type (expected string)
+```
+
+Valid type annotations include variable annotations, function argument annotations, and function return type annotations. Variable annotations work the same way:
+
+```python
+>>> x : int = 3 # valid
+>>> x = "hello"
+STypeError: invalid type assigned to x
+```
+
+## Optimization
+
+Coral uses a gradual typing system that places type-inferred immutable variables on the stack instead of following Python's dynamic PyObject memory model. This optimization can speed up computational intensive numerical code by many orders of magnitude. For example, the example gcd code above, even without type annotations, runs about 1000x faster in Coral than in Python. You can test this by simply running the same program using both the Python interpreter and Coral compiler. Other highly optimized examples include:
+
+```python
+>>> def count(x):
+...    sum = 0
+...
+...    for i in range(x):
+...        if i / 20 < 5:
+...            sum += i
+...
+...    return sum
+...
+>>> print(count(100000000))
+4950
+```
+
+which runs much faster in Coral than Python. Type annotations make this optimization even more robust. Often types cannot be fully type inferred, but type hints allow more code to be placed on the stack. For example:
+
+```python
+>>> def gcd(a : int, b : int) -> int
+...     while a != b: 
+...         if a > b: 
+...             a = a - b
+...         else: 
+...             b = b - a
+...     return a
+...
+>>> def dynamic(): 
+...    if x > 50:
+...        return x
+...    else: 
+...        return 4.0
+...
+>>> x = 51
+>>> a = dynamic()
+>>> x = 1552323251232
+>>> b = dynamic()
+>>> print(gcd(a, b))
+5.
+```
+
+Without the type annotations on the gcd function, this code takes about 25 seconds when run by Coral and does not terminate within 5 minutes when run by Python. However, when type annotations are added to the gcd function, it finished in less than a second when run by Coral.
+
+## Exceptions
+
+Coral has both compile and runtime exceptions for type errors, undefined variables, and out of bounds list access.
 
 ```python
 >>> def dynamic(): 
@@ -205,3 +277,5 @@ In cases where type inference is not possible due to a conditional branch, these
 >>> print(dynamic() * dynamic())
 RuntimeError: unsupported operand type(s) for binary *
 ```
+
+This only occurs in relatively obscure cases like the above, but in all cases type hints are respected and errors due to invalid usage are raised. Coral performs out-of-bounds checking at runtime for arrays, type checking for binary and unary operators, undefined objects, and other 
