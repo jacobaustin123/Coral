@@ -127,7 +127,8 @@ and exp map = function
             let (_, types) = split_sbind bindout in
             let stack = TypeMap.empty in
             let stack' = TypeMap.add (x, types) true stack in
-            let (map2, block, data, locals) = (func_stmt map map1 stack' {cond = false; forloop = false; noeval = false;} body) in
+
+            let (map2, block, data, locals) = (func_stmt map map1 {stack = stack'; cond = false; forloop = false; noeval = false; } body) in
 
             (match data with (* match return type with *)
               | Some (typ2, e', d) -> (* it did return something *)
@@ -157,40 +158,40 @@ and exp map = function
 
 (* func_expr: checks expressions within functions. differs from expr in how it handles function calls *)
 
-and func_expr globals locals stack flag x = convert (func_exp globals locals stack flag x)
+and func_expr globals locals the_state x = convert (func_exp globals locals the_state x)
 
-and func_exp globals locals stack flag = function (* evaluate expressions, return types and add to map *)
+and func_exp globals locals the_state = function (* evaluate expressions, return types and add to map *)
   | Unop(op, e) -> 
-    let (t1, e', _) = func_expr globals locals stack flag e in 
+    let (t1, e', _) = func_expr globals locals the_state e in 
     let t2 = unop t1 op in (t2, SUnop(op, e'), None)
 
   | Binop(a, op, b) -> 
-    let (t1, e1, _) = func_expr globals locals stack flag a in 
-    let (t2, e2, _) = func_expr globals locals stack flag b in 
+    let (t1, e1, _) = func_expr globals locals the_state a in 
+    let (t2, e2, _) = func_expr globals locals the_state b in 
     let t3 = binop t1 t2 op in (t3, SBinop(e1, op, e2), None)
 
   | Var(Bind(x, t)) -> 
     if StringMap.mem x locals then 
     let (typ, t', data) = StringMap.find x locals in 
     (t', SVar(x), data) 
-    else if flag.noeval then (t, SVar(x), None) else
+    else if the_state.noeval then (t, SVar(x), None) else
     raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
 
   | ListAccess(e, x) ->
-    let (t1, e1, _) = func_expr globals locals stack flag e in
-    let (t2, e2, _) = func_expr globals locals stack flag x in
+    let (t1, e1, _) = func_expr globals locals the_state e in
+    let (t2, e2, _) = func_expr globals locals the_state x in
     if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn then raise (Failure ("STypeError: invalid types for list access"))
     else (Dyn, SListAccess(e1, e2), None)
 
   | ListSlice(e, x1, x2) ->
-    let (t1, e1, _) = func_expr globals locals stack flag e in
-    let (t2, e2, _) = func_expr globals locals stack flag x1 in
-    let (t3, e3, _) = func_expr globals locals stack flag x2 in
+    let (t1, e1, _) = func_expr globals locals the_state e in
+    let (t2, e2, _) = func_expr globals locals the_state x1 in
+    let (t3, e3, _) = func_expr globals locals the_state x2 in
     if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t3 <> Int && t3 <> Dyn then raise (Failure ("STypeError: invalid types for list access"))
     else (Dyn, SListSlice(e1, e2, e3), None)
 
   | Call(exp, args) ->
-    let (t, e, data) = func_expr globals locals stack flag exp in 
+    let (t, e, data) = func_expr globals locals the_state exp in 
     if t <> Dyn && t <> FuncType then raise (Failure ("STypeError: cannot call objects of type " ^ type_to_string t)) else
     (match data with (* data is either the Func info *)
       | Some(x) -> 
@@ -202,7 +203,7 @@ and func_exp globals locals stack flag = function (* evaluate expressions, retur
             then raise (Failure ("SSyntaxError: unexpected number of arguments in function call"))
 
             else let rec aux (globals, locals, bindout, exprout) v1 v2 = match v1, v2 with 
-              | b, e -> let data = func_expr globals locals stack flag e in let (t', e', _) = data in 
+              | b, e -> let data = func_expr globals locals the_state e in let (t', e', _) = data in 
               let (map', name, inferred_t, explicit_t) = assign globals data b in (map', locals, ((Bind(name, explicit_t)) :: bindout), (e' :: exprout)) in
 
             let map' = StringMap.map (fun (a, b, c) -> (Dyn, b, c)) locals in
@@ -210,10 +211,10 @@ and func_exp globals locals stack flag = function (* evaluate expressions, retur
             let (map'', _, _, _) = assign map1 (Dyn, (SCall (e, [], SNop), Dyn), data) name in
 
             let (_, types) = split_sbind bindout in (* avoid recursive calls by checking if the type has already been called. *)
-            if TypeMap.mem (x, types) stack then (Dyn, SCall(e, (List.rev exprout), SNop), None) 
-            else let stack' = TypeMap.add (x, types) true stack in
-            
-            let (map2, block, data, locals) = (func_stmt globals map'' stack' flag body) in
+            if TypeMap.mem (x, types) the_state.stack then (Dyn, SCall(e, (List.rev exprout), SNop), None) 
+            else let stack' = TypeMap.add (x, types) true the_state.stack in
+
+            let (map2, block, data, locals) = (func_stmt globals map'' { noeval = false; cond = false; forloop = false; stack = stack'; } body) in
             (match data with
               | Some (typ2, e', d) -> let Bind(n1, btype) = name in if btype <> Dyn && btype <> typ2 then 
                   if typ2 <> Dyn then raise (Failure ("STypeError: invalid return type")) else 
@@ -229,8 +230,8 @@ and func_exp globals locals stack flag = function (* evaluate expressions, retur
           
           | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation")))
       
-      | None -> if not flag.noeval then print_endline "SNotImplementedError: calling weakly defined functions has not been implemented";
-          let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals stack flag e' in e'' :: acc) [] args) in
+      | None -> if not the_state.noeval then print_endline "SNotImplementedError: calling weakly defined functions has not been implemented";
+          let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals the_state e' in e'' :: acc) [] args) in
           (Dyn, (SCall(e, eout, SNop)), None)
         )
 
@@ -283,7 +284,7 @@ and assign map data bind =
 and check_array map e b = 
   let (typ, e', data) = expr map e in
   (match typ with
-  | Arr | Dyn -> assign map (Dyn, e', data) b
+  | String | Arr | Dyn -> assign map (Dyn, e', data) b
   | _ -> raise (Failure ("STypeError: invalid array type in for loop.")))
 
 
@@ -298,15 +299,15 @@ stack is a TypeMap containing the function call stack.
 TODO distinguish between outer and inner scope return statements to stop evaluating when definitely
 returned. *)
 
-and check_func globals locals out data local_vars stack flag = (function  
+and check_func globals locals out data local_vars the_state = (function  
   | [] -> ((List.rev out), data, locals, List.sort_uniq compare (List.rev local_vars))
-  | a :: t -> let (m', value, d, loc) = func_stmt globals locals stack flag a in
+  | a :: t -> let (m', value, d, loc) = func_stmt globals locals the_state a in
     (match (data, d) with
-      | (None, None) -> check_func globals m' (value :: out) None (loc @ local_vars) stack flag t
-      | (None, _) -> check_func globals m' (value :: out) d (loc @ local_vars) stack flag t
-      | (_, None) -> check_func globals m' (value :: out) data (loc @ local_vars) stack flag t
-      | (_, _) when d = data -> check_func globals m' (value :: out) data (loc @ local_vars) stack flag t
-      | _ -> check_func globals m' (value :: out) (Some (Dyn, (SNoexpr, Dyn), None)) (loc @ local_vars) stack flag t))
+      | (None, None) -> check_func globals m' (value :: out) None (loc @ local_vars) the_state t
+      | (None, _) -> check_func globals m' (value :: out) d (loc @ local_vars) the_state t
+      | (_, None) -> check_func globals m' (value :: out) data (loc @ local_vars) the_state t
+      | (_, _) when d = data -> check_func globals m' (value :: out) data (loc @ local_vars) the_state t
+      | _ -> check_func globals m' (value :: out) (Some (Dyn, (SNoexpr, Dyn), None)) (loc @ local_vars) the_state t))
 
 (* match_data: when reconciling branches in a conditional branch, this function
   checks what return types can still be inferred. If both return the same type, 
@@ -328,40 +329,40 @@ and match_data d1 d2 = match d1, d2 with
   to simplify the code by merging this with stmt, but it will be challenging to do.
 *)
 
-and func_stmt globals locals stack flag = function 
+and func_stmt globals locals the_state = function 
   | Return(e) -> (* for closures, match t with FuncType, attach local scope *)
-    let data = func_expr globals locals stack flag e in 
+    let data = func_expr globals locals the_state e in 
     let (typ, e', d) = data in 
     (locals, SReturn(e'), (Some data), []) 
 
   | Block(s) -> 
-    let (value, data, map', out) = check_func globals locals [] None [] stack flag s in 
+    let (value, data, map', out) = check_func globals locals [] None [] the_state s in 
     (map', SBlock(value), data, out)
   
   | Asn(exprs, e) -> 
-    let data = func_expr globals locals stack flag e in 
+    let data = func_expr globals locals the_state e in 
     let (typ, e', d) = data in
 
     let rec aux (m, lvalues, lcls) = function
       | [] -> (m, List.rev lvalues, List.rev lcls)
       | Var x :: t -> 
         let Bind (x1, t1) = x in 
-        if flag.cond && t1 <> Dyn then 
+        if the_state.cond && t1 <> Dyn then 
         raise (Failure ("SSyntaxError: cannot explicitly type variables in conditional branches")) 
         else let (m', name, inferred_t, explicit_t) = assign locals data x in 
         (aux (m', SLVar (Bind (name, explicit_t)) :: lvalues, Bind(name, inferred_t) :: lcls) t)
 
       | ListAccess(e, index) :: t -> 
-        let (t1, e1, _) = func_expr globals locals stack flag e in
-        let (t2, e2, _) = func_expr globals locals stack flag index in
+        let (t1, e1, _) = func_expr globals locals the_state e in
+        let (t2, e2, _) = func_expr globals locals the_state index in
         if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t1 == String then raise (Failure ("STypeError: invalid types for list assignment"))
         else (aux (m, SLListAccess (e1, e2) :: lvalues, lcls) t)
 
       | ListSlice(e, low, high) :: t -> raise (Failure "SNotImplementedError: List slicing has not been implemented")
 
-(*         let (t1, e1, _) = func_expr globals locals stack flag e in
-        let (t2, e2, _) = func_expr globals locals stack flag low in
-        let (t3, e3, _) = func_expr globals locals stack flag high in
+(*         let (t1, e1, _) = func_expr globals locals the_state e in
+        let (t2, e2, _) = func_expr globals locals the_state low in
+        let (t3, e3, _) = func_expr globals locals the_state high in
         if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t3 <> Int && t3 <> Dyn then raise (Failure ("STypeError: invalid types for list access"))
         else (aux (m, SLListSlice(e1, e2, e3) :: out, binds) t) *)
 
@@ -371,7 +372,7 @@ and func_stmt globals locals stack flag = function
     in let (m, lvalues, locals) = aux (locals, [], []) exprs in (m, SAsn(lvalues, e'), None, locals)
 
   | Expr(e) -> 
-      let (t, e', data) = func_expr globals locals stack flag e in (locals, SExpr(e'), None, [])
+      let (t, e', data) = func_expr globals locals the_state e in (locals, SExpr(e'), None, [])
   
   | Func(a, b, c) ->
     let rec dups = function (* check duplicate argument names *)
@@ -383,7 +384,7 @@ and func_stmt globals locals stack flag = function
     let Bind(name, btype) = a in 
 
     (* we assign Bind(name, Dyn) because we want to allow reassignment of functions. this weakens the type inference in 
-    exchange for reasonable flexibility *)
+    exchange for reasonable flexibility. i.e. this allows us to do def foo(x) -> int and then def foo(x) -> float later *)
 
     let (map', _, _, _) = assign locals (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in
     let (semantmap, _, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in
@@ -395,8 +396,9 @@ and func_stmt globals locals stack flag = function
         ) (semantmap, []) b in
 
     let bindout = List.rev bind in
-    let (map2, block, data, locals) = (func_stmt StringMap.empty map'' TypeMap.empty {flag with noeval = true;} c) in
-    
+
+    let (map2, block, data, locals) = (func_stmt StringMap.empty map'' { forloop = false; cond = false; noeval = true; stack = TypeMap.empty;} c) in
+
     (match data with
       | Some (typ2, e', d) ->
         if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
@@ -405,17 +407,17 @@ and func_stmt globals locals stack flag = function
           (map', SFunc(func), None, [Bind(name, FuncType)]) 
         else let func = { styp = typ2; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
         (map', SFunc(func), None, [Bind(name, FuncType)])
-    
+
       | None -> 
         if btype <> Dyn then 
         raise (Failure ("STypeError: invalid return type")) else 
         let func = { styp = Null; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
         (map', SFunc(func), None, [Bind(name, FuncType)]))
 
-  | If(a, b, c) -> let (typ, e', _) = func_expr globals locals stack flag a in 
+  | If(a, b, c) -> let (typ, e', _) = func_expr globals locals the_state a in 
         if typ <> Bool && typ <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
-        else let (map', value, data, out) = func_stmt globals locals stack {flag with cond = true;} b in 
-        let (map'', value', data', out') = func_stmt globals locals stack {flag with cond = true;} c in 
+        else let (map', value, data, out) = func_stmt globals locals {the_state with cond = true;} b in 
+        let (map'', value', data', out') = func_stmt globals locals {the_state with cond = true;} c in 
         if equals map' map'' then (map', SIf(e', value, value'), match_data data data', out) 
         else let merged = transform map' map'' in 
         let slist = from_sblock value in let slist' = from_sblock value' in
@@ -424,8 +426,8 @@ and func_stmt globals locals stack flag = function
   | For(a, b, c) -> let (m, name, inferred_t, explicit_t) = check_array locals b a in 
         let bind_for_locals = Bind(name, inferred_t) in
         let bind_for_sast = Bind(name, explicit_t) in
-        let (m', x', d, out) = func_stmt globals m stack {flag with cond = true; forloop = true;} c in 
-        let (typ, e', _) = func_expr globals m' stack flag b in 
+        let (m', x', d, out) = func_stmt globals m {the_state with cond = true; forloop = true;} c in 
+        let (typ, e', _) = func_expr globals m' the_state b in 
         if equals locals m' then (m', SFor(bind_for_sast, e', x'), d, bind_for_locals :: out)
         else let merged = transform locals m' in 
         let slist = from_sblock x' in 
@@ -436,11 +438,11 @@ and func_stmt globals locals stack flag = function
         let a2 = Asn([Var a], Binop(Var a, Add, Lit(IntLit(1)))) in
         let a3 = While(Binop(Var a, Less, b), Block(from_block c @ [a2])) in
         let a4 = If(Binop(b, Greater, Lit(IntLit(0))), Block(a1 :: [a3]), Block([])) in
-        func_stmt globals locals stack flag a4 
+        func_stmt globals locals the_state a4 
 
-  | While(a, b) -> let (typ, e, data) = func_expr globals locals stack flag a in 
+  | While(a, b) -> let (typ, e, data) = func_expr globals locals the_state a in 
         if typ <> Bool && typ <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
-        else let (m', x', d, out) = func_stmt globals locals stack {flag with cond = true;} b in 
+        else let (m', x', d, out) = func_stmt globals locals {the_state with cond = true;} b in 
         if equals locals m' then (m', SWhile(e, x'), d, out) else
         let merged = transform locals m' in 
         let slist = from_sblock x' in
@@ -448,18 +450,18 @@ and func_stmt globals locals stack flag = function
 
   | Nop -> (locals, SNop, None, [])
 
-  | Type(a) ->  let (t, e, _) = func_expr globals locals stack flag a in 
+  | Type(a) ->  let (t, e, _) = func_expr globals locals the_state a in 
     print_endline (type_to_string t); 
     (locals, SNop, None, []) 
 
-  | Print(e) -> let (t, e', _) = func_expr globals locals stack flag e in 
+  | Print(e) -> let (t, e', _) = func_expr globals locals the_state e in 
     (locals, SPrint(e'), None, [])
 
-  | _ as s -> let (map', value, out) = stmt locals flag s in (map', value, None, [])
+  | _ as s -> let (map', value, out) = stmt locals the_state s in (map', value, None, [])
 
 (* stmt: the regular statement function used for evaluating statements outside of functions. *)
 
-and stmt map flag = function (* evaluates statements, can pass it a func *)
+and stmt map the_state = function (* evaluates statements, can pass it a func *)
   | Asn(exprs, e) -> 
     let data = expr map e in 
     let (typ, e', d) = data in
@@ -468,7 +470,7 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
       | [] -> (m, List.rev lvalues, List.rev locals)
       | Var x :: t -> 
         let Bind (x1, t1) = x in 
-        if flag.cond && t1 <> Dyn then 
+        if the_state.cond && t1 <> Dyn then 
         raise (Failure ("SSyntaxError: cannot explicitly type variables in conditional branches")) 
         else let (m', name, inferred_t, explicit_t) = assign m data x in 
         (aux (m', SLVar (Bind (name, explicit_t)) :: lvalues, Bind(name, inferred_t) :: locals) t)
@@ -494,7 +496,7 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
     in let (m, lvalues, locals) = aux (map, [], []) exprs in (m, SAsn(lvalues, e'), locals)
 
   | Expr(e) -> let (t, e', _) = expr map e in (map, SExpr(e'), [])
-  | Block(s) -> let ((value, globals), map') = check map [] [] flag s in (map', SBlock(value), globals)
+  | Block(s) -> let ((value, globals), map') = check map [] [] the_state s in (map', SBlock(value), globals)
   | Return(e) -> raise (Failure ("SSyntaxError: return statement outside of function"))
   | Func(a, b, c) -> let rec dups = function (* check duplicate argument names *)
       | [] -> ()
@@ -512,7 +514,7 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
       ) (semantmap, []) b in
 
     let bindout = List.rev binds in
-    let (map2, block, data, locals) = (func_stmt StringMap.empty map'' TypeMap.empty {flag with noeval = true; forloop = false; cond = false; } c) in
+    let (map2, block, data, locals) = (func_stmt StringMap.empty map'' {noeval = true; forloop = false; cond = false; stack = TypeMap.empty;} c) in
       (match data with
         | Some (typ2, e', d) ->
             if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
@@ -531,8 +533,8 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
   | If(a, b, c) -> 
     let (typ, e', _) = expr map a in 
     if typ <> Bool && typ <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
-    else let (map', value, out) = stmt map {flag with cond = true;} b in 
-    let (map'', value', out') = stmt map {flag with cond = true;} c in 
+    else let (map', value, out) = stmt map {the_state with cond = true;} b in 
+    let (map'', value', out') = stmt map {the_state with cond = true;} c in 
     if equals map' map'' then (map', SIf(e', value, value'), out') 
     else let merged = transform map' map'' in 
     let slist = from_sblock value in let slist' = from_sblock value' in
@@ -542,7 +544,7 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
     let (m, name, inferred_t, explicit_t) = check_array map b a in 
     let bind_for_locals = Bind(name, inferred_t) in
     let bind_for_sast = Bind(name, explicit_t) in
-    let (m', x', out) = stmt m {flag with cond = true; forloop = true; } c in 
+    let (m', x', out) = stmt m {the_state with cond = true; forloop = true; } c in 
     let (typ, e', _) = expr m' b in 
     if equals map m' then (m', SFor(bind_for_sast, e', x'), bind_for_locals :: out) 
     else let merged = transform m m' in 
@@ -554,12 +556,12 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
         let a2 = Asn([Var a], Binop(Var a, Add, Lit(IntLit(1)))) in
         let a3 = While(Binop(Var a, Less, b), Block(from_block c @ [a2])) in
         let a4 = If(Binop(b, Greater, Lit(IntLit(0))), Block(a1 :: [a3]), Block([])) in
-        stmt map flag a4
+        stmt map the_state a4
 
   | While(a, b) -> 
     let (t, e, _) = expr map a in 
     if t <> Bool && t <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
-    else let (m', x', out) = stmt map {flag with cond = true; }b in 
+    else let (m', x', out) = stmt map {the_state with cond = true; }b in 
     if equals map m' then (m', SWhile(e, x'), out) 
     else let merged = transform map m' in 
     let slist = from_sblock x' in
@@ -578,6 +580,6 @@ and stmt map flag = function (* evaluates statements, can pass it a func *)
 (* check: master function to check the entire program by iterating over the list of
 statements and returning a list of sstmts, a list of globals, and the updated map *)
 
-and check map out globals flag = function
+and check map out globals the_state = function
   | [] -> ((List.rev out, List.sort_uniq compare (List.rev globals)), map)
-  | a :: t -> let (m', value, g) = stmt map flag a in check m' (value :: out) (g @ globals) flag t
+  | a :: t -> let (m', value, g) = stmt map the_state a in check m' (value :: out) (g @ globals) the_state t

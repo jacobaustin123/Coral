@@ -730,7 +730,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     ignore(L.build_call fn_p [|elmptr|] "print_cob" body_builder);
     ignore(L.build_call printf_func [| fs2 ; L.const_int int_t 0 |] "printf" body_builder);
 
-    L.build_br iter_bb body_builder;
+    ignore(L.build_br iter_bb body_builder);
 
     let merge_bb = L.append_block context "merge" fn in
     ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
@@ -779,7 +779,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let fn_p = build_getctypefn_cobj ctype_print_idx elmptr body_builder in
     ignore(L.build_call fn_p [|elmptr|] "print_cob" body_builder);
 
-    L.build_br iter_bb body_builder;
+    ignore(L.build_br iter_bb body_builder);
 
     let merge_bb = L.append_block context "merge" fn in
     ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
@@ -882,7 +882,6 @@ let add_lists fn b =
   (* builds the addition function for lists *)
   let build_list_add_fn fn b = 
     let (builder, dataptr_as_i8ptr, total) = add_lists fn b in
-
     let (newobjptr, newdataptr) = build_new_cobj clist_t builder in
 
     let _ = build_new_clist_init newdataptr dataptr_as_i8ptr total builder in
@@ -1018,16 +1017,18 @@ let add_lists fn b =
 
 
   (* useful utility functions! *)
-  let names_of_bindlist bindlist =
+  (* let names_of_bindlist bindlist =
     List.map name_of_bind bindlist
-  in
-(* helper fn: seq 4 == [0;1;2;3] *)
+  in *)
+  (* helper fn: seq 4 == [0;1;2;3] *)
   let seq len =
     let rec aux len acc =
       if len<0 then acc else aux (len-1) (len::acc)
     in aux (len-1) []
   in
 
+  (* lookup: finds the address of allocated variables in memory. searches the locals
+  list first and then the globals list *)
   let lookup namespace bind = (*tstp (string_of_sbind bind);*)
       let bind = match bind with
         | Bind(n, Int)| Bind(n, Float)| Bind(n, Bool) | Bind(n, String) -> bind
@@ -1036,6 +1037,8 @@ let add_lists fn b =
         with Not_found -> lookup_global_binding bind
   in
 
+  (* build_temp_box: builds a temporary cobj with given type and data. similar to
+  build_new_cobj_init *)
   let build_temp_box rawval raw_ty b =
       if raw_ty = Dyn then raise (Failure "CodegenError: attempting to build temp box for dynamic object.")
       else tstp ("Building temp box for " ^ string_of_typ raw_ty);
@@ -1051,6 +1054,9 @@ let add_lists fn b =
       ignore(L.build_store (ctype_of_typ raw_ty) typeptr_addr b);
       Box(box_ptr)
   in
+
+  (* change_state: utility function which handles modifying the state record in an elegant and 
+  self-documenting way *)
   let rec change_state old = function
       | S_rettyp(ret_typ) -> {ret_typ=ret_typ;namespace=old.namespace;func=old.func;b=old.b;optim_funcs=old.optim_funcs;generic_func=old.generic_func}
       | S_names(namespace) -> {ret_typ=old.ret_typ;namespace=namespace;func=old.func;b=old.b;optim_funcs=old.optim_funcs;generic_func=old.generic_func}
@@ -1065,6 +1071,8 @@ let add_lists fn b =
       change_state old (S_names(new_namespace))
     | S_list(updates) -> List.fold_left change_state old updates
   in
+
+  (* rebox_if_needed: used for handling heapify for objects which need to be copied and stored in memory *)
   let rebox_if_needed boxaddr name the_state =
     match boxaddr with 
       | BoxAddr(addr, true) -> tstp ("Boxing " ^ name);
@@ -1076,7 +1084,7 @@ let add_lists fn b =
       | BoxAddr(_, false) -> the_state  (* do nothing *)
     in
 
-  (* check if addr cobj had been defined (is data pointer null) *)
+  (* check if addr cobj had been defined (is data pointer is null) *)
   let check_defined addr message the_state = 
     if not !exceptions then the_state else
 
@@ -1198,6 +1206,7 @@ let add_lists fn b =
 
   in
 
+  (* performs bounds checking on a given list, checking both lower and upper bounds *)
   let check_bounds list_ptr n_ptr message the_state = 
     if not !exceptions then the_state else
 
@@ -1236,7 +1245,8 @@ let add_lists fn b =
     (Box(result), the_state)
   in
 
-  (* safe getidx for lists, with type checking *)
+  (* safe getidx_parent for lists, with type checking. this is used to get a pointer to
+  the pointer to a given idx in a list, which can be used for assignment *)
   let build_getidx_parent_list list_pointer index_pointer the_state =
     let fn_p = build_getctypefn_cobj ctype_idx_parent_idx list_pointer the_state.b in
     let the_state = check_null fn_p "RuntimeError: unsupported operand type(s) for list access" the_state in
@@ -1244,20 +1254,6 @@ let add_lists fn b =
     let the_state = check_bounds list_pointer index_pointer "RuntimeError: list index out of bounds" the_state in
     let result = L.build_call fn_p [| list_pointer ; index_pointer |] "parent_binop_result" the_state.b in
     (Box(result), the_state)
-
-(*   (* safe getidx for lists, used to get the parent of the index for assignment *)
-  let build_getidx_parent_list list_pointer index_pointer the_state =
-    let the_state = check_null fn_p ("RuntimeError: unsupported operand type(s) for list access") the_state in
-    let the_state = check_explicit_type Int index_pointer "RuntimeError: unsupported operand type(s) for list access" the_state in
-    let the_state = check_bounds list_pointer index_pointer "RuntimeError: list index out of bounds" the_state in
-    let n = build_getdata_cobj int_t index_pointer the_state.b in 
-
-    let listptr = build_getlist_cobj list_pointer the_state.b in 
-    let gep_addr = L.build_struct_gep listptr clist_data_idx "__gep_addr" the_state.b in
-    let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (L.pointer_type (L.pointer_type cobj_pt)) "__gep_addr_as_cobjptrptrptr" the_state.b in
-    let gep_addr_as_cobjptrptr = L.build_load gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" the_state.b in
-    let result = L.build_gep gep_addr_as_cobjptrptr [| n |] "__gep_addr_as_cobjptrptr" the_state.b in (* other_p is offset of sought element *)
-    (Box(result), the_state) *)
   
   in
 
@@ -1273,6 +1269,7 @@ let add_lists fn b =
 
   in
 
+  (* expr: main function for evaluating expressions handed to Codegen from semant *)
   let rec expr the_state typed_e = 
       let (namespace,the_function) = (the_state.namespace,the_state.func) in
       let (e, ty) = typed_e in
@@ -1371,6 +1368,7 @@ let add_lists fn b =
             ) in
               (Raw(binop_instruction v1 v2 "binop_result" the_state.b),the_state)
 
+          (* if one of the two is boxed, boxx both of them. this could be optimized in the future *)
           | (Box(boxval),Raw(rawval)) -> 
             tstp "binop (box, raw)"; generic_binop (Box(boxval)) (build_temp_box rawval ty2 the_state.b)
           | (Raw(rawval),Box(boxval)) -> 
@@ -1467,9 +1465,9 @@ let add_lists fn b =
 
                 (* now lets build the body of the optimized function *)
             let fn_builder = L.builder_at_end context (L.entry_block optim_func) in  
-            let int_format_str = L.build_global_stringptr "%d\n" "fmt" the_state.b
+            (* let int_format_str = L.build_global_stringptr "%d\n" "fmt" the_state.b
             and string_format_str = L.build_global_stringptr "%d\n" "fmt" the_state.b
-            and float_format_str = L.build_global_stringptr "%c\n" "fmt" the_state.b in  
+            and float_format_str = L.build_global_stringptr "%c\n" "fmt" the_state.b in   *)
             (* List.iter (fun (Bind (n, t)) -> print_endline (n ^ ": " ^ string_of_typ t)) sfdecl.sformals; *)
             let fn_namespace = build_binding_list (Some(fn_builder)) (typed_formals @ sfdecl.slocals) in
             let vals_to_store = Array.to_list (L.params optim_func) in
@@ -1575,6 +1573,7 @@ let add_lists fn b =
   and rip_from_inner_state old inner =
     change_state old (S_list([S_names(inner.namespace);S_optimfuncs(inner.optim_funcs)])) (* grab names/optimfuncs from inner *)
 
+  (* stmt: main function used for evaluating statements handed to Codegen from semant *)
   and stmt the_state s =   (* namespace comes first bc never gets modified unless descending so it works better for fold_left in SBlock *)
       let (namespace,the_function) = (the_state.namespace, the_state.func) in
       match s with
@@ -1690,7 +1689,7 @@ let add_lists fn b =
         let body_state = change_state the_state (S_b(L.builder_at_end context body_bb)) in
         let body_state = add_terminal (stmt body_state body) (L.build_br pred_bb) in
         let the_state = rip_from_inner_state the_state body_state in
-        let pred_builder = L.builder_at_end context pred_bb in
+        (* let pred_builder = L.builder_at_end context pred_bb in *)
         (* eval the boolean predicate *)
         let pred_state = change_state the_state (S_b(L.builder_at_end context pred_bb)) in
         let (_, t) = predicate in
@@ -1741,7 +1740,7 @@ let add_lists fn b =
                   ignore(L.build_store rawdata var_addr the_state.b); the_state
           ) in
 
-         add_terminal (stmt the_state body) (L.build_br iter_bb);
+         ignore(add_terminal (stmt the_state body) (L.build_br iter_bb));
          let merge_bb = L.append_block context "merge" the_function in
            ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
          let the_state = change_state the_state (S_b(L.builder_at_end context merge_bb)) in
@@ -1764,17 +1763,19 @@ let add_lists fn b =
                 )
                 | Box(v) -> (match the_state.ret_typ with
                     | Dyn -> tstp "dynamic return of box"; (v, the_state)
-                    | _ -> tstp "explicit return of box"; 
-                      if ty = FuncType || ty = Arr then (v, the_state) else (* deal with FuncType more elegantly in the future *)
+                    | _ -> tstp ("explicit return of box for type " ^ (string_of_typ the_state.ret_typ)); 
                       let the_state = check_explicit_type the_state.ret_typ v ("RuntimeError: invalid return type (expected " ^ (string_of_typ the_state.ret_typ) ^ ")") the_state in
-                      let data = build_getdata_cobj (ltyp_of_typ the_state.ret_typ) v the_state.b in (data, the_state)
+                      if the_state.ret_typ = FuncType || the_state.ret_typ = Arr || the_state.ret_typ = String then 
+                        let _ = (tstp "returning an explicit cobj type") in (v, the_state) 
+                      else let _ = (tstp "extracting data for explicit return type") in
+                        let data = build_getdata_cobj (ltyp_of_typ the_state.ret_typ) v the_state.b in (data, the_state)
                 )
-            ) in (L.build_ret data the_state.b); the_state
+            ) in ignore(L.build_ret data the_state.b); the_state
           )
           | true -> tstp "generic function return"; let (data, the_state) = (match res with
             | Box(v) -> (v, the_state)
             | Raw(v) -> (match (build_temp_box v ty the_state.b) with Box(v) -> (v, the_state))
-            ) in (L.build_ret data the_state.b); the_state
+            ) in ignore(L.build_ret data the_state.b); the_state
         ) in the_state
 
     | SFunc sfdecl -> the_state (*
@@ -1835,6 +1836,8 @@ let add_lists fn b =
         let the_state = change_state the_state (S_optimfuncs(fn_state.optim_funcs)) in (* grab optimfuncs from inner *)
         the_state  (* SFunc() returns the original builder *)
         *)
+
+    (* used to handle heapify calls *)
     | STransform (name, from_ty, to_ty) -> 
       tstp ("Transforming " ^ name ^ ": " ^ (string_of_typ from_ty) ^ " -> " ^ (string_of_typ to_ty));
       (match (from_ty, to_ty) with
@@ -1855,7 +1858,7 @@ let add_lists fn b =
          ignore(L.build_store data raw_addr the_state.b);
          the_state
       
-       | (String, Dyn) | (Dyn, String) ->
+       | (String, Dyn) | (Dyn, String) | (Arr, Dyn) | (Dyn, Arr) ->
           let BoxAddr(box_addr1, _) = lookup namespace (Bind(name, from_ty)) (* no need to check needs_update flag bc this is assignment *)
           and BoxAddr(box_addr2, _) = lookup namespace (Bind(name, to_ty)) in
           let cobj_addr = L.build_load box_addr1 "load_cobj" the_state.b in

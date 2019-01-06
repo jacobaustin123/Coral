@@ -98,9 +98,3 @@ and string_of_lvalue = function
   | SLExpr(e) -> string_of_sexpr e
 
 and string_of_sprogram (sl, bl) = String.concat "\n" (List.map (string_of_sstmt 1) sl) ^ "\n\nGlobals: [" ^ String.concat " " (List.map string_of_sbind bl) ^ "]"
-
-type flag = {
-  noeval : bool;
-  cond : bool;
-  forloop : bool;
-}

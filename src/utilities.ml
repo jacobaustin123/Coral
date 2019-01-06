@@ -197,7 +197,7 @@ let compare_decl a b = if a = b then a else false
 let compare_data a b = if a = b then a else None
 
 (* map with SFunc and argument type list used to check recursive calls *)
-module TypeMap = Map.Make(struct type t = stmt * typ list let compare = Pervasives.compare end);;
+module TypeMap = Map.Make(struct type t = stmt * typ list let compare = Pervasives.compare end)
 
 (* map with string keys, used for variable lookup *)
 module StringMap = Map.Make(String)
@@ -244,3 +244,9 @@ let from_sblock block = match block with
 (* check if two maps are equal *)
 let equals m1 m2 = (StringMap.equal (fun x y -> (compare x y) = 0) m1 m2) (* check if two maps are equal *)
 
+type flag = {
+  stack : bool TypeMap.t;
+  noeval : bool; (* in a SFunc doing a generic analysis *)
+  cond : bool; (* in a conditional branch? *)
+  forloop : bool; (* in a for loop? *)
+}

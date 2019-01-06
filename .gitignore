@@ -28,7 +28,6 @@ gcd.coral
 source.*
 main
 *.diff
-*.out
 
 # IntelliJ nonsense
 .idea/*
