@@ -3,7 +3,6 @@ open Sast
 open Utilities
 open Interpret
 
-
 (* boolean flags used to handle command line arguments *)
 let debug = ref false
 let run = ref true
