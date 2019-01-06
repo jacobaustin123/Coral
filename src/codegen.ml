@@ -89,8 +89,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   and ctype_idx_parent_idx = 14
   and ctype_neg_idx = 15
   and ctype_not_idx = 16
-  and ctype_call_idx = 17
-  and ctype_heapify_idx = 18
+  and ctype_heapify_idx = 17
+  and ctype_call_idx = 18
   and ctype_print_idx = 19
   and num_ctype_idxs = 20 in (** must update when adding idxs! (tho not used anywhere yet) **)
 
@@ -110,10 +110,10 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   and ctype_or_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
   and ctype_idx_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
   and ctype_idx_parent_t = L.function_type (L.pointer_type cobj_pt) [| cobj_pt; cobj_pt |]
-  and ctype_call_t = L.function_type cobj_pt [| cobj_pt ; cobj_ppt |]
   and ctype_neg_t = L.function_type cobj_pt [| cobj_pt |]
   and ctype_not_t = L.function_type cobj_pt [| cobj_pt |]
   and ctype_heapify_t = L.function_type int_t [| cobj_pt |]
+  and ctype_call_t = L.function_type cobj_pt [| cobj_pt ; cobj_ppt |]
   and ctype_print_t = L.function_type int_t [| cobj_pt |] in
 
   (* type sigs for ptrs to fns in ctype *)
@@ -134,8 +134,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   and ctype_idx_parent_pt = L.pointer_type ctype_idx_parent_t
   and ctype_neg_pt = L.pointer_type ctype_neg_t
   and ctype_not_pt = L.pointer_type ctype_not_t
+  and ctype_heapify_pt = L.pointer_type ctype_heapify_t
   and ctype_call_pt = L.pointer_type ctype_call_t
-  and ctype_heapify_pt = L.pointer_type ctype_heapify_t 
   and ctype_print_pt = L.pointer_type ctype_print_t in
   let ctype_t = L.named_struct_type context "CType" in (*define a named struct*)
   let ctype_pt = L.pointer_type ctype_t in
@@ -163,8 +163,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     ctype_idx_parent_pt;
   	ctype_neg_pt;
     ctype_not_pt;
-    ctype_call_pt;
     ctype_heapify_pt;
+    ctype_call_pt;
   	ctype_print_pt |] false);
 
    let get_t = function
@@ -239,6 +239,43 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
    parent
   in
 
+  (* heapify(self_p) modifies self by copying its data to the heap and pointing to the new heap data *)
+  let build_iheapify self_p name b =   (* data_type = int_t etc *)
+    (* the box dataptr_addr points to the raw data we want to copy *)
+    let dataptr_addr_i8pp = L.build_struct_gep self_p cobj_data_idx "dat" b in
+    let dataptr_addr = L.build_bitcast dataptr_addr_i8pp (L.pointer_type (L.pointer_type int_t)) "dat" b in
+    let rawdata_addr = L.build_load dataptr_addr "raw_data_addr" b in
+    let rawdata = L.build_load rawdata_addr "raw_data" b in
+    let heap_data_p = L.build_malloc int_t "heap_data_p" b in
+    ignore(L.build_store rawdata heap_data_p b);
+    let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
+    L.build_store heap_data_p dataptr_addr_i8pp b
+  in
+
+  let build_fheapify self_p name b =   (* data_type = int_t etc *)
+    (* the box dataptr_addr points to the raw data we want to copy *)
+    let dataptr_addr_i8pp = L.build_struct_gep self_p cobj_data_idx "dat" b in
+    let dataptr_addr = L.build_bitcast dataptr_addr_i8pp (L.pointer_type (L.pointer_type float_t)) "dat" b in
+    let rawdata_addr = L.build_load dataptr_addr "raw_data_addr" b in
+    let rawdata = L.build_load rawdata_addr "raw_data" b in
+    let heap_data_p = L.build_malloc float_t "heap_data_p" b in
+    ignore(L.build_store rawdata heap_data_p b);
+    let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
+    L.build_store heap_data_p dataptr_addr_i8pp b
+  in
+
+  let build_bheapify self_p name b =   (* data_type = int_t etc *)
+    (* the box dataptr_addr points to the raw data we want to copy *)
+    let dataptr_addr_i8pp = L.build_struct_gep self_p cobj_data_idx "dat" b in
+    let dataptr_addr = L.build_bitcast dataptr_addr_i8pp (L.pointer_type (L.pointer_type bool_t)) "dat" b in
+    let rawdata_addr = L.build_load dataptr_addr "raw_data_addr" b in
+    let rawdata = L.build_load rawdata_addr "raw_data" b in
+    let heap_data_p = L.build_malloc bool_t "heap_data_p" b in
+    ignore(L.build_store rawdata heap_data_p b);
+    let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
+    L.build_store heap_data_p dataptr_addr_i8pp b
+  in
+
   let built_ops =
   	 let typs = ["int"; "float"; "bool"; "char"; "list"; "string"; "func"] in
 
@@ -260,6 +297,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
        Oprt("idx_parent", None, None, None, None, Some((build_idx_parent), int_t), None, None);
        Uoprt("neg", Some((L.build_neg), int_t), Some((L.build_fneg), float_t), Some((L.build_neg), bool_t), None, None, None, None);
        Uoprt("not", Some((L.build_not), int_t), None, Some((L.build_not), bool_t), Some((L.build_not), char_t), None, None, None);
+       Uoprt("heapify", Some((build_iheapify), int_t), Some((build_fheapify), int_t), Some((build_bheapify), int_t), None, None, None, None);
        Coprt("call", None, None, None, None, None, None, Some((L.build_call), int_t));
        ] in
 
@@ -309,7 +347,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 			      | Some tfn ->
 			        let (fn, bd) = build_ctype_fn (t ^ "_" ^ o) ((function
                 | "neg" -> ctype_neg_t
-                | "not" -> ctype_not_t) o)
+                | "not" -> ctype_not_t
+                | "heapify" -> ctype_heapify_t) o)
 				      in BUoprt(o, Some(((fn, bd), tfn)))
 			      | None -> BUoprt(o, None)
 		      in bop
@@ -329,11 +368,9 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
                 | "call" -> ctype_call_t) o)
 				      in BCoprt(o, Some(((fn, bd), tfn)))
 			      | None -> BCoprt(o, None)
-		      in bop		      ) ops
+		      in bop) ops
         in (t, bops)) typs
       in
-
-  (* Functions! *)
 
   let build_fnptr_of_cfo cobj_p b = 
     let x2 = L.build_struct_gep cobj_p cobj_data_idx "x2" b in
@@ -345,25 +382,11 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   let build_special_ctype_fn fn ty_str =
       let (name, fn_ty) = (match fn with
         | FPrint -> ("print", ctype_print_t)
-        | FHeapify -> ("heapify", ctype_heapify_t)
-        | FCall -> ("call", ctype_call_t)
         | FAdd -> ("add", ctype_add_t)
       ) in
       let (the_fn, the_bld) = build_ctype_fn (ty_str ^ "_" ^ name) fn_ty in
       (the_fn,the_bld)
   in
-  
-  (*let x = [
-      (FPrint,[Int,Bool,Float]);
-      (FHeapify,[Int,Bool,Float]);
-      (FCall,[FuncType])
-  ]
-            
-  let build_fns spec_ty ty_list = List.map (build_special_ctype_fn spec_ty) ty_list in
-  let all = List.map (fun x -> match x with (spec_ty,ty_list) in build_fns spec_ty ty_list) x in
-
-  let get_special_fn spec_ty ty = 
-    match *)
 
   let (list_add_fn, list_add_b) = build_special_ctype_fn FAdd "list" in
   let (string_add_fn, string_add_b) = build_special_ctype_fn FAdd "list" in
@@ -401,24 +424,6 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     | "string" -> string_print_b
   in
 
-  (* Heapify *)
-  let (int_heapify_fn, int_heapify_b) = build_special_ctype_fn FHeapify "int" in
-  let (float_heapify_fn, float_heapify_b) = build_special_ctype_fn FHeapify "float" in
-  let (bool_heapify_fn, bool_heapify_b) = build_special_ctype_fn FHeapify "bool" in
-  let (func_heapify_fn, func_heapify_b) = build_special_ctype_fn FHeapify "func" in
-  let (list_heapify_fn, list_heapify_b) = build_special_ctype_fn FHeapify "list" in
-  let (string_heapify_fn, string_heapify_b) = build_special_ctype_fn FHeapify "string" in
-
-  let get_heapify_fn_lval = function
-    | "int" -> int_heapify_fn
-    | "float" -> float_heapify_fn
-    | "bool" -> bool_heapify_fn
-    | "func" -> func_heapify_fn
-    | "list" -> list_heapify_fn
-    | "string" -> string_heapify_fn
-    | _ -> L.const_pointer_null ctype_heapify_pt
-  in
-
   (* define the default CTypes *)
   let [ctype_int; ctype_float; ctype_bool; ctype_char; ctype_list; ctype_string; ctype_func] =
   	List.map (fun (t, bops) -> L.define_global ("ctype_" ^ t) (L.const_named_struct ctype_t (Array.of_list ((List.map (function
@@ -435,11 +440,10 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
           | _ -> L.const_pointer_null ctype_call_pt))
   	  | BUoprt(fn, o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
-  	    | None -> L.const_pointer_null ctype_neg_pt)) bops)
-            @ ([ get_heapify_fn_lval t ;
-                get_print_fn_lval t])))) the_module) built_ops in
-
-
+  	    | None -> (match fn with
+  	      | "heapify" -> L.const_pointer_null ctype_heapify_pt
+  	      | _ -> L.const_pointer_null ctype_neg_pt))) bops)
+            @ ([ get_print_fn_lval t])))) the_module) built_ops in
 
   let ctype_of_ASTtype = function
     | Int -> Some ctype_int
@@ -584,9 +588,6 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let formals_llvalues = (Array.to_list (L.params fn)) in
     let [ remote_self_p ] = formals_llvalues in
 
-
-    let _ = build_gettype_cobj remote_self_p b in
-
     (* boilerplate *)
     let self_p = boilerplate_till_load remote_self_p "self_p" b in
 
@@ -612,8 +613,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
   (* creates the ctype functions for all standard (not-special functions *)
   List.iter (fun (t, bops) -> List.iter (function
-    | BOprt(fn, o) ->
-      (match fn with
+    | BOprt(fn, o) -> (match fn with
       | "idx" | "idx_parent" -> (match o with
         | Some(((fn, bd), tfn)) ->
           let (tf, tp) = tfn in
@@ -630,14 +630,24 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
           let result = build_new_cobj_init tp result_data bd in
           ignore(L.build_ret result bd)
         | None -> ()))
-    | BUoprt(fn, o) -> (match o with
-      | Some(((fn, bd), tfn)) ->
-        let (tf, tp) = tfn in
-        let (self_data) = boilerplate_uop (get_t t) fn bd in
-        let result_data = tf self_data "result_data" bd in
-        let result = build_new_cobj_init tp result_data bd in
-        ignore(L.build_ret result bd)
-      | None -> ())
+    | BUoprt(fn, o) -> (match fn with
+      | "heapify" -> (match o with
+        | Some(((fn, bd), tfn)) ->
+          let (tf, tp) = tfn in
+          let formals_llvalues = (Array.to_list (L.params fn)) in
+          let [remote_self_p] = formals_llvalues in
+          let box_addr = boilerplate_till_load remote_self_p "self_p" bd in
+          let result_data = tf box_addr "result_data" bd in
+          ignore(L.build_ret (L.const_int int_t 0) bd)
+        | None -> ())
+      | _ -> (match o with
+        | Some(((fn, bd), tfn)) ->
+          let (tf, tp) = tfn in
+          let (self_data) = boilerplate_uop (get_t t) fn bd in
+          let result_data = tf self_data "result_data" bd in
+          let result = build_new_cobj_init tp result_data bd in
+          ignore(L.build_ret result bd)
+        | None -> ()))
     | BCoprt(fn, o) -> (match o with
       | Some(((fn, bd), tfn)) ->
         let (tf, tp) = tfn in
@@ -652,47 +662,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         let fn_p = build_fnptr_of_cfo self_p bd in
         let result = tf fn_p [|argv|] "result" bd in
         ignore(L.build_ret result bd)
-    | None -> ())) bops) built_ops;
-        
-  (* heapify(self_p) modifies self by copying its data to the heap and pointing to the new heap data *)
-  let build_heapify data_type fn b =   (* data_type = int_t etc *)
-      let formals_llvalues = (Array.to_list (L.params fn)) in
-      let [remote_self_p] = formals_llvalues in
-      let box_addr = boilerplate_till_load remote_self_p "self_p" b in
-      (* the box dataptr_addr points to the raw data we want to copy *)
-      let dataptr_addr_i8pp = L.build_struct_gep box_addr cobj_data_idx "dat" b in
-      let dataptr_addr = L.build_bitcast dataptr_addr_i8pp (L.pointer_type (L.pointer_type data_type)) "dat" b in
-      let rawdata_addr = L.build_load dataptr_addr "raw_data_addr" b in
-      let rawdata = L.build_load rawdata_addr "raw_data" b in
-      let heap_data_p = L.build_malloc data_type "heap_data_p" b in
-      ignore(L.build_store rawdata heap_data_p b);
-      let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
-      ignore(L.build_store heap_data_p dataptr_addr_i8pp b);
-      ignore(L.build_ret (L.const_int int_t 0) b);  (* or can ret void? *)
-  in
-
-  (* build the heapify functions *)
-  let get_heapify_builder_of_t = function
-    |"int" -> int_heapify_b
-    |"float" -> float_heapify_b
-    |"bool" -> bool_heapify_b
-  in
-  ignore(List.iter (fun t -> build_heapify (get_t t) (get_heapify_fn_lval t) (get_heapify_builder_of_t t)) ["int";"float";"bool"]);
-
-  let _ =
-    let (fn, b) = (func_heapify_fn, func_heapify_b) in
-    ignore(L.build_ret (L.const_int int_t 0) b);
-  in
-  
- let _ =
-    let (fn, b) = (list_heapify_fn, list_heapify_b) in
-    ignore(L.build_ret (L.const_int int_t 0) b);
-  in
-
- let _ =
-    let (fn, b) = (string_heapify_fn, string_heapify_b) in
-    ignore(L.build_ret (L.const_int int_t 0) b);
-  in
+      | None -> ())) bops) built_ops;
 
   (* define printf *)
   let printf_t : L.lltype =   (* define the type that the printf function should be *)
@@ -777,7 +747,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     ignore(build_list_print_fn fn b);
   in
 
-(* builds the print function for strings. basically just iterates over all the objects and calls their print functions *)
+  (* builds the print function for strings. basically just iterates over all the objects and calls their print functions *)
   let build_string_print_fn fn b =   (* data_type = int_t etc *)
     let formals_llvalues = (Array.to_list (L.params fn)) in
     let [remote_self_p] = formals_llvalues in
