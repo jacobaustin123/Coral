@@ -2,6 +2,8 @@
   <img src="https://github.com/ja3067/Coral/blob/fcf/docs/coral.png" width="75%"><br><br>
 </div>
 
+# Coral
+
 The **Coral** programming language: a gradually typed, Python-like language with powerful optional typing for improved safety and performance. Coral performs a kind of partial type inference on optionally explicitly typed Python code and seamlessly optimizes type-inferred objects to nearly as efficient as equivalent C-code, orders of magnitude faster than Python. Coral also enforces types at compile and runtime, catching errors where possible before code is run, and otherwise throwing errors at runtime for invalid types.
 
 ## Examples
