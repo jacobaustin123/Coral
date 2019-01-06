@@ -9,8 +9,7 @@ The **Coral** programming language: a gradually typed, Python-like language with
 * [Exceptions](#exceptions)
 * [Differences from Python](#differences-from-python)
 
-## Examples
----------
+# Examples
 
 Coral is syntactically identical to Python and any valid Coral program is also a valid Python program. The following is a simple gcd program which compiles to machine code nearly as efficient as equivalent C code.
 
@@ -30,8 +29,7 @@ gcd(x, y)
 
 Coral supports Python 3.7 style type annotations which allow it to further type-infer ambiguous code segments for additional optimization and compile-time error checking.
 
-## Installation
----------
+# Installation
 
 The Coral language is written in OCaml and compiles target programs to LLVM IR. To build the language with OCaml and ocaml-llvm already installed, run:
 
@@ -67,8 +65,7 @@ Other Linux distributions can be installed similarly using your distribution's p
 
 To add the llvm installation to your \$PATH variable permanently, you can copy the last line above to your .bashrc or .bash\_profile file.
 
-## Goals
----------
+# Goals
 
 ### Familiarity
 
@@ -86,8 +83,7 @@ Because of Coral's type inference system and assisted by type annotations, Coral
 
 The core philosophy of Coral is that you don’t pay a penalty if you don’t type your code, and typed functions can be called with untyped arguments and vice versa. This preserves all the convenience of Python, while giving the programmer the freedom to be more explicit where desired.
 
-## Using the Coral Compiler and Interpreter
----------
+# Using the Coral Compiler and Interpreter
 
 Once Coral has been compiled, you can begin writing your own Coral programs. Use the Language Reference Manual to learn syntax as well as the limitations of the Coral language. 
 
@@ -132,7 +128,7 @@ Coral also has a build-in **interpreter**. To use the interpreter, simply run ``
 
 ```python
 > coral
-Welcome to the Coral programming language! 
+Welcome to the Coral programming language.
 >>> def gcd(a, b)
 ...     while a != b: 
 ...         if a > b: 
@@ -146,8 +142,7 @@ Welcome to the Coral programming language!
 >>>
 ```
 
-## Adding Type Annotations
----------
+# Adding Type Annotations
 
 There are many cases in Python where types cannot be fully inferred at compile time due to the lack of strong static typing. There are also many cases where a function may be intended to only take a single kind of input or return a single kind of output. Both these cases can be addressed by the inclusion of optional static typing in Coral. These type hints or type annotations follow the Python 3.7 standard, for example: 
 
@@ -215,8 +210,7 @@ Valid type annotations include variable annotations, function argument annotatio
 STypeError: invalid type assigned to x
 ```
 
-## Optimization
----------
+# Optimization
 
 Coral uses a gradual typing system that places type-inferred immutable variables on the stack instead of following Python's dynamic PyObject memory model. This optimization can speed up computational intensive numerical code by many orders of magnitude. For example, the example gcd code above, even without type annotations, runs about 1000x faster in Coral than in Python. You can test this by simply running the same program using both the Python interpreter and Coral compiler. Other highly optimized examples include:
 
@@ -261,8 +255,7 @@ which runs much faster in Coral than Python. Type annotations make this optimiza
 
 Without the type annotations on the gcd function, this code takes about 25 seconds when run by Coral and does not terminate within 5 minutes when run by Python. However, when type annotations are added to the gcd function, it finished in less than a second when run by Coral.
 
-## Exceptions
----------
+# Exceptions
 
 Coral has both compile and runtime exceptions for type errors, undefined variables, and out of bounds list access. Coral strives to raise as many of these errors as possible at compile time, using a robust type inferrence system. For example, the following errors will be caught by the compiler:
 
@@ -325,8 +318,7 @@ RuntimeError: list index out of bounds
 RuntimeError: list index out of bounds
 ```
 
-## Differences from Python
----------
+# Differences from Python
 
 Coral strives to be syntactically identical to Python, and as close as possible to Python in runtime behavior. There are a few differences in behavior and many limitations, mostly due to the scope of the Coral project. These features could be added at a later date, and we welcome contributions.
 
@@ -367,7 +359,6 @@ elif, break, continue, pass, class, global, await, from, as, nonlocal, yield, as
 
 These should be implemented, and we again welcome contributions to support these features. The primary limitation is adding support for them in the codegen/LLVM IR generation steps.
 
-## Acknowledgments
----------
+# Acknowledgments
 
 This language was developed as a Programming Languages and Translators project in Fall 2018 at Columbia University by Jacob Austin, Matthew Bowers, Sanford Miller, and Rebecca Cawkwell.
