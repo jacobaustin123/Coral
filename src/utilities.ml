@@ -250,3 +250,13 @@ type flag = {
   cond : bool; (* in a conditional branch? *)
   forloop : bool; (* in a for loop? *)
 }
+
+let globals_to_list globals = 
+  let current = StringMap.bindings globals in
+  let bindings = List.map (fun (name, (_, typ, _)) -> (name, typ)) current in
+  bindings
+
+let make_transforms globals = 
+  let entry = List.map (fun (name, typ) -> STransform(name, typ, Dyn)) globals in
+  let exit = List.map (fun (name, typ) -> STransform(name, Dyn, typ)) globals in
+  SBlock(SBlock(entry) :: [SBlock(exit)])

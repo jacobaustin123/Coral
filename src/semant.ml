@@ -6,16 +6,6 @@ open Utilities
 syntax checking, and other features. expr objects are converted to sexpr, and stmt objects are converted
 to sstmts. *)
 
-let globals_to_list globals = 
-  let current = StringMap.bindings globals in
-  let bindings = List.map (fun (name, (_, typ, _)) -> (name, typ)) current in
-  bindings
-
-let make_transforms globals = 
-  let entry = List.map (fun (name, typ) -> STransform(name, typ, Dyn)) globals in
-  let exit = List.map (fun (name, typ) -> STransform(name, Dyn, typ)) globals in
-  SBlock(SBlock(entry) :: [SBlock(exit)])
-
 (* binop: evaluate types of two binary operations and check if the binary operation is valid.
 This currently is quite restrictive and does not permit automatic type casting like in Python.
 This may be changed in the future. The commented-out line would allow that feature *)
@@ -592,6 +582,6 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
 (* check: master function to check the entire program by iterating over the list of
 statements and returning a list of sstmts, a list of globals, and the updated map *)
 
-and check map out globals the_state = function
-  | [] -> ((List.rev out, List.sort_uniq compare (List.rev globals)), map)
-  | a :: t -> let (m', value, g) = stmt map the_state a in check m' (value :: out) (g @ globals) the_state t
+and check map sast_out globals_out the_state = function
+  | [] -> ((List.rev sast_out, List.sort_uniq compare (List.rev globals_out)), map)
+  | a :: t -> let (m', statement, binds) = stmt map the_state a in check m' (statement :: sast_out) (binds @ globals_out) the_state t
