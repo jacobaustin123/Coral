@@ -4,7 +4,7 @@
 
 -----------------
 
-The **Coral** programming language: a gradually typed, Python-like language with powerful optional typing for improved safety and performance. Coral performs a kind of partial type inference on optionally explicitly typed Python code and seamlessly optimizes type-inferred objects to nearly as efficient as equivalent C-code, orders of magnitude faster than Python. Coral also enforces types at compile and runtime, catching errors where possible before code is run, and otherwise throwing errors at runtime for invalid types.
+The **Coral programming language** is a gradually typed, Python-like language with powerful optional typing for improved safety and performance. Coral performs a kind of partial type inference on optionally explicitly typed Python code and seamlessly optimizes type-inferred objects to nearly as efficient as equivalent C-code, orders of magnitude faster than Python. Coral also enforces types at compile and runtime, catching errors where possible before code is run, and otherwise throwing errors at runtime for invalid types.
 
 ## Examples
 
@@ -24,7 +24,8 @@ y = 26
 gcd(x, y)
 ```
 
-Coral supports Python 3.7 style type annotations which allow it to further 
+Coral supports Python 3.7 style type annotations which allow it to further type-infer and optimize ambiguous code. The full Language Reference Manual can be found [here](https://github.com/ja3067/Coral/blob/fcf/docs/Coral%20Language%20Reference%20Manual.pdf).
+
 ## Installation
 
 The Coral language is written in OCaml and compiles target programs to LLVM IR. To build the language with OCaml and ocaml-llvm already installed, run:
