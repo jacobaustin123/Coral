@@ -1,4 +1,4 @@
-The **Coral** programming language: a blazingly-fast, gradually typed Python-like language with powerful optional typing for improved safety and performance. Coral performs type inference on optionally typed Python code and seamlessly optimizes type-inferred objects to be nearly as efficient as equivalent C-code, orders of magnitude faster than Python. Coral also enforces types at compile and runtime, catching errors where possible before code is run, and otherwise throwing errors at runtime for invalid types.
+The **Coral** programming language: a blazingly-fast, gradually typed Python-like language with powerful optional typing for improved safety and performance. Coral performs type inference on optionally typed Python code and seamlessly optimizes type-inferred objects to be nearly as efficient as equivalent C-code, orders of magnitude faster than Python. Coral also enforces types at compile and runtime, catching errors where possible before code is run, and otherwise throwing errors at runtime.
 
 # Table of Contents
 * [Examples](#examples)
@@ -11,7 +11,7 @@ The **Coral** programming language: a blazingly-fast, gradually typed Python-lik
 
 # Examples
 
-Coral is syntactically identical to a subset of Python, so any valid Coral program is also a valid Python program. This code snippet is a simple gcd program which runs in Python but compiles using the Coral compiler to machine code nearly as fast as C code.
+Coral is syntactically identical to a subset of Python, so any valid Coral program is also a valid Python program. This code snippet is a simple gcd program using some optional explicit typing. This program runs correctly in Python, but takes ten minutes to run. When compiled to machine code using the Coral compiler, it takes less than a second - nearly as fast as C code.
 
 ```python
 def gcd(a, b):
@@ -30,11 +30,11 @@ y = 100052312523
 gcd(x, y)
 ```
 
-This gcd code is 1000x faster when run with the Coral compiler than in the Python interpreter. Coral also supports Python 3.7 style type annotations which allow it to further type-infer ambiguous code segments for additional optimization and compile-time error checking.
+Coral supports Python 3.7 style type annotations, as seen in the add function here. These type annotations are not just cosmetic - they allow the compiler to further type-infer ambiguous code segments and perform additional optimization and compile-time error checking.
 
 # Installation
 
-The Coral language is written in OCaml and compiles target programs to LLVM IR. To build the language with OCaml, ocaml-llvm, and gcc/clang already installed, run:
+The Coral language is written in OCaml and compiles target programs to LLVM IR. To build the language *with OCaml, ocaml-llvm, and gcc/clang already installed*, run:
 
 ```bash
 > git clone https://github.com/ja3067/Coral.git
@@ -116,7 +116,7 @@ By default, this will generate the corresponding LLVM IR, compile it to an execu
 > coral gcd.cl -o main
 ```
 
-This will name the file main instead. To generate only the LLVM IR, run Coral with the ```-llvm``` flag. To generate only the assembly code, run Coral with the ```-S``` flag. To only run the semantic checker without compilation, use the ```-no-compile``` flag. 
+This will name the file main instead. To generate only the LLVM IR, run Coral with the ```-emit-llvm``` flag. To generate only the assembly code, run Coral with the ```-S``` flag. To only run the semantic checker without compilation, use the ```-no-compile``` flag. To disable runtime error checking for improved performance, using the ```-no-except``` flag.
 
 ```bash
 > coral gcd.cl -emit-llvm # only produces llvm
@@ -179,7 +179,7 @@ will succeed if called with a string argument, like ```foo("hello")```, but will
 STypeError: invalid return type
 ```
 
-Coral also supports Python-style lists, and these can be specified in type annotations.
+Sometimes these kinds of errors will only be raised when the function is called, if type inference depends on the types of the arguments or global variables in the function. Coral also supports Python-style lists, and these can be specified in type annotations.
 
 ```python
 >>> def add(x : list): 
@@ -194,7 +194,7 @@ Coral also supports Python-style lists, and these can be specified in type annot
 STypeError: invalid type assigned to x
 ```
 
-In rare cases where type inference is not possible (due for example to a conditional branch), these errors will occur at runtime.
+In cases where type inference is not possible (due for example to a conditional branch), these errors will occur at runtime.
 
 ```python
 >>> def dynamic() -> str: 
@@ -237,7 +237,7 @@ Coral uses a gradual typing system that places type-inferred immutable variables
 4950
 ```
 
-which runs much faster in Coral than Python. Type annotations make this optimization even more robust. Often types cannot be fully type inferred, but type hints allow more code to be placed on the stack. For example:
+which runs much faster in Coral than Python. Type annotations make this optimization even more robust. Often types cannot be fully type inferred, but type hints allow more code to be placed on the stack. For example, in this gcd code:
 
 ```python
 >>> def gcd(a : int, b : int) -> int
@@ -262,7 +262,7 @@ which runs much faster in Coral than Python. Type annotations make this optimiza
 5.
 ```
 
-Without the type annotations on the gcd function, this code takes about 25 seconds when run by Coral and does not terminate within 5 minutes when run by Python. However, when type annotations are added to the gcd function, it finishes in less than a second when run by Coral.
+Without the type annotations on the gcd function, this code takes about 25 seconds when run by Coral and does not terminate within 5 minutes when run by Python - this is because the Coral compiler cannot determine the type of the object returned by the dynamic function at compile-time. However, when type annotations are added to the gcd function, it finishes in less than a second when compiled and run by Coral.
 
 # Exceptions
 
@@ -298,7 +298,7 @@ STypeError: invalid return type
 STypeError: invalid type assigned to x
 ```
 
-Some errors cannot be caught by the compiler, and will only be caught at runtime. Runtime checks are only added to the LLVM IR when the code is not provably correct at compile-time. This saves needless computation at runtime.
+All errors prefixed by an "S" are caught at compile time. Some errors cannot be caught by the compiler, and will only be caught at runtime. Runtime checks are only added to the LLVM IR when the code is not provably correct at compile-time. This saves needless computation at runtime. For example, in this example, the return type of the dynamic function is unknown, so if it ultimately returns a string at runtime, the error will be thrown then.
 
 ```python
 >>> def dynamic(): 
@@ -326,6 +326,8 @@ RuntimeError: list index out of bounds
 >>> print(x[-1])
 RuntimeError: list index out of bounds
 ```
+
+While it is not recommended, runtime exceptions can be disabled using the ```-no-except``` compiler flag, which will significantly improve performance at the expense of possible segmentation faults or invalid type usage.
 
 # Differences from Python
 
