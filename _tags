@@ -1,5 +1,0 @@
-# Include the llvm and llvm.analysis packages while compiling
-true: package(llvm), package(llvm.analysis)
-
-# Enable almost all compiler warnings
-true : warn(-8-11-26-23)

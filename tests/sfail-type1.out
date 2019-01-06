@@ -1,1 +1,0 @@
-STypeError: unsupported operand type(s) for binary +: 'string' and 'int'
