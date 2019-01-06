@@ -22,7 +22,10 @@ def gcd(a, b):
 	    b = b - a
     return a
 
-x = 54
+def add(a : int, b : int) -> int:
+	return a + b
+	
+x = add(50, 40)
 y = 100052312523
 gcd(x, y)
 ```
@@ -42,23 +45,20 @@ The Coral language is written in OCaml and compiles target programs to LLVM IR. 
 This will generate an executable called Coral which acts as a compiler and interpreter for our language. If OCaml and ocaml-llvm are not already installed, you should install them. On Mac OS, run:
 
 ```bash
-> brew install opam
-> brew install llvm
+> brew install opam llvm
 > opam install llvm
 ```
 
 and on Linux run:
 
 ```bash
-> sudo apt-get install opam
-> sudo apt-get install llvm
+> sudo apt-get install opam llvm
 > opam install llvm
 ```
 Other Linux distributions can be installed similarly using your distribution's package manager. If the above fails, try instead running the following on Mac OS (or the equivalent on Linux):
 
 ```bash
-> brew install opam
-> brew install llvm
+> brew install opam llvm
 > opam depext conf-llvm.6.0.0
 > opam install llvm
 > export PATH=/usr/local/opt/llvm@6/bin:$PATH
@@ -119,8 +119,9 @@ By default, this will generate the corresponding LLVM IR, compile it to an execu
 This will name the file main instead. To generate only the LLVM IR, run Coral with the ```-llvm``` flag. To generate only the assembly code, run Coral with the ```-S``` flag. To only run the semantic checker without compilation, use the ```-no-compile``` flag. 
 
 ```bash
-> coral gcd.cl -llvm # only produces llvm
+> coral gcd.cl -emit-llvm # only produces llvm
 > coral gcd.cl -no-compile # only run semantic checker
+> coral gcd.cl -no-except # generates machine code with no runtime error handling
 > coral gcd.cl -S # only generates assembly code
 > coral gcd.cl -d # shows debugging information about the program. can be combined with other flags
 ```
