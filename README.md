@@ -1,4 +1,4 @@
-The **Coral** programming language: a gradually typed, Python-like language with powerful optional typing for improved safety and performance. Coral performs a kind of partial type inference on optionally explicitly typed Python code and seamlessly optimizes type-inferred objects to nearly as efficient as equivalent C-code, orders of magnitude faster than Python. Coral also enforces types at compile and runtime, catching errors where possible before code is run, and otherwise throwing errors at runtime for invalid types.
+The **Coral** programming language: a gradually typed, Python-like language with powerful optional typing for improved safety and performance. Coral performs type inference on optionally typed Python code and seamlessly optimizes type-inferred objects to nearly as efficient as equivalent C-code, orders of magnitude faster than Python. Coral also enforces types at compile and runtime, catching errors where possible before code is run, and otherwise throwing errors at runtime for invalid types.
 
 # Table of Contents
 * [Examples](#examples)
@@ -27,11 +27,11 @@ y = 26
 gcd(x, y)
 ```
 
-Coral supports Python 3.7 style type annotations which allow it to further type-infer ambiguous code segments for additional optimization and compile-time error checking.
+This gcd code for large inputs is 1000x faster than running the same code in the Python interpreter. Coral also supports Python 3.7 style type annotations which allow it to further type-infer ambiguous code segments for additional optimization and compile-time error checking.
 
 # Installation
 
-The Coral language is written in OCaml and compiles target programs to LLVM IR. To build the language with OCaml and ocaml-llvm already installed, run:
+The Coral language is written in OCaml and compiles target programs to LLVM IR. To build the language with OCaml, ocaml-llvm, and gcc/clang already installed, run:
 
 ```bash
 > git clone https://github.com/ja3067/Coral.git
@@ -57,6 +57,7 @@ and on Linux run:
 Other Linux distributions can be installed similarly using your distribution's package manager. If the above fails, try instead running the following on Mac OS (or the equivalent on Linux):
 
 ```bash
+> brew install opam
 > brew install llvm
 > opam depext conf-llvm.6.0.0
 > opam install llvm
