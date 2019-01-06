@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://github.com/ja3067/Coral/blob/fcf/docs/coral.png" width="75%"><br><br>
+  <img src="https://github.com/ja3067/Coral/blob/fcf/docs/coral2.png" width="75%"><br><br>
 </div>
 
 -----------------
