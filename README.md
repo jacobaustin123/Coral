@@ -6,6 +6,13 @@
 
 The **Coral** programming language: a gradually typed, Python-like language with powerful optional typing for improved safety and performance. Coral performs a kind of partial type inference on optionally explicitly typed Python code and seamlessly optimizes type-inferred objects to nearly as efficient as equivalent C-code, orders of magnitude faster than Python. Coral also enforces types at compile and runtime, catching errors where possible before code is run, and otherwise throwing errors at runtime for invalid types.
 
+# Table of Contents
+* [Examples](#examples)
+* [Installation](#installation)
+* [Goals](#goals)
+* [Using the Coral Compiler and Interpreter](#using-the-coral-compiler-and-interpreter)
+* [Adding Type Annotations](#adding-type-annotations)
+
 ## Examples
 
 Coral is syntactically identical to Python and any valid Coral program is also a valid Python program. The following is a simple gcd program which compiles to machine code nearly as efficient as equivalent C code.
@@ -24,7 +31,8 @@ y = 26
 gcd(x, y)
 ```
 
-Coral supports Python 3.7 style type annotations which allow it to further 
+Coral supports Python 3.7 style type annotations which allow it to further type-infer ambiguous code segments for additional optimization and compile-time error checking.
+
 ## Installation
 
 The Coral language is written in OCaml and compiles target programs to LLVM IR. To build the language with OCaml and ocaml-llvm already installed, run:
@@ -60,3 +68,140 @@ Other Linux distributions can be installed similarly using your distribution's p
 ```
 
 To add the llvm installation to your \$PATH variable permanently, you can copy the last line above to your .bashrc or .bash\_profile file.
+
+## Goals
+
+### Familiarity
+
+Coral's syntax is identical to Python's, with all its usual convenience. Python programmers can simply copy their code into the Coral compiler, and they can add type annotations which can be used to help performance and improve safety. Python is already an easy-to-learn language, and Coral adds no additional difficult to the learning curve. Coral also imposes no further restriction on the kinds of functions which can be run.
+
+### Type Safety
+
+Coral provides type safety where desired. Type specifiers on variables and functions enforce correct usage in large code bases. Sometimes it is helpful to have more flexibility with what kinds of types a variable can take or what kinds of arguments can be passed to it. Coral allows that. But if you have a large code-base with functions or arguments of known type, it can be helpful to explicitly declare those types and have them guaranteed by the compiler and runtime environment. Coral provides that too. Coral generally strives to catch as many type errors as possible at compile time, but will fall back to runtime checks where needed.
+
+### Code Optimization
+
+Because of Coral's type inference system and assisted by type annotations, Coral is able to compile code to far more efficient machine code that Python. Even without type-hints, Coral can often optimize code to be nearly as fast as equivalent C code, and type hints can allow it to overcome ambiguities in type-inference that would otherwise prevent Coral from optimizing fully. This natural interplay between typed code and optimization is at the heart of the Coral language.
+
+### Seamless Interplay between Typed and Untyped Code
+
+The core philosophy of Coral is that you don’t pay a penalty if you don’t type your code, and typed functions can be called with untyped arguments and vice versa. This preserves all the convenience of Python, while giving the programmer the freedom to be more explicit where desired.
+
+## Using the Coral Compiler and Interpreter
+
+Once Coral has been compiled, you can begin writing your own Coral programs. Use the Language Reference Manual to learn syntax as well as the limitations of the Coral language. 
+
+The following sample code is an implementation of gcd, a simple program in Coral:
+
+```python
+def gcd(a, b): 
+    while a != b: 
+        if a < b: 
+            b = b-a
+        else: 
+            a = a-b
+    return a
+    
+a = 1234342213
+b = 334232
+print(gcd(a,b))
+```
+
+This code is syntactically identical to Python, and requires no type annotations. To compile using the Coral compiler, save this code to a file called gcd.cl and compile it with
+
+```bash
+> coral gcd.cl
+```
+
+By default, this will generate the corresponding LLVM IR, compile it to an executable file called a.out, and run it. To change the name of the output file, run 
+
+```bash
+> coral gcd.cl -o main
+```
+
+This will name the file main instead. To generate only the LLVM IR, run Coral with the ```-llvm``` flag. To generate only the assembly code, run Coral with the ```-S``` flag. To only run the semantic checker without compilation, use the ```-no-compile``` flag. 
+
+```bash
+> coral gcd.cl -llvm # only produces llvm
+> coral gcd.cl -no-compile # only run semantic checker
+> coral gcd.cl -S # only generates assembly code
+> coral gcd.cl -d # shows debugging information about the program. can be combined with other flags
+```
+
+Coral also has a build-in **interpreter**. To use the interpreter, simply run ```coral``` without a file specified. This will open an interactive window like the OCaml or Python interpreter in which you can run any valid Coral programs. The following is an example of gcd code run in the interpreter:
+
+```python
+> coral
+Welcome to the Coral programming language! 
+>>> def gcd(a, b)
+...     while a ! = b: 
+...         if a > b: 
+...             a = a-b
+...         else: 
+...             b = b-a
+...     a
+...
+>>> gcd(5,10) 
+5.
+>>>
+```
+
+## Adding Type Annotations
+
+There are many cases in Python where types cannot be fully inferred at compile time due to the lack of strong static typing. There are also many cases where a function may be intended to only take a single kind of input or return a single kind of output. Both these cases can be addressed by the inclusion of optional static typing in Coral. These type hints or type annotations follow the Python 3.7 standard, for example: 
+
+```python
+def foo(x : int, y : int) -> str:
+    if x == 3:
+        return "hello"
+    else:
+        return "goodbye"
+```
+
+This function can only take integer arguments, and can only return a string. Calling this function with other arguments, like
+
+```python
+foo(3.0, 4.0) # called with floating point arguments
+```
+
+will result in an error. Likewise, a function like
+
+```python
+def foo(x) -> str:
+    return x
+```
+
+will succeed if called with a string argument, like ```foo("hello")```, but will raise a compile-time error if called with an integer argument, like ```foo(3)```. As a further example:
+
+```python
+>>> def foo() -> int: 
+...     return "hello" 
+...
+STypeError: invalid return type
+>>> def add(x : int[]): ...     sum = 0 
+...     for i in x: 
+...         sum += i 
+...     return sum 
+...
+>>> print(add([1,2,3]))
+6 
+>>>print(add([1.0,2.0, 3.0]))
+STypeError: invalid type assigned to x
+```
+
+In cases where type inference is not possible due to a conditional branch, these errors will occur at runtime, like for example:
+
+```python
+>>> def dynamic(): 
+...    if x == 3:
+...        return 3
+...    else: 
+...        return "hello" 
+...
+>>> x = 3
+>>> print(dynamic() * dynamic())
+9
+>>> x = 4
+>>> print(dynamic() * dynamic())
+RuntimeError: unsupported operand type(s) for binary *
+```
