@@ -1,4 +1,4 @@
-The **Coral** programming language: a gradually typed, Python-like language with powerful optional typing for improved safety and performance. Coral performs type inference on optionally typed Python code and seamlessly optimizes type-inferred objects to nearly as efficient as equivalent C-code, orders of magnitude faster than Python. Coral also enforces types at compile and runtime, catching errors where possible before code is run, and otherwise throwing errors at runtime for invalid types.
+The **Coral** programming language: a blazingly-fast, gradually typed Python-like language with powerful optional typing for improved safety and performance. Coral performs type inference on optionally typed Python code and seamlessly optimizes type-inferred objects to be nearly as efficient as equivalent C-code, orders of magnitude faster than Python. Coral also enforces types at compile and runtime, catching errors where possible before code is run, and otherwise throwing errors at runtime for invalid types.
 
 # Table of Contents
 * [Examples](#examples)
@@ -11,7 +11,7 @@ The **Coral** programming language: a gradually typed, Python-like language with
 
 # Examples
 
-Coral is syntactically identical to Python and any valid Coral program is also a valid Python program. The following is a simple gcd program which compiles to machine code nearly as efficient as equivalent C code.
+Coral is syntactically identical to a subset of Python, so any valid Coral program is also a valid Python program. This code snippet is a simple gcd program which runs in Python but compiles using the Coral compiler to machine code nearly as fast as C code.
 
 ```python
 def gcd(a, b):
@@ -23,11 +23,11 @@ def gcd(a, b):
     return a
 
 x = 54
-y = 26
+y = 100052312523
 gcd(x, y)
 ```
 
-This gcd code for large inputs is 1000x faster than running the same code in the Python interpreter. Coral also supports Python 3.7 style type annotations which allow it to further type-infer ambiguous code segments for additional optimization and compile-time error checking.
+This gcd code is 1000x faster when run with the Coral compiler than in the Python interpreter. Coral also supports Python 3.7 style type annotations which allow it to further type-infer ambiguous code segments for additional optimization and compile-time error checking.
 
 # Installation
 
@@ -123,7 +123,6 @@ This will name the file main instead. To generate only the LLVM IR, run Coral wi
 > coral gcd.cl -no-compile # only run semantic checker
 > coral gcd.cl -S # only generates assembly code
 > coral gcd.cl -d # shows debugging information about the program. can be combined with other flags
-> coral gcd.cl -o main # compiles to a ./main executable
 ```
 
 Coral also has a build-in **interpreter**. To use the interpreter, simply run ```coral``` without a file specified. This will open an interactive window like the OCaml or Python interpreter in which you can run any valid Coral program. The following is an example of gcd code run in the interpreter:
@@ -170,25 +169,31 @@ def foo(x) -> str:
     return x
 ```
 
-will succeed if called with a string argument, like ```foo("hello")```, but will raise a compile-time error if called with an integer argument, like ```foo(3)```. As a further example:
+will succeed if called with a string argument, like ```foo("hello")```, but will raise a compile-time error if called with an integer argument, like ```foo(3)```. For example:
 
 ```python
 >>> def foo() -> int: 
 ...     return "hello" 
 ...
 STypeError: invalid return type
->>> def add(x : int[]): ...     sum = 0 
+```
+
+Coral also supports Python-style lists, and these can be specified in type annotations.
+
+```python
+>>> def add(x : list): 
+...     sum = 0 
 ...     for i in x: 
 ...         sum += i 
 ...     return sum 
 ...
->>> print(add([1,2,3]))
+>>> print(add([1, 2, 3]))
 6 
->>> print(add([1.0,2.0, 3.0]))
+>>> print(add(4.0))
 STypeError: invalid type assigned to x
 ```
 
-In cases where type inference is not possible due to a conditional branch, these errors will occur at runtime, like for example:
+In rare cases where type inference is not possible (due for example to a conditional branch), these errors will occur at runtime.
 
 ```python
 >>> def dynamic() -> str: 
@@ -260,7 +265,7 @@ Without the type annotations on the gcd function, this code takes about 25 secon
 
 # Exceptions
 
-Coral has both compile and runtime exceptions for type errors, undefined variables, and out of bounds list access. Coral strives to raise as many of these errors as possible at compile time, using a robust type inferrence system. For example, the following errors will be caught by the compiler:
+Coral has both compile and runtime exceptions for type errors, undefined variables, and out of bounds list access. Coral strives to raise as many of these errors as possible at compile time, using a robust type inference system. For example, the following errors will be caught by the compiler:
 
 **Function Argument Errors:**
 
@@ -327,7 +332,7 @@ Coral strives to be syntactically identical to Python, and as close as possible 
 
 ### No Closures
 
-Coral does not have closures when returning functions from functions (as first class objections). For example, in Python the following code works as expected:
+Coral does not have closures when returning functions from functions (as first class objects). For example, in Python the following code works as expected:
 
 ```python
 >>> def foo():
