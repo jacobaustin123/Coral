@@ -123,9 +123,10 @@ This will name the file main instead. To generate only the LLVM IR, run Coral wi
 > coral gcd.cl -no-compile # only run semantic checker
 > coral gcd.cl -S # only generates assembly code
 > coral gcd.cl -d # shows debugging information about the program. can be combined with other flags
+> coral gcd.cl -o main # compiles to a ./main executable
 ```
 
-Coral also has a build-in **interpreter**. To use the interpreter, simply run ```coral``` without a file specified. This will open an interactive window like the OCaml or Python interpreter in which you can run any valid Coral programs. The following is an example of gcd code run in the interpreter:
+Coral also has a build-in **interpreter**. To use the interpreter, simply run ```coral``` without a file specified. This will open an interactive window like the OCaml or Python interpreter in which you can run any valid Coral program. The following is an example of gcd code run in the interpreter:
 
 ```python
 > coral
@@ -158,7 +159,8 @@ def foo(x : int, y : int) -> str:
 This function can only take integer arguments, and can only return a string. Calling this function with other arguments, like
 
 ```python
-foo(3.0, 4.0) # called with floating point arguments
+>>> foo(3.0, 4.0) # called with floating point arguments
+STypeError: invalid type assigned to x
 ```
 
 will result in an error. Likewise, a function like
@@ -254,7 +256,7 @@ which runs much faster in Coral than Python. Type annotations make this optimiza
 5.
 ```
 
-Without the type annotations on the gcd function, this code takes about 25 seconds when run by Coral and does not terminate within 5 minutes when run by Python. However, when type annotations are added to the gcd function, it finished in less than a second when run by Coral.
+Without the type annotations on the gcd function, this code takes about 25 seconds when run by Coral and does not terminate within 5 minutes when run by Python. However, when type annotations are added to the gcd function, it finishes in less than a second when run by Coral.
 
 # Exceptions
 
