@@ -48,31 +48,30 @@ extract a list of tokens. once this list has been extracted, we iterate over it 
 are correct, and to insert Parser.INDENT and Parser.DEDENT tokens as desired. We also sanitize it using the 
 above methods *)
 
+let indent_done = ref false
+let tabwidth = 8
+
 let indent tokens base current =
     let rec aux curr s out stack = match s with
     | [] -> (curr, stack, List.rev out)
     | Parser.CEND :: (Parser.EOL :: t) -> aux 0 t out stack;
-    | Parser.TAB :: t -> aux (curr + 1) t out stack;
-    | Parser.COLON :: (Parser.EOL :: t) -> (Stack.push (curr + 1) stack; aux curr (Parser.EOL :: t) (Parser.INDENT :: (Parser.COLON :: out)) stack)
-    | Parser.EOL :: t -> aux 0 t (Parser.SEP :: out) stack 
-    | a :: t -> if Stack.top stack = curr then aux curr t (a::out) stack (* do nothing, continue with next character *)
-      else if Stack.top stack > curr then let _ = Stack.pop stack in aux curr (a :: t) (Parser.DEDENT :: out) stack (* if dedented, pop off the stack and add a DEDENT token *)
-      else if curr = (Stack.top stack) + 1 then let _ = Stack.push curr stack in aux curr (a :: t) (Parser.INDENT :: out) stack (* if indented by one, push onto the stack and add an indent token *)
-      else raise (Failure "SSyntaxError: invalid indentation detected!"); (* else raise an error *)
-  in aux current tokens [] base
+    | Parser.TAB :: t -> if not !indent_done then aux (curr + tabwidth) t out stack else aux curr t out stack
+    | Parser.SPACE :: t -> if not !indent_done then aux (curr + 1) t out stack else aux curr t out stack
+    | Parser.EOL :: t -> indent_done := false; aux 0 t (Parser.SEP :: out) stack 
+    | a :: t -> indent_done := true;
+      if Stack.top stack = curr then aux curr t (a::out) stack (* do nothing, continue with next character *)
+      
+      else if (curr < Stack.top stack) then 
+        let rec dedent out curr stack = 
+          if curr < (Stack.top stack) then let _ = Stack.pop stack in dedent (Parser.DEDENT :: out) curr stack
+          else (out, stack)
 
+        in let (tokens, stacK) = dedent [] curr stack in 
+        if Stack.top stack = curr then aux curr (a :: t) (tokens @ out) stack (* if dedented, pop off the stack and add a DEDENT token *)
+        else raise (Failure "SSyntaxError: invalid indentation detected!");
 
-let indent_file tokens base current =
-    let rec aux curr s out stack = match s with
-    | [] -> (curr, stack, List.rev out)
-    | Parser.NOP :: (Parser.EOL :: t) -> aux 0 t out stack;
-    | Parser.CEND :: (Parser.EOL :: t) -> aux 0 t out stack;
-    | Parser.TAB :: t -> aux (curr + 1) t out stack;
-    | Parser.COLON :: (Parser.EOL :: t) -> (Stack.push (curr + 1) stack; aux curr (Parser.EOL :: t) (Parser.INDENT :: (Parser.COLON :: out)) stack)
-    | Parser.EOL :: t -> aux 0 t (Parser.SEP :: out) stack 
-    | a :: t -> if Stack.top stack = curr then aux curr t (a::out) stack (* do nothing, continue with next character *)
-      else if Stack.top stack > curr then let _ = Stack.pop stack in aux curr (a :: t) (Parser.DEDENT :: out) stack (* if dedented, pop off the stack and add a DEDENT token *)
-      else if curr = (Stack.top stack) + 1 then let _ = Stack.push curr stack in aux curr (a :: t) (Parser.INDENT :: out) stack (* if indented by one, push onto the stack and add an indent token *)
+      else if (curr > Stack.top stack) then 
+        let _ = Stack.push curr stack in aux curr (a :: t) (Parser.INDENT :: out) stack (* if indented by one, push onto the stack and add an indent token *)
       else raise (Failure "SSyntaxError: invalid indentation detected!"); (* else raise an error *)
   in aux current tokens [] base
 
@@ -101,11 +100,13 @@ let get_ast path =
   in let base = Stack.create() in let _ = Stack.push 0 base in
 
   let rec read current stack = (* logic of the interpreter *)
-    try let line = (input_line chan) ^ "\n" in (* add newline for parser, gets stripped by input_line *)
-     let lexbuf = (Lexing.from_string line) in
-     let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
-     let (curr, stack, formatted) = indent_file temp stack current in
-     formatted @ (read curr stack)
+    try 
+      let line = (input_line chan) ^ "\n" in (* add newline for parser, gets stripped by input_line *)
+      if String.length line = 1 then (read current stack)
+      else let lexbuf = (Lexing.from_string line) in
+      let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
+      let (curr, stack, formatted) = indent temp stack current in
+      formatted @ (read curr stack)
    with End_of_file -> close_in chan; Array.make (Stack.length stack - 1) Parser.DEDENT |> Array.to_list
   in let formatted = ref (read 0 base) in
   let _ = if !debug then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
@@ -201,19 +202,19 @@ let codegen sast fname =
 
     let llvm_name = (match String.length !executable_name with
       | 0 -> fname ^ ".ll"
-      | _ -> !executable_name) in
+      | _ -> !executable_name ^ ".ll") in
 
     let oc = open_out llvm_name in
     Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc;
 
     let assembly_name = (match String.length !executable_name with
       | 0 -> fname ^ ".s"
-      | _ -> !executable_name) in
+      | _ -> !executable_name ^ ".s") in
 
     let executable_name = (match String.length !executable_name with
       | 0 -> "a.out"
       | _ -> !executable_name) in
-
+    
     let output = match (!emit_llvm, !assembly) with
       | (true, _) -> [] 
       | (false, true) -> 
@@ -234,16 +235,25 @@ convert it to a list of Parser.token, apply the appropriate indentation correcti
 check to make sure we are at 0 indentation level, print more dots otherwise, and then
 compute the correct value and repeat. *)
 
+let is_empty tokens = match tokens with
+  | Parser.NOP :: [Parser.EOL] -> true
+  | _ -> false
+
+let block = ref false
+
 let rec from_console map past run = 
   try 
     Printf.printf ">>> "; flush stdout;
     let base = Stack.create() in let _ = Stack.push 0 base in
 
     let rec read current stack = (* logic of the interpreter *)
-        let lexbuf = (Lexing.from_channel stdin) in
+        let line = (input_line stdin) ^ "\n" in (* add newline for parser, gets stripped by input_line *)
+        let lexbuf = (Lexing.from_string line) in
         let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
         let (curr, stack, formatted) = indent temp stack current in 
-        if Stack.top stack = 0 then formatted else
+        if Filename.check_suffix (String.trim line) ":" then block := true
+        else if Stack.top stack = 0 then block := false;
+        if is_empty temp || not !block then formatted else
         (Printf.printf "... "; flush stdout;
         formatted @ (read curr stack))
 
