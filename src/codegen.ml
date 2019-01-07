@@ -970,10 +970,10 @@ let add_lists fn b =
 
 
   let name_of_bind = function
-      |Bind(name,_) -> name
+      | Bind(name,_) -> name
   in
   let type_of_bind = function
-      |Bind(_,ty) -> ty
+      | Bind(_,ty) -> ty
   in
   let ltyp_of_typ = function
       | Int -> int_t
@@ -1007,12 +1007,12 @@ let add_lists fn b =
       (** the commented code adds a Dyn version of every var. i wont use it for pure immutable phase-1 testing tho! **)
       let dynify bind =   (* turns a bind into dynamic. a helper fn *)
          let Bind(name,_) = bind in
-           Bind(name,Dyn)
+           Bind(name, Dyn)
       in
       let dyns_list =   (* redundant list where every bind is dynamic *)
           List.map dynify binds
       in
-      let binds = if dynify_all then List.sort_uniq Pervasives.compare (binds @ dyns_list) else binds
+      let binds = if dynify_all then let () = tstp "dynifying all vars" in List.sort_uniq Pervasives.compare (binds @ dyns_list) else binds
       in   (* now binds has a dyn() version of each variable *)
       let prettyname_of_bind bind = (name_of_bind bind) ^ "_" ^ (string_of_typ (type_of_bind bind))
       in
@@ -1041,7 +1041,7 @@ let add_lists fn b =
               | _ -> L.build_alloca (ltyp_of_typ (type_of_bind bind)) (prettyname_of_bind bind) builder
           )
         in
-        let (res,newbind) = match (type_of_bind bind) with
+        let (res, newbind) = match (type_of_bind bind) with
           | Int | Float | Bool -> (RawAddr(alloc_result), bind)
           | String -> (BoxAddr(alloc_result, false), Bind((name_of_bind bind), String))
           | Arr -> (BoxAddr(alloc_result, false), Bind((name_of_bind bind), Arr))
@@ -1057,7 +1057,7 @@ let add_lists fn b =
 
   let globals_map =
       let globals_list = snd prgm  (* snd prgrm is the bind list of globals *) in
-        build_binding_list None globals_list true
+        build_binding_list None globals_list false
   in
   let lookup_global_binding bind =   (*pbind bind;*)
     try BindMap.find bind globals_map
@@ -1484,10 +1484,10 @@ let add_lists fn b =
         (*ignore(expr the_state fexpr);*) (* I guess we dont care abt the result of this since we just recompile from the sfdecl anyways *)
         (*let (_,the_state) = expr the_state fexpr in*)
 
-        let (_, func_typ) = fexpr in 
-        let BoxAddr(addr, _) = lookup the_state.namespace (Bind(sfdecl.sfname, func_typ)) in
-        let the_state = check_defined addr ("RuntimeError: function " ^ sfdecl.sfname ^ " is not defined.") the_state in
-
+        (* let (_, func_typ) = fexpr in  *)
+        (* let BoxAddr(addr, _) = lookup the_state.namespace (Bind(sfdecl.sfname, func_typ)) in
+        let the_state = check_defined addr ("RuntimeError: function " ^ sfdecl.sfname ^ " is not defined.") the_state in *)
+        
         let eval_arg aggreg e =
             let (the_state, args) = aggreg in
             let (res, the_state) = expr the_state e in
