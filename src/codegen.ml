@@ -1483,6 +1483,9 @@ let add_lists fn b =
         (*ignore(expr the_state fexpr);*) (* I guess we dont care abt the result of this since we just recompile from the sfdecl anyways *)
         (*let (_,the_state) = expr the_state fexpr in*)
 
+        let BoxAddr(addr, _) = lookup the_state.namespace (Bind(sfdecl.sfname, Dyn)) in
+        let the_state = check_defined addr ("RuntimeError: function " ^ sfdecl.sfname ^ " is not defined.") the_state in
+
         let eval_arg aggreg e =
             let (the_state, args) = aggreg in
             let (res, the_state) = expr the_state e in
