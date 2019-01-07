@@ -14,9 +14,9 @@ def foo():
 x = 3
 
 y = foo()
-print(y()(5))
+print(y(5))
 
 x = 4
 
 y = foo()
-print(y()(5))
+print(y(5))

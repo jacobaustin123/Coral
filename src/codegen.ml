@@ -988,26 +988,30 @@ let add_lists fn b =
       | Float -> L.const_null float_t
       | Bool -> L.const_null bool_t
       | Dyn -> tstp "const_of_typ called on Dyn"; L.const_null cobj_pt
+      | FuncType -> tstp "const_of_typ called on FuncType"; L.const_null cobj_pt
       | _ -> tstp "unexpected const_of_typ encountered"; raise (Failure "CodegenError: unexpected type encountered in const_of_typ")
 
+  in
+  let names_of_bindlist bindlist =
+    List.map name_of_bind bindlist
   in
 
   (** allocate for all the bindings and put them in a map **)
 
   (* pass in Some(builder) to do local vars alloca() or None to do globals non-alloca *)
-  let build_binding_list local_builder_opt binds =   (* returns a stringmap Bind -> Addr *) 
+  let build_binding_list local_builder_opt binds dynify_all =   (* returns a stringmap Bind -> Addr *) 
   (* strip out all the FuncTypes from binds *)
       (*let binds = List.rev (List.fold_left (fun binds bind -> if ((type_of_bind bind) = FuncType) then binds else (bind::binds)) [] binds) in*)
       (** the commented code adds a Dyn version of every var. i wont use it for pure immutable phase-1 testing tho! **)
-      (**let dynify bind =   (* turns a bind into dynamic. a helper fn *)
-         Bind(name,_) = bind in
+      let dynify bind =   (* turns a bind into dynamic. a helper fn *)
+         let Bind(name,_) = bind in
            Bind(name,Dyn)
       in
       let dyns_list =   (* redundant list where every bind is dynamic *)
-          List.map dynify (names_of_bindlist binds)
+          List.map dynify binds
       in
-      binds = List.sort_uniq Pervasives.compare (binds @ dyns_list) 
-      in   (* now binds has a dyn() version of each variable *) **)
+      let binds = if dynify_all then List.sort_uniq Pervasives.compare (binds @ dyns_list) else binds
+      in   (* now binds has a dyn() version of each variable *)
       let prettyname_of_bind bind = (name_of_bind bind) ^ "_" ^ (string_of_typ (type_of_bind bind))
       in
       let get_const bind = match (type_of_bind bind) with 
@@ -1049,7 +1053,7 @@ let add_lists fn b =
 
   let globals_map =
       let globals_list = snd prgm  (* snd prgrm is the bind list of globals *) in
-        build_binding_list None globals_list
+        build_binding_list None globals_list true
   in
   let lookup_global_binding bind =   (*pbind bind;*)
     try BindMap.find bind globals_map
@@ -1069,9 +1073,6 @@ let add_lists fn b =
 
 
   (* useful utility functions! *)
-  (* let names_of_bindlist bindlist =
-    List.map name_of_bind bindlist
-  in *)
   (* helper fn: seq 4 == [0;1;2;3] *)
   let seq len =
     let rec aux len acc =
@@ -1429,7 +1430,7 @@ let add_lists fn b =
 
         ) in (res,the_state)
 
-      | SCall(fexpr, arg_expr_list, SNop) -> raise (Failure "CodegenError: Generic SCalls partially implemented and disabled.");
+      | SCall(fexpr, arg_expr_list, SNop) -> 
         tstp ("GENERIC SCALL of "^(string_of_int (List.length arg_expr_list))^" args");
         (* eval the arg exprs *)
         let argc = List.length arg_expr_list in
@@ -1521,7 +1522,7 @@ let add_lists fn b =
             and string_format_str = L.build_global_stringptr "%d\n" "fmt" the_state.b
             and float_format_str = L.build_global_stringptr "%c\n" "fmt" the_state.b in   *)
             (* List.iter (fun (Bind (n, t)) -> print_endline (n ^ ": " ^ string_of_typ t)) sfdecl.sformals; *)
-            let fn_namespace = build_binding_list (Some(fn_builder)) (typed_formals @ sfdecl.slocals) in
+            let fn_namespace = build_binding_list (Some(fn_builder)) (typed_formals @ sfdecl.slocals) false in
             let vals_to_store = Array.to_list (L.params optim_func) in
 
             (* let addrs = List.map (fun (bind, explicit_type) -> ((lookup fn_namespace bind), explicit_type)) binds in *)
@@ -1830,7 +1831,7 @@ let add_lists fn b =
             ) in ignore(L.build_ret data the_state.b); the_state
         ) in the_state
 
-    | SFunc sfdecl -> the_state (*
+    | SFunc sfdecl ->
         tstp ("CREATING GENERIC FN: " ^ sfdecl.sfname); (* create the generic function object, locals may be typed but all formals are dyn/boxed *)
         (* outer scope work: point binding to new cfuncobj *)
         let fname = sfdecl.sfname in
@@ -1874,7 +1875,7 @@ let add_lists fn b =
             ignore(L.build_store cobj_p alloca fn_b);
             BindMap.add (Bind(name,Dyn)) (BoxAddr(alloca,false)) nspace
         in
-        let fn_namespace = build_binding_list (Some(fn_b)) sfdecl.slocals in
+        let fn_namespace = build_binding_list (Some(fn_b)) sfdecl.slocals false in
         let fn_namespace = List.fold_left2 add_formal fn_namespace formal_names formal_vals in
 
         let int_format_str = L.build_global_stringptr "%d\n" "fmt" fn_b
@@ -1887,7 +1888,6 @@ let add_lists fn b =
         let fn_state = add_terminal (stmt fn_state sfdecl.sbody) build_return in
         let the_state = change_state the_state (S_optimfuncs(fn_state.optim_funcs)) in (* grab optimfuncs from inner *)
         the_state  (* SFunc() returns the original builder *)
-        *)
 
     (* used to handle heapify calls *)
     | STransform (name, from_ty, to_ty) -> 

@@ -9,4 +9,4 @@ def foo():
 		return 3.0
 
 y = foo()
-print(y()(5))
+print(y(5))
