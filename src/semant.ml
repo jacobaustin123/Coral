@@ -231,7 +231,7 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
           
           | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation")))
       
-      | None -> if not the_state.noeval then print_endline "SNotImplementedError: calling weakly defined functions has not been implemented";
+      | None -> if not the_state.noeval then print_endline "SWarning: called unknown/undefined function";
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals the_state e' in e'' :: acc) [] args) in
           let transforms = make_transforms (globals_to_list globals) in
           (Dyn, (SCall(e, eout, transforms)), None)
