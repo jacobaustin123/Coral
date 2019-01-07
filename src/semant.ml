@@ -150,7 +150,8 @@ and exp map = function
       
       | None -> print_endline "SWarning: called unknown/undefined function"; (* TODO probably not necessary, may be a problem for recursion *)
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr map e' in e' :: acc) [] args) in
-          (Dyn, (SCall(e, eout, SNop)), None)
+          let transforms = make_transforms (globals_to_list map) in
+          (Dyn, (SCall(e, eout, transforms)), None)
         )
 
   | _ as temp -> print_endline ("SNotImplementedError: '" ^ (expr_to_string temp) ^ 
@@ -171,11 +172,11 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
     let t3 = binop t1 t2 op in (t3, SBinop(e1, op, e2), None)
 
   | Var(Bind(x, t)) -> 
-    if StringMap.mem x locals then 
-    let (typ, t', data) = StringMap.find x locals in 
-    (t', SVar(x), data) 
-    else if the_state.noeval then (t, SVar(x), None) else
-    raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
+    if StringMap.mem x locals then
+      if (StringMap.mem x globals) && the_state.noeval then (Dyn, SVar(x), None)
+      else let (typ, t', data) = StringMap.find x locals in (t', SVar(x), data)
+    else if the_state.noeval then let () = possible_globals := (Bind(x, Dyn)) :: !possible_globals in (Dyn, SVar(x), None) 
+    else raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
 
   | ListAccess(e, x) ->
     let (t1, e1, _) = func_expr globals locals the_state e in
@@ -232,7 +233,8 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
       
       | None -> if not the_state.noeval then print_endline "SNotImplementedError: calling weakly defined functions has not been implemented";
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals the_state e' in e'' :: acc) [] args) in
-          (Dyn, (SCall(e, eout, SNop)), None)
+          let transforms = make_transforms (globals_to_list globals) in
+          (Dyn, (SCall(e, eout, transforms)), None)
         )
 
     | _ as other -> exp locals other
@@ -580,6 +582,6 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
 (* check: master function to check the entire program by iterating over the list of
 statements and returning a list of sstmts, a list of globals, and the updated map *)
 
-and check map out globals the_state = function
-  | [] -> ((List.rev out, List.sort_uniq compare (List.rev globals)), map)
-  | a :: t -> let (m', value, g) = stmt map the_state a in check m' (value :: out) (g @ globals) the_state t
+and check map sast_out globals_out the_state = function
+  | [] -> ((List.rev sast_out, List.sort_uniq Pervasives.compare (List.rev (globals_out @ !possible_globals))), map)
+  | a :: t -> let (m', statement, binds) = stmt map the_state a in check m' (statement :: sast_out) (binds @ globals_out) the_state t

@@ -987,6 +987,8 @@ let add_lists fn b =
       | Int -> L.const_null int_t
       | Float -> L.const_null float_t
       | Bool -> L.const_null bool_t
+      | String -> tstp "const_of_typ called on String"; L.const_null cobj_pt
+      | FuncType -> tstp "const_of_typ called on FuncType"; L.const_null cobj_pt
       | Dyn -> tstp "const_of_typ called on Dyn"; L.const_null cobj_pt
       | FuncType -> tstp "const_of_typ called on FuncType"; L.const_null cobj_pt
       | _ -> tstp "unexpected const_of_typ encountered"; raise (Failure "CodegenError: unexpected type encountered in const_of_typ")
