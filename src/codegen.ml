@@ -1432,8 +1432,10 @@ let add_lists fn b =
 
         ) in (res,the_state)
 
-      | SCall(fexpr, arg_expr_list, SNop) -> 
+      | SCall(fexpr, arg_expr_list, SBlock([entry_transforms;exit_transforms])) -> 
         tstp ("GENERIC SCALL of "^(string_of_int (List.length arg_expr_list))^" args");
+
+        let the_state = stmt the_state entry_transforms in
         (* eval the arg exprs *)
         let argc = List.length arg_expr_list in
 
@@ -1471,6 +1473,7 @@ let add_lists fn b =
         let (Box(caller_cobj_p),the_state) = expr the_state fexpr in
         let call_ptr = build_getctypefn_cobj ctype_call_idx caller_cobj_p the_state.b in
         let result = L.build_call call_ptr [|caller_cobj_p;argv|] "result" the_state.b in
+        let the_state = stmt the_state exit_transforms in
         (Box(result),the_state)
         
 
@@ -1897,7 +1900,6 @@ let add_lists fn b =
       tstp ("Transforming " ^ name ^ ": " ^ (string_of_typ from_ty) ^ " -> " ^ (string_of_typ to_ty));
       (match (from_ty, to_ty) with
        | (x, y) when x = y -> the_state
-       | (FuncType, Dyn) | (Dyn, FuncType) -> the_state
        | (Dyn, raw_ty) when raw_ty = Int || raw_ty = Float || raw_ty = Bool ->
          (* get addresses for raw and boxed versions *)
          let unchecked_boxaddr = lookup namespace (Bind(name,Dyn)) in
@@ -1913,7 +1915,7 @@ let add_lists fn b =
          ignore(L.build_store data raw_addr the_state.b);
          the_state
       
-       | (String, Dyn) | (Dyn, String) | (Arr, Dyn) | (Dyn, Arr) ->
+       | (String, Dyn) | (Dyn, String) | (Arr, Dyn) | (Dyn, Arr) | (FuncType, Dyn) | (Dyn, FuncType) -> 
           let BoxAddr(box_addr1, _) = lookup namespace (Bind(name, from_ty)) (* no need to check needs_update flag bc this is assignment *)
           and BoxAddr(box_addr2, _) = lookup namespace (Bind(name, to_ty)) in
           let cobj_addr = L.build_load box_addr1 "load_cobj" the_state.b in
