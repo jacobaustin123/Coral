@@ -298,6 +298,8 @@ let rec from_console map past run =
     let imported_program = parse_imports program in
 
     let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; stack = TypeMap.empty; } imported_program) in (* temporarily here to check validity of SAST *)
+    let (sast, globals) = sast in
+    let sast = (strip_return [] sast, globals) in 
     let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
     
     if run then
