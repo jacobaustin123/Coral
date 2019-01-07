@@ -175,7 +175,7 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
     if StringMap.mem x locals then
       if (StringMap.mem x globals) && the_state.noeval then (Dyn, SVar(x), None)
       else let (typ, t', data) = StringMap.find x locals in (t', SVar(x), data)
-    else if the_state.noeval then (Dyn, SVar(x), None) 
+    else if the_state.noeval then let () = possible_globals := (Bind(x, Dyn)) :: !possible_globals in (Dyn, SVar(x), None) 
     else raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
 
   | ListAccess(e, x) ->

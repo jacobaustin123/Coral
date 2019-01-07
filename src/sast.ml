@@ -97,4 +97,4 @@ and string_of_lvalue = function
   | SLListSlice(e1, e2, e3) -> string_of_sexpr e1 ^ "[" ^ string_of_sexpr e2 ^ ":" ^ string_of_sexpr e3 ^ "]"
   | SLExpr(e) -> string_of_sexpr e
 
-and string_of_sprogram (sl, bl) = String.concat "\n" (List.map (string_of_sstmt 1) sl) ^ "\n\nGlobals: [" ^ String.concat " " (List.map string_of_sbind bl) ^ "]"
+and string_of_sprogram (sl, bl) = String.concat "\n" (List.map (string_of_sstmt 1) sl) ^ "\n\nGlobals: [" ^ String.concat ", " (List.map string_of_sbind bl) ^ "]"

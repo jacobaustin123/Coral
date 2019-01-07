@@ -253,13 +253,15 @@ type flag = {
   forloop : bool; (* in a for loop? *)
 }
 
+let make_dynamic bindlist = List.map (fun (Bind(name, typ)) -> Bind(name, Dyn)) bindlist
+
 let globals_to_list globals = 
   let current = StringMap.bindings globals in
-  let bindings = List.map (fun (name, (_, typ, _)) -> (name, typ)) current in
+  let bindings = List.map (fun (name, (_, typ, _)) -> Bind(name, typ)) current in
   bindings
 
 let make_transforms globals = 
-  possible_globals := globals @ !possible_globals;
-  let entry = List.map (fun (name, typ) -> STransform(name, typ, Dyn)) globals in
-  let exit = List.map (fun (name, typ) -> STransform(name, Dyn, typ)) globals in
+  possible_globals := (make_dynamic globals) @ !possible_globals;
+  let entry = List.map (fun (Bind(name, typ)) -> STransform(name, typ, Dyn)) globals in
+  let exit = List.map (fun (Bind(name, typ)) -> STransform(name, Dyn, typ)) globals in
   SBlock(SBlock(entry) :: [SBlock(exit)])
