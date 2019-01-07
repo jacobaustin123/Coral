@@ -249,7 +249,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let heap_data_p = L.build_malloc int_t "heap_data_p" b in
     ignore(L.build_store rawdata heap_data_p b);
     let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
-    L.build_store heap_data_p dataptr_addr_i8pp b
+    ignore(L.build_store heap_data_p dataptr_addr_i8pp b);
+    L.build_ret (L.const_int int_t 0) b
   in
 
   let build_fheapify self_p name b =   (* data_type = int_t etc *)
@@ -261,7 +262,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let heap_data_p = L.build_malloc float_t "heap_data_p" b in
     ignore(L.build_store rawdata heap_data_p b);
     let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
-    L.build_store heap_data_p dataptr_addr_i8pp b
+    ignore(L.build_store heap_data_p dataptr_addr_i8pp b);
+    L.build_ret (L.const_int int_t 0) b
   in
 
   let build_bheapify self_p name b =   (* data_type = int_t etc *)
@@ -273,7 +275,20 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let heap_data_p = L.build_malloc bool_t "heap_data_p" b in
     ignore(L.build_store rawdata heap_data_p b);
     let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
-    L.build_store heap_data_p dataptr_addr_i8pp b
+    ignore(L.build_store heap_data_p dataptr_addr_i8pp b);
+    L.build_ret (L.const_int int_t 0) b
+  in
+
+  let build_lheapify self_p name b =
+    L.build_ret (L.const_int int_t 0) b
+  in
+
+  let build_sheapify self_p name b =
+    L.build_ret (L.const_int int_t 0) b
+  in
+
+  let build_fcheapify self_p name b =
+    L.build_ret (L.const_int int_t 0) b
   in
 
   let built_ops =
@@ -297,7 +312,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
        Oprt("idx_parent", None, None, None, None, Some((build_idx_parent), int_t), None, None);
        Uoprt("neg", Some((L.build_neg), int_t), Some((L.build_fneg), float_t), Some((L.build_neg), bool_t), None, None, None, None);
        Uoprt("not", Some((L.build_not), int_t), None, Some((L.build_not), bool_t), Some((L.build_not), char_t), None, None, None);
-       Uoprt("heapify", Some((build_iheapify), int_t), Some((build_fheapify), int_t), Some((build_bheapify), int_t), None, None, None, None);
+       Uoprt("heapify", Some((build_iheapify), int_t), Some((build_fheapify), int_t), Some((build_bheapify), int_t), None, Some((build_lheapify), int_t), Some((build_sheapify), int_t), Some((build_fcheapify), int_t));
        Coprt("call", None, None, None, None, None, None, Some((L.build_call), int_t));
        ] in
 
@@ -637,8 +652,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
           let formals_llvalues = (Array.to_list (L.params fn)) in
           let [remote_self_p] = formals_llvalues in
           let box_addr = boilerplate_till_load remote_self_p "self_p" bd in
-          let result_data = tf box_addr "result_data" bd in
-          ignore(L.build_ret (L.const_int int_t 0) bd)
+          ignore(tf box_addr "result_data" bd)
         | None -> ())
       | _ -> (match o with
         | Some(((fn, bd), tfn)) ->
