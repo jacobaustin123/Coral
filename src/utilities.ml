@@ -215,6 +215,7 @@ let rec1 = ref [] (* these are used to extract Transform objects for use in code
 let rec2 = ref []
 
 let binds = ref []
+let possible_globals = ref []
 
 (* transform: merge function used to reconcile the global lookup map after a conditional branch.
 extracts objects with transformed type for use in codegen. *)
@@ -258,6 +259,7 @@ let globals_to_list globals =
   bindings
 
 let make_transforms globals = 
+  possible_globals := globals @ !possible_globals;
   let entry = List.map (fun (name, typ) -> STransform(name, typ, Dyn)) globals in
   let exit = List.map (fun (name, typ) -> STransform(name, Dyn, typ)) globals in
   SBlock(SBlock(entry) :: [SBlock(exit)])

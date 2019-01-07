@@ -583,5 +583,5 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
 statements and returning a list of sstmts, a list of globals, and the updated map *)
 
 and check map sast_out globals_out the_state = function
-  | [] -> ((List.rev sast_out, List.sort_uniq compare (List.rev globals_out)), map)
+  | [] -> ((List.rev sast_out, List.sort_uniq Pervasives.compare (List.rev (globals_out @ !possible_globals))), map)
   | a :: t -> let (m', statement, binds) = stmt map the_state a in check m' (statement :: sast_out) (binds @ globals_out) the_state t
