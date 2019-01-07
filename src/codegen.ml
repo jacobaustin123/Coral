@@ -1044,6 +1044,8 @@ let add_lists fn b =
         let (res,newbind) = match (type_of_bind bind) with
           | Int | Float | Bool -> (RawAddr(alloc_result), bind)
           | String -> (BoxAddr(alloc_result, false), Bind((name_of_bind bind), String))
+          | Arr -> (BoxAddr(alloc_result, false), Bind((name_of_bind bind), Arr))
+          | FuncType -> (BoxAddr(alloc_result, false), Bind((name_of_bind bind), FuncType))
           | _ -> (BoxAddr(alloc_result, false), Bind((name_of_bind bind), Dyn))
         in (res, newbind)
       in
@@ -1086,7 +1088,7 @@ let add_lists fn b =
   list first and then the globals list *)
   let lookup namespace bind = (*tstp (string_of_sbind bind);*)
       let bind = match bind with
-        | Bind(n, Int)| Bind(n, Float)| Bind(n, Bool) | Bind(n, String) -> bind
+        | Bind(n, Int)| Bind(n, Float)| Bind(n, Bool) | Bind(n, String) | Bind(n, FuncType) | Bind(n, Arr) -> bind
         | Bind(n, _) -> Bind(n, Dyn)
       in try BindMap.find bind namespace
         with Not_found -> lookup_global_binding bind
@@ -1476,14 +1478,14 @@ let add_lists fn b =
         let the_state = stmt the_state exit_transforms in
         (Box(result),the_state)
         
-
       | SCall(fexpr, arg_expr_list, SFunc(sfdecl)) -> 
 
         tstp ("OPTIMIZED SCALL of " ^ sfdecl.sfname ^ " with binds:"); List.iter pbind sfdecl.sformals; tstp ("returns:" ^ (string_of_typ sfdecl.styp));tstp "(end of binds)";
         (*ignore(expr the_state fexpr);*) (* I guess we dont care abt the result of this since we just recompile from the sfdecl anyways *)
         (*let (_,the_state) = expr the_state fexpr in*)
 
-        let BoxAddr(addr, _) = lookup the_state.namespace (Bind(sfdecl.sfname, Dyn)) in
+        let (_, func_typ) = fexpr in 
+        let BoxAddr(addr, _) = lookup the_state.namespace (Bind(sfdecl.sfname, func_typ)) in
         let the_state = check_defined addr ("RuntimeError: function " ^ sfdecl.sfname ^ " is not defined.") the_state in
 
         let eval_arg aggreg e =
@@ -1854,7 +1856,7 @@ let add_lists fn b =
           ignore(L.build_store the_function dfp_as_fp the_state.b);  (* store fnptr *)
           ignore(L.build_store ctype_func ctypefieldptr the_state.b);  (* store ctype ptr *)
           (* store new object in appropriate binding *)
-          let BoxAddr(boxaddr,_) = (lookup namespace (Bind(fname,Dyn))) in (*ok to throw away need_update bool in assignment! *)
+          let BoxAddr(boxaddr,_) = (lookup namespace (Bind(fname, FuncType))) in (*ok to throw away need_update bool in assignment! *)
           ignore(L.build_store fn_obj boxaddr the_state.b)
         in
 
