@@ -1,2 +1,2 @@
 3
-RuntimeError: name 'bar' is not defined
+RuntimeError: function bar is not defined.
