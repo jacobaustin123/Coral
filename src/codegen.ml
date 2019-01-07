@@ -1783,12 +1783,13 @@ let add_lists fn b =
          let body_builder = L.builder_at_end context body_bb in
 
          let elmptr = build_idx listptr n "binop_result" body_builder in
-          let the_state = change_state the_state (S_b(body_builder)) in
+         let the_state = change_state the_state (S_b(body_builder)) in
 
          let Bind(name, explicit_t) = var in 
          let the_state = (match (lookup namespace var) with (*assignment so ok to throw away the needs_update bool*)
               | BoxAddr(var_addr, _) -> ignore(L.build_store elmptr var_addr the_state.b); the_state
               | RawAddr(var_addr) -> 
+                  tstp "storing for loop variable in raw address (rare)";
                   let the_state = check_explicit_type explicit_t elmptr ("RuntimeError: invalid type assigned to " ^ name) the_state in
                   let rawdata = build_getdata_cobj (ltyp_of_typ explicit_t) elmptr the_state.b in
                   ignore(L.build_store rawdata var_addr the_state.b); the_state
@@ -1922,16 +1923,21 @@ let add_lists fn b =
          (* get addresses for raw and boxed versions *)
          let BoxAddr(box_addr, _) = lookup namespace (Bind(name, Dyn)) (* no need to check needs_update flag bc this is assignment *)
          and RawAddr(raw_addr) = lookup namespace (Bind(name, raw_ty)) in
+
+        let rawval = L.build_load raw_addr "__load_raw" the_state.b in
+         let tempobj = build_new_cobj_init (ltyp_of_typ raw_ty) rawval the_state.b in
+(*       
          (* gep for direct pointers to the type and data fields of box *)
          let cobj_addr = L.build_load box_addr "load_cobj" the_state.b in
          (* let cobj_addr = L.build_load box_addr "cobjptr" the_state.b in *)
          let raw_addr = L.build_bitcast raw_addr char_pt "raw" the_state.b in
          let dataptr_addr = L.build_struct_gep cobj_addr cobj_data_idx "dat_p_p" the_state.b in
          let typeptr_addr = L.build_struct_gep cobj_addr cobj_type_idx "ty_p_p" the_state.b in
-         let typeptr_addr = L.build_bitcast typeptr_addr (L.pointer_type ctype_pt) "ty" the_state.b in
+         let typeptr_addr = L.build_bitcast typeptr_addr (L.pointer_type ctype_pt) "ty" the_state.b in *)
          (* store raw_addr in the box's dataptr field and update the typeptr *)
-         ignore(L.build_store raw_addr dataptr_addr the_state.b);
-         ignore(L.build_store (ctype_of_typ raw_ty) typeptr_addr the_state.b);
+         (* ignore(L.build_store raw_addr dataptr_addr the_state.b); *)
+
+         ignore(L.build_store tempobj box_addr the_state.b);
          let the_state = change_state the_state (S_needs_reboxing(name, true)) in
          the_state
       )
