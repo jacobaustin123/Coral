@@ -29,6 +29,8 @@ source.*
 main
 *.diff
 a.out
+*.ll
+*.s
 
 # IntelliJ nonsense
 .idea/*
