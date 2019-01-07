@@ -6,7 +6,7 @@ module L = Llvm
 let pt some_lltype = Printf.eprintf "pt: %s%s\n" "---->" (L.string_of_lltype some_lltype)
 let pv some_llvalue = Printf.eprintf "pv: %s%s\n" "---->" (L.string_of_llvalue some_llvalue)
 let tst() = (*Printf.eprintf "!!!!!!!!!!\n";*)()
-let tstp str = Printf.eprintf "%s\n" str
+let tstp str = print_endline str
 let pbind bind = tstp (string_of_sbind bind); ()
 let _ = L.enable_pretty_stacktrace()
 (* Maps *)

@@ -1432,7 +1432,7 @@ let add_lists fn b =
 
         ) in (res,the_state)
 
-      | SCall(fexpr, arg_expr_list, SBlock([entry_transforms;exit_transforms])) -> 
+      | SCall(fexpr, arg_expr_list, SBlock([entry_transforms; exit_transforms])) -> 
         tstp ("GENERIC SCALL of "^(string_of_int (List.length arg_expr_list))^" args");
 
         let the_state = stmt the_state entry_transforms in
@@ -1831,9 +1831,10 @@ let add_lists fn b =
                 )
             ) in ignore(L.build_ret data the_state.b); the_state
           )
-          | true -> tstp "generic function return"; let (data, the_state) = (match res with
-            | Box(v) -> (v, the_state)
-            | Raw(v) -> (match (build_temp_box v ty the_state.b) with Box(v) -> (v, the_state))
+          | true -> tstp "generic function return"; 
+            let (data, the_state) = (match res with
+              | Box(v) -> tstp "box generic return"; (v, the_state)
+              | Raw(v) -> tstp "raw generic return"; (match (build_temp_box v ty the_state.b) with Box(v) -> (v, the_state))
             ) in ignore(L.build_ret data the_state.b); the_state
         ) in the_state
 
@@ -1907,20 +1908,13 @@ let add_lists fn b =
           let cobj_addr = L.build_load box_addr1 "load_cobj" the_state.b in
           ignore(L.build_store cobj_addr box_addr2 the_state.b); the_state
 
-
        | (Dyn, raw_ty) when raw_ty = Int || raw_ty = Float || raw_ty = Bool ->
          (* get addresses for raw and boxed versions *)
          let unchecked_boxaddr = lookup namespace (Bind(name,Dyn)) in
          let the_state = rebox_if_needed unchecked_boxaddr name the_state in
-         let BoxAddr(box_addr,_) = unchecked_boxaddr
-         and RawAddr(raw_addr) = lookup namespace (Bind(name,raw_ty)) in
+         let BoxAddr(box_addr,_) = unchecked_boxaddr in
+         let RawAddr(raw_addr) = lookup namespace (Bind(name,raw_ty)) in
          let data = build_getdata_cobj (ltyp_of_typ raw_ty) box_addr the_state.b in
-         (* gep for direct pointers to the type and data fields of box *)
-         (* let cobj_addr = L.build_load box_addr "cobjptr" the_state.b in
-         let dataptr_addr = L.build_struct_gep cobj_addr cobj_data_idx "dat_p_p" the_state.b in
-         let dataptr = L.build_load dataptr_addr "dat_p" the_state.b in
-         let typed_dataptr = L.build_bitcast dataptr (ltyp_of_typ raw_ty) "typd_dat_p" the_state.b in
-         let data = L.build_load typed_dataptr "dat" the_state.b in *)
          ignore(L.build_store data raw_addr the_state.b);
          the_state
       
