@@ -11,7 +11,7 @@ Python-style indentation based parsing scheme. The second is the full parser */
 
 %token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE PLUSEQ MINUSEQ TIMESEQ DIVIDEEQ EXPEQ
 %token EXP NOT NEG SEP AND OR ARROW NOP TYPE PRINT FUNC
-%token TAB COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE DOT
+%token TAB SPACE COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE DOT
 %token BOOL INT FLOAT STRING ARR
 %token CLASS IMPORT CEND RANGE
 %token INDENT DEDENT
@@ -75,6 +75,7 @@ seq:
 token:
   | COLON { COLON }
   | TAB { TAB }
+  | SPACE { SPACE }
   | ARROW { ARROW }
   | RETURN { RETURN }
   | NOT { NOT }
@@ -169,15 +170,15 @@ stmt:
   | expr SEP { Expr $1 }
   | stmt SEP { $1 }
   | IMPORT VARIABLE SEP { Import($2) }
-  | CLASS VARIABLE COLON stmt_block { Class($2, $4) }
-  | DEF VARIABLE LPAREN formals_opt RPAREN COLON stmt_block { Func(Bind($2, Dyn), $4, $7) }
-  | DEF VARIABLE LPAREN formals_opt RPAREN ARROW typ COLON stmt_block { Func(Bind($2, $7), $4, $9) }
+  | CLASS VARIABLE COLON SEP stmt_block { Class($2, $5) }
+  | DEF VARIABLE LPAREN formals_opt RPAREN COLON SEP stmt_block { Func(Bind($2, Dyn), $4, $8) }
+  | DEF VARIABLE LPAREN formals_opt RPAREN ARROW typ COLON SEP stmt_block { Func(Bind($2, $7), $4, $10) }
   | RETURN expr SEP { Return $2 }
-  | IF expr COLON stmt_block %prec NOELSE { If($2, $4, Block([])) }
-  | IF expr COLON stmt_block ELSE COLON stmt_block { If($2, $4, $7) } /* to do figure out (Block) */
-  | FOR bind_opt IN expr COLON stmt_block { For($2, $4, $6) }
-  | FOR bind_opt IN RANGE LPAREN expr RPAREN COLON stmt_block { Range($2, $6, $9) }
-  | WHILE expr COLON stmt_block { While($2, $4) }
+  | IF expr COLON SEP stmt_block %prec NOELSE { If($2, $5, Block([])) }
+  | IF expr COLON SEP stmt_block ELSE COLON SEP stmt_block { If($2, $5, $9) } /* to do figure out (Block) */
+  | FOR bind_opt IN expr COLON SEP stmt_block { For($2, $4, $7) }
+  | FOR bind_opt IN RANGE LPAREN expr RPAREN COLON SEP stmt_block { Range($2, $6, $10) }
+  | WHILE expr COLON SEP stmt_block { While($2, $5) }
   | formal_asn_list ASN expr { Asn(List.rev $1, $3) }
   | lvalue PLUSEQ expr { Asn([$1], Binop($1, Add, $3)) }
   | lvalue MINUSEQ expr { Asn([$1], Binop($1, Sub, $3)) }
@@ -220,7 +221,7 @@ list_access:
 delimited by an indent and dedent block introduced by the indentation parser in coral.ml */
 
 stmt_block: 
-  | INDENT SEP stmt_list DEDENT { Block(List.rev $3) }
+  | INDENT stmt_list DEDENT { Block(List.rev $2) }
 
 /* formals_opt: an optional formal name in a function declaration */
 

@@ -28,6 +28,7 @@ let implode s = String.concat "" (List.map (String.make 1) s)
 let print = function 
   | Parser.COLON -> "COLON"
   | Parser.TAB -> "TAB"
+  | Parser.SPACE -> "SPACE"
   | Parser.NOT -> "NOT"
   | Parser.IF -> "IF"
   | Parser.ELSE -> "ELSE"

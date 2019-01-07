@@ -20,9 +20,10 @@ let exp = ('e'|'E')('+'|'-')?['0'-'9']+
 let cstylefloat = ('.'['0'-'9']+exp?|['0'-'9']+('.'['0'-'9']*exp?|exp))
 
 rule token = parse
-  | [' ' '\r'] { token lexbuf }
+  | ['\r'] { token lexbuf }
   | ':' { COLON }
   | '\t' { TAB }
+  | ' ' { SPACE }
   | '\n' { EOL }
   | "not" { NOT }
   | "if" { IF }
