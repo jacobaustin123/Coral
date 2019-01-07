@@ -184,12 +184,12 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
    in
 
   (* here's how you go from a cobj to the data value: *)
-  let build_getdata_cobj data_type cobj_p b =  (* data_type = int_t etc *)
+  let build_getdata_cobj data_type cobj_p b =  (* data_type = int_t etc *) (*tstp "hi"; L.dump_value cobj_p;*)
     (*let x1 = L.build_load (lookup_global_binding "a") "x1" b in*)
-    let x2 = L.build_struct_gep cobj_p cobj_data_idx "x2" b in
-    let x3 = L.build_load x2 "x3" b in
-    let x4 = L.build_bitcast x3 (L.pointer_type data_type) "x4" b in
-    let data = L.build_load x4 "data" b in
+    let x2 = L.build_struct_gep cobj_p cobj_data_idx "x2" b in (* segfault this line *) 
+    let x3 = L.build_load x2 "x3" b in 
+    let x4 = L.build_bitcast x3 (L.pointer_type data_type) "x4" b in 
+    let data = L.build_load x4 "data" b in 
     data
   in
 
@@ -1903,25 +1903,26 @@ let add_lists fn b =
        | (x, y) when x = y -> the_state
 
        | (String, Dyn) | (Dyn, String) | (Arr, Dyn) | (Dyn, Arr) | (FuncType, Dyn) | (Dyn, FuncType) -> 
-          let BoxAddr(box_addr1, _) = lookup namespace (Bind(name, from_ty)) (* no need to check needs_update flag bc this is assignment *)
-          and BoxAddr(box_addr2, _) = lookup namespace (Bind(name, to_ty)) in
+          let BoxAddr(box_addr1, _) = lookup the_state.namespace (Bind(name, from_ty)) (* no need to check needs_update flag bc this is assignment *)
+          and BoxAddr(box_addr2, _) = lookup the_state.namespace (Bind(name, to_ty)) in
           let cobj_addr = L.build_load box_addr1 "load_cobj" the_state.b in
           ignore(L.build_store cobj_addr box_addr2 the_state.b); the_state
 
        | (Dyn, raw_ty) when raw_ty = Int || raw_ty = Float || raw_ty = Bool ->
          (* get addresses for raw and boxed versions *)
-         let unchecked_boxaddr = lookup namespace (Bind(name,Dyn)) in
-         let the_state = rebox_if_needed unchecked_boxaddr name the_state in
-         let BoxAddr(box_addr,_) = unchecked_boxaddr in
-         let RawAddr(raw_addr) = lookup namespace (Bind(name,raw_ty)) in
-         let data = build_getdata_cobj (ltyp_of_typ raw_ty) box_addr the_state.b in
-         ignore(L.build_store data raw_addr the_state.b);
+         let unchecked_boxaddr = lookup the_state.namespace (Bind(name,Dyn)) in
+         let the_state = rebox_if_needed unchecked_boxaddr name the_state in 
+         let BoxAddr(box_addr,_) = unchecked_boxaddr in 
+         let RawAddr(raw_addr) = lookup the_state.namespace (Bind(name,raw_ty)) in 
+         let data_cobj = L.build_load box_addr name the_state.b in
+         let data = build_getdata_cobj (ltyp_of_typ raw_ty) data_cobj the_state.b in  
+         ignore(L.build_store data raw_addr the_state.b); 
          the_state
       
        | (raw_ty, Dyn) when raw_ty = Int || raw_ty = Float || raw_ty = Bool ->
          (* get addresses for raw and boxed versions *)
-         let BoxAddr(box_addr, _) = lookup namespace (Bind(name, Dyn)) (* no need to check needs_update flag bc this is assignment *)
-         and RawAddr(raw_addr) = lookup namespace (Bind(name, raw_ty)) in
+         let BoxAddr(box_addr, _) = lookup the_state.namespace (Bind(name, Dyn)) (* no need to check needs_update flag bc this is assignment *)
+         and RawAddr(raw_addr) = lookup the_state.namespace (Bind(name, raw_ty)) in
 
         let rawval = L.build_load raw_addr "__load_raw" the_state.b in
          let tempobj = build_new_cobj_init (ltyp_of_typ raw_ty) rawval the_state.b in
@@ -1946,5 +1947,6 @@ let add_lists fn b =
 
   ignore(L.build_ret (L.const_int int_t 0) final_state.b);
     (* prints module *)
+  pm();
 
   the_module  (* return the resulting llvm module with all code!! *)
