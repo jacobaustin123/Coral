@@ -1900,27 +1900,30 @@ let add_lists fn b =
       tstp ("Transforming " ^ name ^ ": " ^ (string_of_typ from_ty) ^ " -> " ^ (string_of_typ to_ty));
       (match (from_ty, to_ty) with
        | (x, y) when x = y -> the_state
-       | (Dyn, raw_ty) when raw_ty = Int || raw_ty = Float || raw_ty = Bool ->
-         (* get addresses for raw and boxed versions *)
-         let unchecked_boxaddr = lookup namespace (Bind(name,Dyn)) in
-         let the_state = rebox_if_needed unchecked_boxaddr name the_state in
-         let BoxAddr(box_addr,_) = unchecked_boxaddr
-         and RawAddr(raw_addr) = lookup namespace (Bind(name,raw_ty)) in
-         (* gep for direct pointers to the type and data fields of box *)
-         let cobj_addr = L.build_load box_addr "cobjptr" the_state.b in
-         let dataptr_addr = L.build_struct_gep cobj_addr cobj_data_idx "dat_p_p" the_state.b in
-         let dataptr = L.build_load dataptr_addr "dat_p" the_state.b in
-         let typed_dataptr = L.build_bitcast dataptr (ltyp_of_typ raw_ty) "typd_dat_p" the_state.b in
-         let data = L.build_load typed_dataptr "dat" the_state.b in
-         ignore(L.build_store data raw_addr the_state.b);
-         the_state
-      
+
        | (String, Dyn) | (Dyn, String) | (Arr, Dyn) | (Dyn, Arr) | (FuncType, Dyn) | (Dyn, FuncType) -> 
           let BoxAddr(box_addr1, _) = lookup namespace (Bind(name, from_ty)) (* no need to check needs_update flag bc this is assignment *)
           and BoxAddr(box_addr2, _) = lookup namespace (Bind(name, to_ty)) in
           let cobj_addr = L.build_load box_addr1 "load_cobj" the_state.b in
           ignore(L.build_store cobj_addr box_addr2 the_state.b); the_state
 
+
+       | (Dyn, raw_ty) when raw_ty = Int || raw_ty = Float || raw_ty = Bool ->
+         (* get addresses for raw and boxed versions *)
+         let unchecked_boxaddr = lookup namespace (Bind(name,Dyn)) in
+         let the_state = rebox_if_needed unchecked_boxaddr name the_state in
+         let BoxAddr(box_addr,_) = unchecked_boxaddr
+         and RawAddr(raw_addr) = lookup namespace (Bind(name,raw_ty)) in
+         let data = build_getdata_cobj (ltyp_of_typ raw_ty) box_addr the_state.b in
+         (* gep for direct pointers to the type and data fields of box *)
+         (* let cobj_addr = L.build_load box_addr "cobjptr" the_state.b in
+         let dataptr_addr = L.build_struct_gep cobj_addr cobj_data_idx "dat_p_p" the_state.b in
+         let dataptr = L.build_load dataptr_addr "dat_p" the_state.b in
+         let typed_dataptr = L.build_bitcast dataptr (ltyp_of_typ raw_ty) "typd_dat_p" the_state.b in
+         let data = L.build_load typed_dataptr "dat" the_state.b in *)
+         ignore(L.build_store data raw_addr the_state.b);
+         the_state
+      
        | (raw_ty, Dyn) when raw_ty = Int || raw_ty = Float || raw_ty = Bool ->
          (* get addresses for raw and boxed versions *)
          let BoxAddr(box_addr, _) = lookup namespace (Bind(name, Dyn)) (* no need to check needs_update flag bc this is assignment *)
