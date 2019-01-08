@@ -1,7 +1,6 @@
 open Ast
 open Sast
 open Utilities
-open Interpret
 
 (* coral.ml: the main compiler file for the Coral Programming Language. coral.ml handles command line
 parsing, generating and interpretering the compiler and interpreter, handling tab-based indentation, 
