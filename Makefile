@@ -7,9 +7,6 @@ OCB = ocamlbuild $(OCB_FLAGS)
 all: clean native 
 	./coral.native test.cl
 
-fn: clean native
-	./coral.native fn-test.cl
-
 clean:
 	$(OCB) -clean 
 	rm -rf testall.log *.diff *.out main source.ll source.o source.s .ll

@@ -76,40 +76,6 @@ RunFail() {
     return 0
 }
 
-
-CheckLLVM() {
-    error=0
-    basename=`echo $1 | sed 's/.*\\///
-                             s/.cl//'`
-    reffile=`echo $1 | sed 's/.cl$//'`
-    basedir="`echo $1 | sed 's/\/[^\/]*$//'`/."
-
-    echo -n "$basename..."
-
-    echo 1>&2
-    echo "###### Testing $basename" 1>&2
-
-    generatedfiles=""
-
-    generatedfiles="$generatedfiles ${basename}.ll ${basename}.s ${basename}.exe ${basename}.out" &&
-    
-    Run "$CORAL" "$1" ">" "${basename}.out" &&
-    Compare ${basename}.out ${reffile}.out ${basename}.diff
-
-    # Report the status and clean up the generated files
-
-    if [ $error -eq 0 ] ; then
-    if [ $keep -eq 0 ] ; then
-        rm -f $generatedfiles
-    fi
-    echo "OK"
-    echo "###### SUCCESS" 1>&2
-    else
-    echo "###### FAILED" 1>&2
-    globalerror=$error
-    fi
-}
-
 CheckSemant() {
     error=0
     basename=`echo $1 | sed 's/.*\\///
@@ -126,7 +92,7 @@ CheckSemant() {
 
     generatedfiles="$generatedfiles ${basename}.out" &&
     
-    Run "$CORAL" "-no-compile" "$1" ">" "${basename}.out" &&
+    Run "$CORAL" "$1" ">" "${basename}.out" &&
     Compare ${basename}.out ${reffile}.out ${basename}.diff
 
     # Report the status and clean up the generated files
@@ -147,7 +113,7 @@ if [ $# -ge 1 ]
 then
     files=$@
 else
-    files="tests/test-*.cl tests/sfail-*.cl tests/stest-*.cl tests/fail-*.cl"
+    files="tests/sfail-*.cl tests/stest-*.cl"
 fi
 
 for file in $files
@@ -159,12 +125,6 @@ do
 	    ;;
   *sfail-*)
  	     CheckSemant $file 2>> $globallog
-      ;;
-  *test-*)
-      CheckLLVM $file 2>> $globallog
-      ;;
-  *fail-*)
-      CheckLLVM $file 2>> $globallog
       ;;
 	*)
 	    echo "unknown file type $file"
