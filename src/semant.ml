@@ -393,7 +393,7 @@ and func_stmt globals locals the_state = function
 
     let (map'', binds) = List.fold_left 
         (fun (map, out) (Bind (x, t)) -> 
-          let (map', name, inferred_t, explicit_t) = assign map (Dyn, (SNoexpr, Dyn), None) (Bind (x, Dyn)) in 
+          let (map', name, inferred_t, explicit_t) = assign map (Dyn, (SNoexpr, Dyn), None) (Bind (x, t)) in 
           (map', Bind(name, explicit_t) :: out)
         ) (semantmap, []) b in
 
@@ -405,15 +405,15 @@ and func_stmt globals locals the_state = function
       | Some (typ2, e', d) ->
         if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
         raise (Failure ("STypeError: invalid return type")) 
-        else let func = { styp = btype; sfname = name; sformals = b; slocals = locals; sbody = block } in 
+        else let func = { styp = btype; sfname = name; sformals = bindout; slocals = locals; sbody = block } in 
           (map', SFunc(func), None, [Bind(name, FuncType)]) 
-        else let func = { styp = typ2; sfname = name; sformals = b; slocals = locals; sbody = block } in 
+        else let func = { styp = typ2; sfname = name; sformals = bindout; slocals = locals; sbody = block } in 
         (map', SFunc(func), None, [Bind(name, FuncType)])
 
       | None -> 
         if btype <> Dyn then 
         raise (Failure ("STypeError: invalid return type")) else 
-        let func = { styp = Null; sfname = name; sformals = b; slocals = locals; sbody = block } in 
+        let func = { styp = Null; sfname = name; sformals = bindout; slocals = locals; sbody = block } in 
         (map', SFunc(func), None, [Bind(name, FuncType)]))
 
   | If(a, b, c) -> let (typ, e', _) = func_expr globals locals the_state a in 
@@ -511,7 +511,7 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
 
     let (map'', binds) = List.fold_left 
       (fun (map, out) (Bind(x, t)) -> 
-        let (map', name, inferred_t, explicit_t) = assign map (Dyn, (SNoexpr, Dyn), None) (Bind(x, Dyn)) in 
+        let (map', name, inferred_t, explicit_t) = assign map (Dyn, (SNoexpr, Dyn), None) (Bind(x, t)) in 
         (map', (Bind(name, explicit_t)) :: out)
       ) (semantmap, []) b in
 
@@ -521,15 +521,15 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
         | Some (typ2, e', d) ->
             if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
             raise (Failure ("STypeError: invalid return type")) else 
-            let func = { styp = btype; sfname = name; sformals = b; slocals = locals; sbody = block } in 
+            let func = { styp = btype; sfname = name; sformals = bindout; slocals = locals; sbody = block } in 
               (map', SFunc(func), [Bind(name, FuncType)]) else
-              let func = { styp = typ2; sfname = name; sformals = b; slocals = locals; sbody = block } in 
+              let func = { styp = typ2; sfname = name; sformals = bindout; slocals = locals; sbody = block } in 
             (map', SFunc(func), [Bind(name, FuncType)])
         
         | None -> 
           if btype <> Dyn then 
           raise (Failure ("STypeError: invalid return type")) else 
-          let func = { styp = Null; sfname = name; sformals = b; slocals = locals; sbody = block } in 
+          let func = { styp = Null; sfname = name; sformals = bindout; slocals = locals; sbody = block } in 
           (map', SFunc(func), [Bind(name, FuncType)]))
 
   | If(a, b, c) -> 

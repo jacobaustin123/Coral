@@ -1447,7 +1447,7 @@ let add_lists fn b =
             (the_state,res::args)
         in
         let (the_state, arg_dataunits) = List.fold_left eval_arg (the_state,[]) (List.rev arg_expr_list) in
-
+  
         let arg_types = List.map (fun (_,ty) -> ty) arg_expr_list in
 
         let transform_if_needed raw_ty = function
@@ -1880,24 +1880,37 @@ let add_lists fn b =
           List.rev (List.fold_left (fun acc n -> (Bind(n,Dyn))::acc) [] names)
         in
         
+        let fn_state = change_state the_state (S_list([S_b(fn_b); S_func(the_function); S_generic_func(true)])) in
+
 (* all formals should be dyns! *)
         (*let fn_namespace = build_binding_list (Some(fn_b)) (names_to_dynlist formal_names) in*)
-        let add_formal nspace name cobj_p =  (* alloc a formal *)
-            L.set_value_name name cobj_p;  (* cosmetic *)
-            let alloca = L.build_alloca cobj_pt name fn_b in
-            ignore(L.build_store cobj_p alloca fn_b);
-            BindMap.add (Bind(name, Dyn)) (BoxAddr(alloca,false)) nspace
-        in
-        let fn_namespace = build_binding_list (Some(fn_b)) sfdecl.slocals false in
-        let fn_namespace = List.fold_left2 add_formal fn_namespace formal_names formal_vals in
+        let add_formal (nspace, fn_state) bind cobj_p =  (* alloc a formal *)
+          let Bind((name, typ)) = bind in
+          (match typ with 
+            | Dyn | String | Arr | FuncType -> L.set_value_name name cobj_p;  (* cosmetic *)
+              let alloca = L.build_alloca cobj_pt name fn_state.b in
+              ignore(L.build_store cobj_p alloca fn_state.b);
+              (BindMap.add bind (BoxAddr(alloca,false)) nspace, fn_state)
+            | _ -> L.set_value_name name cobj_p;  (* cosmetic *)
+              let alloca = L.build_alloca (ltyp_of_typ typ) name fn_state.b in
+              let fn_state = check_explicit_type typ cobj_p ("RuntimeError: invalid type assigned to " ^ name ^ " (expected " ^ (string_of_typ typ) ^ " )") fn_state in 
+              let data = build_getdata_cobj (ltyp_of_typ typ) cobj_p fn_state.b in
+              ignore(L.build_store data alloca fn_state.b);
+              (BindMap.add bind (RawAddr(alloca)) nspace, fn_state))
 
-        let int_format_str = L.build_global_stringptr "%d\n" "fmt" fn_b
-        and float_format_str = L.build_global_stringptr "%f\n" "fmt" fn_b
-        and str_format_str = L.build_global_stringptr  "%s\n" "fmt" fn_b in
+        in
+
+        let fn_namespace = build_binding_list (Some(fn_b)) sfdecl.slocals false in
+        let (fn_namespace, fn_state) = List.fold_left2 add_formal (fn_namespace, fn_state) sfdecl.sformals formal_vals in
+
+        let int_format_str = L.build_global_stringptr "%d\n" "fmt" fn_state.b
+        and float_format_str = L.build_global_stringptr "%f\n" "fmt" fn_state.b
+        and str_format_str = L.build_global_stringptr  "%s\n" "fmt" fn_state.b in
 
         (* build function body by calling stmt! *)
         let build_return bld = L.build_ret (build_new_cobj_init int_t (L.const_int int_t 0) bld) bld in
-        let fn_state = change_state the_state (S_list([S_names(fn_namespace);S_func(the_function);S_b(fn_b);S_generic_func(true)])) in
+
+        let fn_state = change_state fn_state (S_list([S_names(fn_namespace)])) in
         let fn_state = add_terminal (stmt fn_state sfdecl.sbody) build_return in
         let the_state = change_state the_state (S_optimfuncs(fn_state.optim_funcs)) in (* grab optimfuncs from inner *)
         the_state  (* SFunc() returns the original builder *)
