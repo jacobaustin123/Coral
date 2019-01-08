@@ -1901,7 +1901,7 @@ let add_lists fn b =
               (BindMap.add bind (BoxAddr(alloca,false)) nspace, fn_state)
             | _ -> L.set_value_name name cobj_p;  (* cosmetic *)
               let alloca = L.build_alloca (ltyp_of_typ typ) name fn_state.b in
-              let fn_state = check_explicit_type typ cobj_p ("RuntimeError: invalid type assigned to " ^ name ^ " (expected " ^ (string_of_typ typ) ^ " )") fn_state in 
+              let fn_state = check_explicit_type typ cobj_p ("RuntimeError: invalid type assigned to " ^ name ^ " (expected " ^ (string_of_typ typ) ^ ")") fn_state in 
               let data = build_getdata_cobj (ltyp_of_typ typ) cobj_p fn_state.b in
               ignore(L.build_store data alloca fn_state.b);
               (BindMap.add bind (RawAddr(alloca)) nspace, fn_state))
