@@ -68,11 +68,3 @@ type built_oprt =
   | BOprt of string * (((L.llvalue * L.llbuilder) * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)) option)
   | BCoprt of string * (((L.llvalue * L.llbuilder) * ((L.llvalue -> L.llvalue array -> string -> L.llbuilder -> L.llvalue) * L.lltype)) option)
   | BUoprt of string * (((L.llvalue * L.llbuilder) * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)) option)
-
-type special_ctype_fn = FPrint | FHeapify | FCall | FAdd
-
-let string_of_special_ctype_fn = function
-    | FPrint -> "print"
-    | FHeapify -> "heapify"
-    | FCall -> "call"
-    | FAdd -> "add"

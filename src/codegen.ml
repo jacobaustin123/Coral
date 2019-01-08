@@ -240,6 +240,114 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     fn_ptr
   in
 
+  let build_fnptr_of_cfo cobj_p b =
+    let x2 = L.build_struct_gep cobj_p cobj_data_idx "x2" b in
+    let x3 = L.build_load x2 "x3" b in
+    let fnptr = L.build_bitcast x3 userdef_fn_pt "fnptr" b in
+    fnptr
+  in
+
+  let build_getctypefn_cobj ctype_fn_idx cobj_p b =
+    let x2 = L.build_struct_gep cobj_p cobj_type_idx "x2" b in
+    let x3 = L.build_load x2 "x3" b in  (* x3: ctype_pt *)
+    let x4 = L.build_struct_gep x3 ctype_fn_idx "x4" b in
+    let fn_ptr = L.build_load x4 "fn_ptr" b in
+    fn_ptr
+  in
+
+  (** define helper functions for commonly used code snippets **)
+  let build_new_cobj_empty builder =
+    let objptr = L.build_malloc cobj_t "__new_objptr" builder in (* objptr: cobj_pt* *)
+    let datafieldptr = L.build_struct_gep objptr cobj_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
+    let ctypefieldptr = L.build_struct_gep objptr cobj_type_idx "ctypefieldptr" builder in
+    (objptr, datafieldptr, ctypefieldptr)
+  in
+
+  (* builds a new clist with a pointer to an existing array of cobj pointers. used for adding lists *)
+  let build_new_clist_init dataptr_of_cobj listptr_as_i8ptr length builder =
+    let len = length in
+    let cap = length in
+
+    (* store dataptr the struct *)
+    let datafieldptr = L.build_struct_gep dataptr_of_cobj clist_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
+    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in
+    (* let listptr_as_i8ptrptr = L.build_bitcast listptr_as_i8ptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in *)
+    ignore(L.build_store listptr_as_i8ptr datafieldptr_as_i8ptrptr builder);
+
+    (* store len in the struct *)
+    let lenfieldptr = L.build_struct_gep dataptr_of_cobj clist_len_idx "lenfieldptr" builder in  (* lenfieldptr: i32* *)
+    ignore(L.build_store len lenfieldptr builder);
+
+    (* store cap in the struct *)
+    let capfieldptr = L.build_struct_gep dataptr_of_cobj clist_cap_idx "capfieldptr" builder in  (* capfieldptr: i32* *)
+    ignore(L.build_store cap capfieldptr builder);
+  in
+
+  (** manually making the ctype_ functions **)
+  (* does alloca, store, then load *)  (* note you should not use this if youre not using the values right away !!!!!! *)
+  let boilerplate_till_load remote_cobj_p prettyname b =
+    ignore(L.set_value_name ("remote_" ^ prettyname) remote_cobj_p);
+    let cobj_pp = L.build_alloca cobj_pt (prettyname ^ "_p") b in
+    ignore(L.build_store remote_cobj_p cobj_pp b);
+    let cobj_p = L.build_load cobj_pp (prettyname ^ "_p") b in
+    cobj_p
+  in
+
+  let boilerplate_binop data_type fn b =
+    let formals_llvalues = (Array.to_list (L.params fn)) in
+    let [ remote_self_p; remote_other_p ] = formals_llvalues in
+
+    (* boilerplate *)
+    let self_p = boilerplate_till_load remote_self_p "self_p" b in
+    let other_p = boilerplate_till_load remote_other_p "other_p" b in
+
+    (* get data *)
+    let self_data = build_getdata_cobj data_type self_p b in
+    let other_data = build_getdata_cobj data_type other_p b in
+    (self_data, other_data)
+  in
+
+  let boilerplate_uop data_type fn b =
+    let formals_llvalues = (Array.to_list (L.params fn)) in
+    let [ remote_self_p ] = formals_llvalues in
+
+    (* boilerplate *)
+    let self_p = boilerplate_till_load remote_self_p "self_p" b in
+
+    (* get data *)
+    let self_data = build_getdata_cobj data_type self_p b in
+    (self_data)
+  in
+
+  let boilerplate_lop binop fn b =
+    let formals_llvalues = (Array.to_list (L.params fn)) in
+    let [ remote_self_p; remote_other_p ] = formals_llvalues in
+
+    (* boilerplate *)
+    let self_p = boilerplate_till_load remote_self_p "self_p" b in
+    let other_p = boilerplate_till_load remote_other_p "other_p" b in
+
+    (* get data *)
+    let self_data = build_getlist_cobj self_p b in
+    let other_data = build_getlist_cobj other_p b in
+    (self_data, other_data)
+  in
+
+  let boilerplate_idxop data_type fn b =
+      (* TODO: throw error if array bounds exceeded *)
+    let formals_llvalues = Array.to_list (L.params fn) in
+    let [ remote_self_p; remote_other_p ] = formals_llvalues in
+
+    (* boilerplate *)
+    let self_p = boilerplate_till_load remote_self_p "self_p" b in
+    let other_p = boilerplate_till_load remote_other_p "other_p" b in
+
+    (* get data *)
+    let self_data = build_getlist_cobj self_p b in
+    let other_data = build_getdata_cobj int_t other_p b in
+    (self_data, other_data)
+  in
+
   let build_idx self_p other_p name b =
      (* get elememnt *)
      let gep_addr = L.build_struct_gep self_p clist_data_idx "__gep_addr" b in
@@ -249,7 +357,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
      let cobjptr = L.build_load gep_addr_as_cobjptrptr "__cobjptr" b in
      cobjptr
   in
- 
+
   let build_idx_parent self_p other_p name b =
    (* get elememnt *)
    let gep_addr = L.build_struct_gep self_p clist_data_idx "__gep_addr" b in
@@ -444,7 +552,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   	 let typs = ["int"; "float"; "bool"; "char"; "list"; "string"; "func"] in
 
   	 let ops = [
-  	   Oprt("add", Some((L.build_add), int_t), Some((L.build_fadd), float_t), None, None, None, None, None);
+  	   Oprt("add", Some((L.build_add), int_t), Some((L.build_fadd), float_t), None, None, Some((L.build_add), cobj_pt), Some((L.build_add), cobj_pt), None);
        Oprt("sub", Some((L.build_sub), int_t), Some((L.build_fsub), float_t), None, None, None, None, None);
        Oprt("mul", Some((L.build_mul), int_t), Some((L.build_fmul), float_t), None, None, None, None, None);
        Oprt("div", Some((L.build_sdiv), int_t), Some((L.build_fdiv), float_t), None, None, None, None, None);
@@ -538,39 +646,12 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         in (t, bops)) typs
       in
 
-  let build_fnptr_of_cfo cobj_p b = 
-    let x2 = L.build_struct_gep cobj_p cobj_data_idx "x2" b in
-    let x3 = L.build_load x2 "x3" b in
-    let fnptr = L.build_bitcast x3 userdef_fn_pt "fnptr" b in
-    fnptr
-  in
-
-  let build_special_ctype_fn fn ty_str =
-      let (name, fn_ty) = (match fn with
-        | FPrint -> ("print", ctype_print_t)
-        | FAdd -> ("add", ctype_add_t)
-      ) in
-      let (the_fn, the_bld) = build_ctype_fn (ty_str ^ "_" ^ name) fn_ty in
-      (the_fn,the_bld)
-  in
-
-  let (list_add_fn, list_add_b) = build_special_ctype_fn FAdd "list" in
-  let (string_add_fn, string_add_b) = build_special_ctype_fn FAdd "list" in
-
-  let get_add_fn_lval = function
-    | "list" -> list_add_fn
-    | "string" -> string_add_fn
-    | _ -> L.const_pointer_null ctype_add_pt
-
-  in
-
   (* define the default CTypes *)
   let [ctype_int; ctype_float; ctype_bool; ctype_char; ctype_list; ctype_string; ctype_func] =
   	List.map (fun (t, bops) -> L.define_global ("ctype_" ^ t) (L.const_named_struct ctype_t (Array.of_list (List.map (function
   	  | BOprt(fn, o) -> (match o with
   	    | Some(((fn, bd), tfn)) -> fn
   	    | None -> (match fn with
-          | "add" -> get_add_fn_lval t
           | "idx" -> L.const_pointer_null ctype_idx_pt
           | "idx_parent" -> L.const_pointer_null ctype_idx_parent_pt
           | _ ->  L.const_pointer_null ctype_add_pt))
@@ -610,22 +691,6 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       | Float -> ctype_float
       | Bool -> ctype_bool
       | Dyn -> tstp "Codegen Error: requesting ctype of Dyn"; ctype_int
-  in
-
-  let build_getctypefn_cobj ctype_fn_idx cobj_p b =
-    let x2 = L.build_struct_gep cobj_p cobj_type_idx "x2" b in
-    let x3 = L.build_load x2 "x3" b in  (* x3: ctype_pt *)
-    let x4 = L.build_struct_gep x3 ctype_fn_idx "x4" b in
-    let fn_ptr = L.build_load x4 "fn_ptr" b in
-    fn_ptr
-  in
-
-  (** define helper functions for commonly used code snippets **)
-  let build_new_cobj_empty builder =   
-    let objptr = L.build_malloc cobj_t "__new_objptr" builder in (* objptr: cobj_pt* *)
-    let datafieldptr = L.build_struct_gep objptr cobj_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
-    let ctypefieldptr = L.build_struct_gep objptr cobj_type_idx "ctypefieldptr" builder in
-    (objptr, datafieldptr, ctypefieldptr)
   in
 
   (* builds a new cobj of a given type and returns a pointer to the cobj and a pointer to its data *)
@@ -699,55 +764,66 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     ignore(L.build_store cap capfieldptr builder);
   in
 
-  (** manually making the ctype_ functions **)
-  (* does alloca, store, then load *)  (* note you should not use this if youre not using the values right away !!!!!! *)
-  let boilerplate_till_load remote_cobj_p prettyname b =
-    ignore(L.set_value_name ("remote_" ^ prettyname) remote_cobj_p);
-    let cobj_pp = L.build_alloca cobj_pt (prettyname ^ "_p") b in
-    ignore(L.build_store remote_cobj_p cobj_pp b);
-    let cobj_p = L.build_load cobj_pp (prettyname ^ "_p") b in
-    cobj_p
+  let add_lists self_data other_data b =
+    let self_ln = build_getlen_clist self_data b in
+    let other_ln = build_getlen_clist other_data b in
+
+    let total = L.build_add self_ln other_ln "total_length" b in
+    (* let dataptr = L.build_malloc (L.array_type cobj_pt 10) "__new_dataptr1" b in *)
+
+    let dataptr = L.build_array_malloc cobj_pt total "__new_dataptr" b in
+    let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" b in
+
+    let load_list listptr dataptr fn b =
+      let nptr = L.build_alloca int_t "nptr" b in
+      ignore(L.build_store (L.const_int int_t 0) nptr b);
+
+      let iter_bb = L.append_block context "iter" fn in
+      ignore(L.build_br iter_bb b);
+      let iter_builder = L.builder_at_end context iter_bb in
+
+      let n = L.build_load nptr "n" iter_builder in
+      let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
+      ignore(L.build_store nnext nptr iter_builder);
+
+      let iter_complete = (L.build_icmp L.Icmp.Sge) n total "iter_complete" iter_builder in (* true if n exceeds list length *)
+
+      let body_bb = L.append_block context "list_add_body" fn in
+      let body_builder = L.builder_at_end context body_bb in
+      let elmptr = build_idx listptr n "list_index_result" body_builder in
+
+      let gep_addr = L.build_gep dataptr [|n|] "__elem_ptr" body_builder in
+      ignore(L.build_store elmptr gep_addr body_builder);
+
+      ignore(L.build_br iter_bb body_builder);
+
+      let merge_bb = L.append_block context "merge" fn in
+      ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
+
+      let end_builder = L.builder_at_end context merge_bb in
+      end_builder
+    in
+
+    let builder1 = load_list self_data dataptr (L.block_parent (L.insertion_block b)) b in
+    let dataptr1 = L.build_gep dataptr [|self_ln|] "__next_dataptr" builder1 in
+    let builder2 = load_list other_data dataptr1 (L.block_parent (L.insertion_block b)) builder1 in
+    (builder2, dataptr_as_i8ptr, total)
   in
 
-  let boilerplate_binop data_type fn b =
-    let formals_llvalues = (Array.to_list (L.params fn)) in
-    let [ remote_self_p; remote_other_p ] = formals_llvalues in
-
-    (* boilerplate *)
-    let self_p = boilerplate_till_load remote_self_p "self_p" b in
-    let other_p = boilerplate_till_load remote_other_p "other_p" b in
-
-    (* get data *)
-    let self_data = build_getdata_cobj data_type self_p b in
-    let other_data = build_getdata_cobj data_type other_p b in
-    (self_data, other_data)
+  (* builds the addition function for lists *)
+  let build_ladd self_p other_p name b =
+    let (builder, dataptr_as_i8ptr, total) = add_lists self_p other_p b in
+    let (newobjptr, newdataptr) = build_new_cobj clist_t builder in
+    let _ = build_new_clist_init newdataptr dataptr_as_i8ptr total builder in
+    (builder, newobjptr)
   in
 
-  let boilerplate_uop data_type fn b =
-    let formals_llvalues = (Array.to_list (L.params fn)) in
-    let [ remote_self_p ] = formals_llvalues in
-
-    (* boilerplate *)
-    let self_p = boilerplate_till_load remote_self_p "self_p" b in
-
-    (* get data *)
-    let self_data = build_getdata_cobj data_type self_p b in
-    (self_data)
-  in
-
-  let boilerplate_lop data_type fn b =
-      (* TODO: throw error if array bounds exceeded *)
-    let formals_llvalues = Array.to_list (L.params fn) in
-    let [ remote_self_p; remote_other_p ] = formals_llvalues in
-
-    (* boilerplate *)
-    let self_p = boilerplate_till_load remote_self_p "self_p" b in
-    let other_p = boilerplate_till_load remote_other_p "other_p" b in
-
-    (* get data *)
-    let self_data = build_getlist_cobj self_p b in
-    let other_data = build_getdata_cobj int_t other_p b in
-    (self_data, other_data)
+  (* builds the addition function for strings *)
+  let build_sadd self_p other_p name b =
+    let (builder, dataptr_as_i8ptr, total) = add_lists self_p other_p b in
+    let (newobjptr, newdataptr) = build_new_cobj cstring_t builder in
+    let _ = build_new_clist_init newdataptr dataptr_as_i8ptr total builder in
+    (builder, newobjptr)
   in
 
   (* creates the ctype functions for all standard (not-special functions *)
@@ -756,11 +832,36 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       | "idx" | "idx_parent" -> (match o with
         | Some(((fn, bd), tfn)) ->
           let (tf, tp) = tfn in
-          let (self_data, other_data) = boilerplate_lop (get_t t) fn bd in
+          let (self_data, other_data) = boilerplate_idxop (get_t t) fn bd in
           let result_data = tf self_data other_data "result_data" bd in
           let result = result_data in
           ignore(L.build_ret result bd)
         | None -> ())
+      | "add" -> (match t with
+        | "list" -> (match o with
+          | Some(((fn, bd), tfn)) ->
+            let (tf, tp) = tfn in
+            let (self_data, other_data) = boilerplate_lop (get_t t) fn bd in
+            let (newbuilder, result_data) = build_ladd self_data other_data "result_data" bd in
+            let result = result_data in
+            ignore(L.build_ret result newbuilder)
+          | None -> ())
+        | "string" -> (match o with
+          | Some(((fn, bd), tfn)) ->
+            let (tf, tp) = tfn in
+            let (self_data, other_data) = boilerplate_lop (get_t t) fn bd in
+            let (newbuilder, result_data) = build_sadd self_data other_data "result_data" bd in
+            let result = result_data in
+            ignore(L.build_ret result newbuilder)
+          | None -> ())
+        | _ -> (match o with
+          | Some(((fn, bd), tfn)) ->
+            let (tf, tp) = tfn in
+            let (self_data, other_data) = boilerplate_binop (get_t t) fn bd in
+            let result_data = tf self_data other_data "result_data" bd in
+            let result = build_new_cobj_init tp result_data bd in
+            ignore(L.build_ret result bd)
+          | None -> ()))
       | _ -> (match o with
         | Some(((fn, bd), tfn)) ->
           let (tf, tp) = tfn in
@@ -802,121 +903,6 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         ignore(L.build_ret result bd)
       | None -> ())) bops) built_ops;
 
-  (* builds a new clist with a pointer to an existing array of cobj pointers. used for adding lists *)
-  let build_new_clist_init dataptr_of_cobj listptr_as_i8ptr length builder =
-    let len = length in
-    let cap = length in
-
-    (* store dataptr the struct *)
-    let datafieldptr = L.build_struct_gep dataptr_of_cobj clist_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
-    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in
-    (* let listptr_as_i8ptrptr = L.build_bitcast listptr_as_i8ptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in *)
-    ignore(L.build_store listptr_as_i8ptr datafieldptr_as_i8ptrptr builder);
-
-    (* store len in the struct *)
-    let lenfieldptr = L.build_struct_gep dataptr_of_cobj clist_len_idx "lenfieldptr" builder in  (* lenfieldptr: i32* *)
-    ignore(L.build_store len lenfieldptr builder);
-
-    (* store cap in the struct *)
-    let capfieldptr = L.build_struct_gep dataptr_of_cobj clist_cap_idx "capfieldptr" builder in  (* capfieldptr: i32* *)
-    ignore(L.build_store cap capfieldptr builder);
-  in
-
-  let list_binop fn b =
-    let formals_llvalues = (Array.to_list (L.params fn)) in
-    let [ remote_self_p; remote_other_p ] = formals_llvalues in
-
-    (* boilerplate *)
-    let self_p = boilerplate_till_load remote_self_p "self_p" b in
-    let other_p = boilerplate_till_load remote_other_p "other_p" b in
-
-    (* get data *)
-    let self_data = build_getlist_cobj self_p b in
-    let other_data = build_getlist_cobj other_p b in
-    (self_data, other_data)
-  in
-
-let add_lists fn b = 
-  let (self_data, other_data) = list_binop fn b in
-
-  let self_ln = build_getlen_clist self_data b in
-  let other_ln = build_getlen_clist other_data b in
-
-  let total = L.build_add self_ln other_ln "total_length" b in
-  (* let dataptr = L.build_malloc (L.array_type cobj_pt 10) "__new_dataptr1" b in *)
-
-  let dataptr = L.build_array_malloc cobj_pt total "__new_dataptr" b in
-  let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" b in
-
-  let load_list listptr dataptr fn b =
-    let nptr = L.build_alloca int_t "nptr" b in
-    ignore(L.build_store (L.const_int int_t 0) nptr b); 
-
-    let iter_bb = L.append_block context "iter" fn in
-    ignore(L.build_br iter_bb b);
-    let iter_builder = L.builder_at_end context iter_bb in
-
-    let n = L.build_load nptr "n" iter_builder in
-    let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
-    ignore(L.build_store nnext nptr iter_builder);
-
-    let iter_complete = (L.build_icmp L.Icmp.Sge) n total "iter_complete" iter_builder in (* true if n exceeds list length *)
-
-    let body_bb = L.append_block context "list_add_body" fn in
-    let body_builder = L.builder_at_end context body_bb in
-    let elmptr = build_idx listptr n "list_index_result" body_builder in
-
-    let gep_addr = L.build_gep dataptr [|n|] "__elem_ptr" body_builder in
-    ignore(L.build_store elmptr gep_addr body_builder);
-
-    ignore(L.build_br iter_bb body_builder);
-
-    let merge_bb = L.append_block context "merge" fn in
-    ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
-    
-    let end_builder = L.builder_at_end context merge_bb in 
-    end_builder
-
-  in
-
-  let builder1 = load_list self_data dataptr fn b in
-  let dataptr1 = L.build_gep dataptr [|self_ln|] "__next_dataptr" builder1 in
-  let builder2 = load_list other_data dataptr1 fn builder1 in
-  (builder2, dataptr_as_i8ptr, total)
-
-  in
-
-  (* builds the addition function for lists *)
-  let build_list_add_fn fn b = 
-    let (builder, dataptr_as_i8ptr, total) = add_lists fn b in
-    let (newobjptr, newdataptr) = build_new_cobj clist_t builder in
-
-    let _ = build_new_clist_init newdataptr dataptr_as_i8ptr total builder in
-    ignore(L.build_ret newobjptr builder); 
-
-  in 
-
-  let _ =
-    let (fn, b) = (list_add_fn, list_add_b) in
-    ignore(build_list_add_fn fn b);
-  in
-
-  (* builds the addition function for strings *)
-  let build_string_add_fn fn b = 
-    let (builder, dataptr_as_i8ptr, total) = add_lists fn b in
-
-    let (newobjptr, newdataptr) = build_new_cobj cstring_t builder in
-
-    let _ = build_new_clist_init newdataptr dataptr_as_i8ptr total builder in
-    ignore(L.build_ret newobjptr builder); 
-    
-  in
-  
-  let _ =
-    let (fn, b) = (string_add_fn, string_add_b) in
-    ignore(build_string_add_fn fn b);
-  in
-
   let name_of_bind = function
       |Bind(name,_) -> name
   in
@@ -927,8 +913,9 @@ let add_lists fn b =
       | Int -> int_t
       | Float -> float_t
       | Bool -> bool_t
+      | String -> cstring_t
+      | Arr -> clist_t
       | _ -> cobj_pt
-      (** todo lists and stuff **)
   in
 
   let const_of_typ = function
