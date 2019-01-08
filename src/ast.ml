@@ -2,7 +2,12 @@
 (* The Abstract Syntax Tree (AST) for the Coral Programming Language *)
 
 (* This AST supports many of the features of modern Python, with the exception of 
-exceptions, and some built-in data-structures supported by Python. *)
+exceptions, and some built-in data-structures supported by Python. See the SAST
+for more detailed explanations of these types.
+
+ListAccess is included as a binary operation for simplicity during code generation. 
+Import and Type statements are handled in semant and do not make it to the code 
+generation stage *)
 
 type operator = Add | Sub | Mul | Div | Exp | Eq | Neq | Less | Leq | Greater | Geq | And | Or | ListAccess
 

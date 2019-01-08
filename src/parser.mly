@@ -7,7 +7,10 @@ limitations on exceptions, generators, importing modules, and some other feature
 
 The first parsing target, tokenize, is a helper marser used to simply parse the
 lexing stream into a list that can be used to extract indentation/tabs for the
-Python-style indentation based parsing scheme. The second is the full parser */
+Python-style indentation based parsing scheme. The second is the full parser. 
+
+Note: if any token is added here, it must also be added in the token target below 
+and in the print utility in utilities.ml */
 
 %token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE PLUSEQ MINUSEQ TIMESEQ DIVIDEEQ EXPEQ
 %token EXP NOT NEG SEP AND OR ARROW NOP TYPE PRINT FUNC
@@ -152,15 +155,21 @@ stmt_list:
 
 a) an expression
 b) another statement (in case of unusual behavior in the parser
-c) a class with a name and block of statements
-d) a function with optional typed arguments
-e) a function with explicit return type
-f) a for loop
-g) a while loop
-e) a list of names or other valid lvalue expressions. will be expanded as more lvalues are supported
-f) hard-coded type statements
-g) hard-coded print statements
-h) no operation statements
+c) an import statement
+d) a class with a name and block of statements
+e) a function with optional typed arguments
+f) a function with explicit return type
+g) a return statement
+h) an if statement
+i) an if statement with an else block
+j) a for loop
+k) a range loop
+l) a while loop
+m) a list of assignments
+n-r) compound assignment expressions (purely syntactic sugar)
+s) a "type" statement (prints the type of a variable)
+t) hard-coded print statements
+u) no operation statements
 
 Other statements can be added by defining the appropriate syntax, and adding a new class of statements
 to the ast.ml stmt type.
@@ -192,6 +201,10 @@ stmt:
 formal_asn_list:
   | lvalue { [$1] }
   | formal_asn_list ASN lvalue { $3 :: $1 }
+
+/* An lvalue is anything that can occur on the left-hand side of an assignment.
+Currently Coral only supports assignments to variables or to list index/access
+expressions. Further additions could include list slices, methods, and fields */
 
 lvalue:
   | bind_opt { Var $1 }

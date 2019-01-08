@@ -94,14 +94,3 @@ rule token = parse
 and comment = parse
   | '\n' { CEND }
   | _ { comment lexbuf }
-
-(* 
-
-  | "\"\"\"" { multiline lexbuf }
-
-and multiline = parse
-
-  | "\"\"\"" { EOL }
-  | _ { multiline lexbuf }
-
-*)

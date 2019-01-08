@@ -20,7 +20,7 @@ x = 3
 y = foo()
 z = dyn()
 
-print(y()(z))
+print(y(z))
 
 x = 4
 

@@ -17,7 +17,7 @@ LLC="llc"
 CC="cc"
 
 # Path to the coralc compiler.  
-CORAL="./coral.native"
+CORAL="./coral"
 
 # Set time limit for all operations
 ulimit -t 30
