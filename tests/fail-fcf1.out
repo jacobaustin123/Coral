@@ -1,0 +1,2 @@
+3
+RuntimeError: name 'bar' is not defined

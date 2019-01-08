@@ -8,6 +8,10 @@
   | len -> String.sub str 1 (len - 2)
 }
 
+(* a simple lexer implemented in ocamllex for lexing a Coral/Python program, with a few minor limitations.
+several Python features have not yet been implemented and will throw errors in the lexing stage if 
+encountered. Coral generally follows the K&R C model for floats and string literals *)
+
 let letter = ['a'-'z''A'-'Z''_''0'-'9']
 let number = ['0'-'9']+('.')?['0'-'9']*
 let stringliteral = ('"'[^'"''\\']*('\\'_[^'"''\\']*)*'"')
@@ -16,9 +20,10 @@ let exp = ('e'|'E')('+'|'-')?['0'-'9']+
 let cstylefloat = ('.'['0'-'9']+exp?|['0'-'9']+('.'['0'-'9']*exp?|exp))
 
 rule token = parse
-  | [' ' '\r'] { token lexbuf }
+  | ['\r'] { token lexbuf }
   | ':' { COLON }
   | '\t' { TAB }
+  | ' ' { SPACE }
   | '\n' { EOL }
   | "not" { NOT }
   | "if" { IF }
@@ -32,6 +37,12 @@ rule token = parse
   | "for" { FOR }
   | "while" { WHILE }
   | "def" { DEF }
+  | "int" { INT }
+  | "float" { FLOAT }
+  | "str" { STRING }
+  | "bool" { BOOL }
+  | "func" { FUNC }
+  | "list" { ARR }
   | ',' { COMMA }
   | '.' { DOT }
   | "!=" { NEQ }
@@ -43,15 +54,21 @@ rule token = parse
   | "or" { OR }
   | "in" { IN }
   | "return" { RETURN }
+  | "range" { RANGE }
   | "is" { IS }
   | "None" { NONE }
+  | "range" { RANGE }
   | '#' { comment lexbuf }
-  | "\"\"\"" { multiline lexbuf }
   | '+' { PLUS }
   | '-' { MINUS } 
   | '*' { TIMES }
   | '/' { DIVIDE }
   | "**" { EXP }
+  | "+=" { PLUSEQ }
+  | "-=" { MINUSEQ }
+  | "*=" { TIMESEQ }
+  | "/=" { DIVIDEEQ}
+  | "**=" { EXPEQ }
   | '(' { LPAREN }
   | ')' { RPAREN }
   | '{' { LBRACE }
@@ -61,27 +78,30 @@ rule token = parse
   | "==" { EQ }
   | '=' { ASN }  
   | ';' { SEP }
-  | "int" { INT }
-  | "float" { FLOAT }
-  | "string" { STRING }
-  | "bool" { BOOL }
-  | ("global"|"await"|"import"|"from"|"as"|"nonlocal"|"async"|"yield"|"raise"|"except"|"finally"|"is"|"lambda"|"try"|"with") { raise (Failure("NotImplementedError: these Python 3.7 features are not currently being implemented in the Coral language." )) }
-
-(* to do capture groups for string literal to extract everything but the quotes *)
-
+  | "->" { ARROW }
+  | "type" { TYPE }
+  | "print" { PRINT }
+  | "import" { IMPORT }
+  | ("global"|"await"|"from"|"as"|"nonlocal"|"async"|"yield"|"raise"|"except"|"finally"|"is"|"lambda"|"try"|"with") { raise (Failure("NotImplementedError: these Python 3.7 features are not currently being implemented in the Coral language." )) }
   | stringliteral as id { STRING_LITERAL(strip_quotes id) } 
   | ("True"|"False") as id { if id = "True" then BOOL_LITERAL(true) else BOOL_LITERAL(false) }
   | cstylefloat as lit { FLOAT_LITERAL(float_of_string lit) } 
   | ['0'-'9']+ as id { INT_LITERAL(int_of_string id) }
-  | letter+ as id { VARIABLE(id) }
-
+  | (['a'-'z''A'-'Z''_']letter*) as id { VARIABLE(id) }
   | eof { raise Eof }
   | _ as char { raise (Failure("SyntaxError: invalid character in identifier " ^ Char.escaped char)) }
 
 and comment = parse
-  | '\n' { EOL }
+  | '\n' { CEND }
   | _ { comment lexbuf }
 
+(* 
+
+  | "\"\"\"" { multiline lexbuf }
+
 and multiline = parse
-  | "\"\"\"" { SEP }
+
+  | "\"\"\"" { EOL }
   | _ { multiline lexbuf }
+
+*)

@@ -1,0 +1,1 @@
+STypeError: unsupported operand type(s) for binary +: 'int' and 'float'

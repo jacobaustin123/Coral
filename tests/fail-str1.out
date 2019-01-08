@@ -1,0 +1,2 @@
+h
+RuntimeError: unsupported operand type(s) for list access

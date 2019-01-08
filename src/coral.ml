@@ -1,223 +1,358 @@
 open Ast
-open Getopt (* package used to handle command line arguments *)
+open Sast
+open Utilities
+open Interpret
 
-module StringMap = Map.Make(String);; (* map from string -> expr *)
+let () = Sys.set_signal Sys.sigint
+  (Sys.Signal_handle 
+    (fun _signum ->
+      try Sys.remove "source.ll"; Sys.remove "source.s"; exit 0 with _ -> exit 0))
 
+(* boolean flags used to handle command line arguments *)
+let debug = ref false
+let run = ref true
 
-(* boolean flag used to handle debug flag from command line *)
-let debug = ref 0
-;;
+(* file path flags to handle compilation from a file *)
+let fpath = ref ""
+let fpath_set = ref false
+
+(* exceptions flag enables or disables runtime exceptions *)
+let exceptions = ref true
+
+(* assembly flag specifies whether to generate the .s assembly file instead of an executable *)
+let assembly = ref false
+
+(* emit_llvm flag specifies whether to generate the LLVM IR file instead of an executable *)
+let emit_llvm = ref false
+
+(* executable_name is name of executable file *)
+let executable_name = ref ""
+
+(* usage: usage message for function calls *)
+let usage = "usage: " ^ Sys.argv.(0) ^ " [file] [-d] [-r]"
 
 (* function used to handle command line arguments *)
-let specs =
+let speclist =
 [
-  ( 'd', "debug", (incr debug), None);
+  ( "[file]", Arg.String (fun foo -> ()), ": compile from a file instead of the default interpreter");
+  ( "-d", Arg.Set debug, ": print debugging information at compile time");
+  ( "-S", Arg.Set assembly, ": generate x86 assembly output instead of executable");
+  ( "-emit-llvm", Arg.Set emit_llvm, ": generate llvm ir output instead of compiling");
+  ( "-o", Arg.Set_string executable_name, ": specify the name of the generated executable or assembly file");
+  ( "-no-compile", Arg.Clear run, ": run semantic checking on a file instead of compiling or running it");
+  ( "-no-except", Arg.Clear exceptions, ": run compilation on a file without runtime checks");
 ]
-;;
-
-(* converts floats to bools, so we can hack in support for if statements. 1.0 is true, etc. *)
-let float_of_bool b = if b then 1.0 else 0.0 
-;;
-
-(* combine two lists, used to match the argument names and their values *)
-let rec zip lst1 lst2 = match lst1,lst2 with 
-  | [], [] -> []
-  | [],_::_-> raise (Failure "TypeError: invalid arguments passed to function!")
-  | _::_, []-> raise (Failure "TypeError: invalid arguments passed to function!")
-  | (x::xs),(y::ys) -> (x, y) :: (zip xs ys)
-
-(* expr -> (float, map), used to evaluate expressions *)
-let rec eval_expr map = function 
-  | Lit(x) -> (match x with 
-     | Float(y) -> (y, map)
-     | Int(y) -> (float_of_int y, map)
-     | Bool(y) -> (float_of_bool y, map)
-     | String(y) -> raise (Failure "NotImplementedError: Strings have not yet been implemented!");
-   )
-  | List(x) -> raise (Failure "NotImplementedError: Lists have not yet been implemented!"); 
-  | Var(x) -> (try let Expr(v) = (StringMap.find x map) in eval_expr map v with Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" x; flush stdout; raise Not_found)
-  | Asn(n, v) -> let (v1, m1) = eval_expr map v in let m2 = (StringMap.add n (Expr (Lit(Float(v1)))) m1) in (v1, m2)
-  | Unop(op, v) -> let (v1, m1) = eval_expr map v in
-      (match op with
-        | Neg -> (-.v1, m1)
-        | Not -> if v1 = 0.0 then (1.0, m1) else (0.0, m1))
-  | Call(name, args) -> (try let Func(_, a, ex) = StringMap.find name map in 
-                            let zipped = zip a args in let m1 = List.fold_left add_to_map map zipped in 
-                            let (v2, m2) = eval_stmt m1 (Block ex) in (v2, map) with 
-                            Not_found -> Printf.printf "NameError: name '%s' is not defined!\n" name; flush stdout; raise Not_found) (* raise (Failure "NotImplementedError: Functions have not yet been implemented"); *)
-  | Method(a, b, c) -> raise (Failure "NotImplementedError: Methods have not yet been implemented!");
-  | Field(a, b) -> raise (Failure "NotImplementedError: Fields have not yet been implemented!");
-  | Binop(e1, op, e2) ->
-
-let (v1, m1) = eval_expr map e1 in let (v2, m2) = eval_expr m1 e2 in
-match op with
-  | Add -> (v1 +. v2, m2)
-  | Sub -> (v1 -. v2, m2)
-  | Mul -> (v1 *. v2, m2)
-  | Div -> (v1 /. v2, m2)
-  | Exp -> (v1 ** v2, m2)
-  | Greater -> (float_of_bool (v1 > v2), m2)
-  | Less -> (float_of_bool (v1 < v2), m2)
-  | Geq -> (float_of_bool (v1 >= v2), m2)
-  | Leq -> (float_of_bool (v1 <= v2), m2)
-  | Neq -> (float_of_bool (v1 <> v2), m2)
-  | And -> (float_of_bool (v1 <> 0.0 && v2 <> 0.0), m2)
-  | Or -> (float_of_bool (v1 <> 0.0|| v2 <> 0.0), m2)
-  | Eq -> (float_of_bool (v1 = v2), m2)
-  | If -> if v1 = 1.0 then (v2, m2) else (0.0, m2) (* this doesn't work *)
-
-(* helper function used to add a list of function arguments to the map of local variables *)
-and add_to_map map = function 
-  | (a, b) -> let (v1, m1) = eval_expr map b in let m2 = (StringMap.add a (Expr (Lit (Float(v1)))) m1) in m2
-
-(* takes a statement and evaluates it, returning a float and a map, used to evaluate all expressions *)
-and eval_stmt map = function 
-  | Block(a) -> main map 0.0 a                                     
-  | Func(a, b, c) -> let m1 = (StringMap.add a (Func(a, b, c)) map) in (0.0, m1) (* raise (Failure "NotImplementedError: Functions have not yet been implemented");        *)(*string * string list * stmt list*)                                         (* stmt list *)
-  | Class(a, b) -> raise (Failure "NotImplementedError: Classes have not yet been implemented!"); 
-  | Expr(a) -> let (x, m1) = eval_expr map a in (x, m1)                                                                              (* expr *)          
-  | If(a, b, c) -> let (x, m1) = eval_expr map a in if x = 1.0 then eval_stmt m1 (Block b) else eval_stmt m1 (Block c) (* raise (Failure "NotImplementedError: If statements have not yet been implemented"); *)     (* expr * stmt * stmt *)
-  | For(a, b, c) -> raise (Failure "NotImplementedError: For loops have not yet been implemented!");        (* string * expr * expr *)
-  | While(a, b) -> let rec recurse map = let (x, m1) = eval_expr map a in if x = 1.0 then let (x1, m2) = eval_stmt m1 (Block b) in recurse m2 else (0.0, map) in recurse map                                          (*raise (Failure "NotImplementedError: While loops have not yet been implemented"); *)      (* expr * stmt *)
-  | Return(a) ->  eval_expr map a;       (* expr *)
-
-(* takes a stmt list, iterates through the list and evaluates it in order *)
-and main map value = function 
-  | [] -> (value, map)
-  | a :: t -> let (v1, m1) = eval_stmt map a in main m1 v1 t
-;;
-
-(* converts a string to a list of chars *)
-let explode s = 
-  let rec exp i l =
-    if i < 0 then l else exp (i - 1) (s.[i] :: l) in
-  exp (String.length s - 1) []
-;;
-
-(* does the reverse, i.e. converts a list of chars to a string *)
-let impode s = String.concat "" (List.map (String.make 1) s) 
-
-(* utility function used for printing parsed tokens. can be replaced by menhir mostly. not exhaustive *)
-let print = function 
-  | Parser.COLON -> "COLON"
-  | Parser.TAB -> "TAB"
-  | Parser.NOT -> "NOT"
-  | Parser.IF -> "IF"
-  | Parser.ELSE -> "ELSE"
-  | Parser.FOR -> "FOR"
-  | Parser.WHILE -> "WHILE"
-  | Parser.DEF -> "DEF"
-  | Parser.COMMA -> "COMMA"
-  | Parser.NEQ -> "NEQ"
-  | Parser.LT -> "LT"
-  | Parser.GT -> "GT"
-  | Parser.LEQ -> "LEQ"
-  | Parser.GEQ -> "GEQ"
-  | Parser.AND -> "AND"
-  | Parser.OR -> "OR"
-  | Parser.IN -> "IN"
-  | Parser.TRUE -> "TRUE"
-  | Parser.FALSE -> "FALSE"
-  | Parser.IS -> "IS"
-  | Parser.PLUS -> "PLUS"
-  | Parser.MINUS -> "MINUS"
-  | Parser.TIMES -> "TIMES"
-  | Parser.DIVIDE -> "DIVIDE"
-  | Parser.EXP -> "EXP"
-  | Parser.RETURN -> "RETURN"
-  | Parser.LPAREN -> "LPAREN"
-  | Parser.RPAREN -> "RPAREN"
-  | Parser.LBRACK -> "LBRACK"
-  | Parser.RBRACK -> "RBRACK"
-  | Parser.EQ -> "EQ"
-  | Parser.ASN -> "ASN"
-  | Parser.CLASS -> "CLASS"
-  | Parser.SEP -> "SEP"
-  | Parser.EOF -> "EOF"
-  | Parser.EOL -> "EOL"
-  | Parser.DOT -> "DOT"
-  | Parser.INDENT -> "INDENT"
-  | Parser.DEDENT -> "DEDENT"
-  | Parser.VARIABLE(x) -> "VARIABLE" (*Printf.sprintf "Var(%s)" x *)
-  | Parser.STRING_LITERAL(x) -> Printf.sprintf "STRING_LITERAL(%s)" x
-  | Parser.FLOAT_LITERAL(x) -> "FLOAT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
-  | Parser.BOOL_LITERAL(x) -> "BOOL_ITERAL" (*Printf.sprintf "Lit(%f)" x *)
-  | Parser.INT_LITERAL(x) -> "INT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
-  | _ -> "I'm too lazy"
-;;
-
-(* used to hackily fix a big where multiple semicolons cause issues. there may be a more elegant way *)
-let rec remove_double_semicolons = function 
-  | [] -> []
-  | Parser.SEP :: t -> (remove_double_semicolons t)
-  | x :: t -> 
-      let rec aux nums = function
-        | [] -> nums
-        | a :: t -> if a = List.nth nums 0 && a = Parser.SEP then aux nums t
-       else aux (a :: nums) t in
-      List.rev (aux [x] t)
-;;
-
 
 (* this is a complicated function. it takes the lexed buffer, runs it through the tokenize parser in order to 
 extract a list of tokens. once this list has been extracted, we iterate over it to check if the indentations 
 are correct, and to insert Parser.INDENT and Parser.DEDENT tokens as desired. We also sanitize it using the 
 above methods *)
+
+let indent_done = ref false
+let tabwidth = 8
+
 let indent tokens base current =
     let rec aux curr s out stack = match s with
     | [] -> (curr, stack, List.rev out)
-    | Parser.TAB :: t -> aux (curr + 1) t out stack;
-    | Parser.COLON :: t -> (Stack.push (curr + 1) stack; aux curr t (Parser.INDENT :: (Parser.COLON :: out)) stack)
-    | Parser.EOL :: t -> aux 0 t (Parser.SEP :: out) stack 
-    | a :: t -> (* Printf.printf "indent level: %d (%s)\n" curr (print a); *) if Stack.top stack = curr then aux curr t (a::out) stack (* do nothing, continue with next character *)
-      else if Stack.top stack > curr then let _ = Stack.pop stack in aux curr (a :: t) (Parser.DEDENT :: out) stack (* if dedented, pop off the stack and add a DEDENT token *)
-      else if curr = (Stack.top stack) + 1 then let _ = Stack.push curr stack in aux curr (a :: t) (Parser.INDENT :: out) stack (* if indented by one, push onto the stack and add an indent token *)
-      else raise (Failure "SyntaxError: invalid indentation detected!"); (* else raise an error *)
-  in let (a, b, c) = aux current tokens [] base in
-  (a, b, remove_double_semicolons c)
-;;
+    | Parser.CEND :: (Parser.EOL :: t) -> aux 0 t out stack;
+    | Parser.TAB :: t -> if not !indent_done then aux (curr + tabwidth) t out stack else aux curr t out stack
+    | Parser.SPACE :: t -> if not !indent_done then aux (curr + 1) t out stack else aux curr t out stack
+    | Parser.EOL :: t -> indent_done := false; aux 0 t (Parser.SEP :: out) stack 
+    | a :: t -> indent_done := true;
+      if Stack.top stack = curr then aux curr t (a::out) stack (* do nothing, continue with next character *)
+      
+      else if (curr < Stack.top stack) then 
+        let rec dedent out curr stack = 
+          if curr < (Stack.top stack) then let _ = Stack.pop stack in dedent (Parser.DEDENT :: out) curr stack
+          else (out, stack)
+
+        in let (tokens, stacK) = dedent [] curr stack in 
+        if Stack.top stack = curr then aux curr (a :: t) (tokens @ out) stack (* if dedented, pop off the stack and add a DEDENT token *)
+        else raise (Failure "SSyntaxError: invalid indentation detected!");
+
+      else if (curr > Stack.top stack) then 
+        let _ = Stack.push curr stack in aux curr (a :: t) (Parser.INDENT :: out) stack (* if indented by one, push onto the stack and add an indent token *)
+      else raise (Failure "SSyntaxError: invalid indentation detected!"); (* else raise an error *)
+  in aux current tokens [] base
+
+(* search_env_opt: search the given environment variable for valid search paths 
+and search these for files of the form path/name, return channel if exists, None otherwise *)
+
+let search_env_opt env name = 
+  if not (Filename.is_relative name) 
+    then if Sys.file_exists name 
+      then Some name 
+      else None
+  else let env_string = Sys.getenv_opt env in
+    match env_string with
+      | None -> if Sys.file_exists name then Some name else None
+      | Some x -> let paths = String.split_on_char ':' x in
+          let curr = List.find_opt (fun path -> Sys.file_exists (Filename.concat path name)) paths in
+          match curr with
+            | None -> if Sys.file_exists name then Some name else None
+            | Some path -> Some (Filename.concat path name)
+
+(* get_ast: loads the ast from a given path if possible, lexing and parsing the file found 
+at that path. used for the file-based compiler, not the interpreter, which requires different behavior *)
+
+let get_ast path = 
+  let chan = open_in path
+  in let base = Stack.create() in let _ = Stack.push 0 base in
+
+  let rec read current stack = (* logic of the interpreter *)
+    try 
+      let line = (input_line chan) ^ "\n" in (* add newline for parser, gets stripped by input_line *)
+      if String.length line = 1 then (read current stack)
+      else let lexbuf = (Lexing.from_string line) in
+      let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
+      let (curr, stack, formatted) = indent temp stack current in
+      formatted @ (read curr stack)
+   with End_of_file -> close_in chan; Array.make (Stack.length stack - 1) Parser.DEDENT |> Array.to_list
+  in let formatted = ref (read 0 base) in
+  let _ = if !debug then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
+
+  let token lexbuf = (* hack I found online to convert lexbuf list to a map from lexbuf to Parser.token, needed for Ocamlyacc *)
+  match !formatted with 
+    | []     -> Parser.EOF 
+    | h :: t -> formatted := t ; h in
+
+  let program = Parser.program token (Lexing.from_string "") in program
+
+(* ast_from_path: takes a given filename and searches for files with that name in any 
+directory contained in the $PATH env variable. This calls search_env_opt on "PATH" internally.
+Raises an error if the path is not found, unlike search_env_opt which returns None *)
+
+let ast_from_path fname = 
+  let path = search_env_opt "PATH" fname in
+  let name = match path with
+    | None -> raise (Failure ("FileNotFoundError: unable to open file " ^ fname)) 
+    | Some x -> x
+  in get_ast name
+
+(* fix_extension: checks if a given file ends with the .cl extension. If so, return
+the original path. If not, append .cl to it. *)
+
+
+let fix_extension file = match Filename.check_suffix file ".cl" with
+  | true -> file
+  | false -> file ^ ".cl"
+
+(* parse_imports: this function takes an ast and traverses it, replacing import statements with
+the full ast of the specified file. The behavior of this function follows Python. First the $PATH
+directories are searched, and then the local directory is searched. If the file is found in neither
+of these places, it throws an error. *)
+
+let parse_imports li =
+  let rec aux out = function
+    | [] -> List.rev out
+    | Import(name) :: t -> 
+        let program = ast_from_path (fix_extension name) in
+        aux ((List.rev program) @ out) t
+    | Func(a, b, s1) :: t -> let updated = aux [] (from_block s1) in aux (Func(a, b, Block(updated)) :: out) t
+    | Block(s1) :: t -> let updated = aux [] s1 in aux (Block(updated) :: out) t
+    | If(a, s1, s2) :: t -> let u1 = aux [] (from_block s1) in let u2 = aux [] (from_block s2) in aux (If(a, Block(u1), Block(u2)) :: out) t
+    | For(a, b, s1) :: t -> let updated = aux [] (from_block s1) in aux (For(a, b, Block(updated)) :: out) t
+    | While(a, s1) :: t -> let updated = aux [] (from_block s1) in aux (While(a, Block(updated)) :: out) t
+    | a :: t -> aux (a :: out) t 
+  in aux [] li
+
+(* process_output_to_list: [copied from a Stack Overflow forum post. Runs a Unix command in a subprocess,
+captures the output, and stores earch result in a list to be printed or used further. Used for running
+bash scripts to compile the program *)
+
+let process_output_to_list = fun command -> 
+  let chan = Unix.open_process_in command in
+  let res = ref ([] : string list) in
+  let rec process_otl_aux () =  
+    let e = input_line chan in
+    res := e :: !res;
+    process_otl_aux() in
+  try process_otl_aux ()
+  with End_of_file ->
+    let stat = Unix.close_process_in chan in (List.rev !res, stat)
+
+let cmd_to_list command =
+  let (l, _) = process_output_to_list command in l
+
+(* strip_stmt: this function strips Type(x) and Print(x) stmts from the ast of past 
+function calls when used with the interpreter. The interpreter currently works by appending
+past parsed asts to the current one, and by default past print statements will be called each time
+the interpreter is run on any input statement. Note that this excludes functions because they may
+contain desired function calls. There is no good way around this with the current model. *)
+
+let rec strip_stmt = function 
+  | Type(x) | Print(x) -> Nop
+  | If(a, b, c) -> If(a, strip_stmt b, strip_stmt c)
+  | While(a, b) -> While(a, strip_stmt b)
+  | For(a, b, c) -> For(a, b, strip_stmt c)
+  | Range(a, b, c) -> Range(a, b, strip_stmt c)
+  | Block(x) -> Block(strip_print x)
+  | _ as x -> x
+
+and strip_print ast = List.rev (List.fold_left (fun acc x -> (strip_stmt x) :: acc) [] ast)
+
+let rec strip_return_stmt = function 
+  | SIf(a, b, c) -> SIf(strip_return_expr a, strip_return_stmt b, strip_return_stmt c)
+  | SWhile(a, b) -> SWhile(strip_return_expr a, strip_return_stmt b)
+  | SFor(a, b, c) -> SFor(a, strip_return_expr b, strip_return_stmt c)
+  | SBlock(x) -> SBlock(strip_return [] x)
+  | SFunc({ styp; sfname; sformals; slocals; sbody }) -> SFunc({ styp; sfname; sformals; slocals; sbody = strip_return_stmt sbody; })
+  | SExpr(e) -> SExpr(strip_return_expr e)
+  | SReturn(e) -> SReturn(strip_return_expr e)
+  | SAsn(a, e) -> SAsn(a, strip_return_expr e)
+  | SPrint(e) -> SPrint(strip_return_expr e)
+  | SClass(a, b) -> SClass(a, strip_return_stmt b)
+  | _ as x -> x
+
+and strip_return_expr sexpr = let (e, t) = sexpr in 
+  let e' = (match e with
+  | SCall(e, el, s) -> SCall(e, el, strip_return_stmt s)
+  | _ as x -> x) in
+  (e', t)
+
+  
+and strip_return out = function
+  | [] -> List.rev out
+  | SReturn e :: t -> List.rev ((strip_return_stmt (SReturn e)) :: out)
+  | a :: t -> strip_return ((strip_return_stmt a) :: out) t
+
+
+(* codegen: command to run codegen to a generated sast, save it to a file (source.ll), compile and
+evaluate it, and return the output *)
+
+let codegen sast fname = 
+  let output = 
+  (try 
+    let m = Codegen.translate sast !exceptions in
+    Llvm_analysis.assert_valid_module m;
+
+    let llvm_name = (match String.length !executable_name with
+      | 0 -> fname ^ ".ll"
+      | _ -> !executable_name ^ ".ll") in
+
+    let oc = open_out llvm_name in
+    Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc;
+
+    let assembly_name = (match String.length !executable_name with
+      | 0 -> fname ^ ".s"
+      | _ -> !executable_name ^ ".s") in
+
+    let executable_name = (match String.length !executable_name with
+      | 0 -> "a.out"
+      | _ -> !executable_name) in
+    
+    let output = match (!emit_llvm, !assembly) with
+      | (true, _) -> [] 
+      | (false, true) -> 
+        let output = cmd_to_list ("llc " ^ llvm_name ^ " -o " ^ assembly_name) in
+        Sys.remove llvm_name; output
+      | (false, false) -> 
+        let output = cmd_to_list ("llc " ^ llvm_name ^ " -o " ^ assembly_name ^ " && gcc " ^ assembly_name ^ " -o " ^ executable_name ^ " && ./" ^ executable_name) in
+        Sys.remove llvm_name; Sys.remove assembly_name; output
+    
+    in output
+  with
+    | Not_found -> raise (Failure ("CodegenError: variable not found!"))
+  ) in output
+
 
 (* this is the main function loop for the interpreter. We lex the input from stdin,
 convert it to a list of Parser.token, apply the appropriate indentation corrections,
 check to make sure we are at 0 indentation level, print more dots otherwise, and then
-compute the correct value and repeat *)
-let rec loop map = 
+compute the correct value and repeat. *)
+
+let is_empty tokens = match tokens with
+  | Parser.NOP :: [Parser.EOL] -> true
+  | _ -> false
+
+let block = ref false
+
+let rec from_console map past run = 
   try 
     Printf.printf ">>> "; flush stdout;
     let base = Stack.create() in let _ = Stack.push 0 base in
 
     let rec read current stack = (* logic of the interpreter *)
-        let lexbuf = (Lexing.from_channel stdin) in
+        let line = (input_line stdin) ^ "\n" in (* add newline for parser, gets stripped by input_line *)
+        let lexbuf = (Lexing.from_string line) in
         let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
         let (curr, stack, formatted) = indent temp stack current in 
-        (* let _ = List.iter (Printf.printf "%s ") (List.map print formatted) in *)
-        if Stack.top stack = 0 then formatted else
+        if Filename.check_suffix (String.trim line) ":" then block := true
+        else if Stack.top stack = 0 then block := false;
+        if is_empty temp || not !block then formatted else
         (Printf.printf "... "; flush stdout;
         formatted @ (read curr stack))
 
     in let formatted = ref (read 0 base) in
-    let _ = if !debug = 1 then (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "") in (* print debug messages *)
+    let _ = if !debug then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
 
     let token lexbuf = (* hack I found online to convert lexbuf list to a map from lexbuf to Parser.token, needed for Ocamlyacc *)
     match !formatted with 
       | []     -> Parser.EOF 
       | h :: t -> formatted := t ; h in
 
-    let program = Parser.program token (Lexing.from_string "") in
-    let (result, mymap) = main map 0.0 program
-    in print_endline (string_of_float result); flush stdout; loop mymap
-  with
-    | Not_found -> loop map
-    | Stdlib.Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout; loop map
-    | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; loop map
-;;
+    let program = 
+      if run then ((strip_print past) @ (Parser.program token (Lexing.from_string "")))
+      else (Parser.program token (Lexing.from_string "")) in
 
-(* main loop of the interpreter *)
-let _ =
-	Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout;
-  parse_cmdline specs print_endline;
+    let imported_program = parse_imports program in
+
+    let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; stack = TypeMap.empty; } imported_program) in (* temporarily here to check validity of SAST *)
+    let (sast, globals) = sast in
+    let sast = (strip_return [] sast, globals) in 
+    let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
+    
+    if run then
+      let output = codegen sast "source" in
+      List.iter print_endline output; flush stdout; 
+      from_console map imported_program run
+
+    else flush stdout; from_console map' [] false
+
+  with
+    | Not_found -> Printf.printf "NotFoundError: unknown error\n"; from_console map past run
+    | Parsing.Parse_error -> Printf.printf "SyntaxError: invalid syntax\n"; flush stdout; from_console map past run
+    | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map past run
+    | Runtime explanation -> Printf.printf "%s\n" explanation; flush stdout; from_console map past run
+
+(* this is the main function loop for the file parser. We lex the input from a given file,
+convert it to a list of Parser.token, apply the appropriate indentation corrections,
+dedent to the zero level as needed, and then compute the correct value *)
+
+let rec from_file map fname run = (* todo combine with loop *)
   try
-    let emptymap = StringMap.empty in loop emptymap
-  with 
-    | Scanner.Eof -> exit 0
-;;
+    let original_path = Sys.getcwd () in
+    let program = Sys.chdir (Filename.dirname fname); ast_from_path (Filename.basename fname) in
+    let imported_program = parse_imports program in
+
+    let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; stack = TypeMap.empty; } imported_program) in (* temporarily here to check validity of SAST *)
+    let (sast, globals) = sast in
+    let sast = (strip_return [] sast, globals) in 
+    let () = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)
+    let () = Sys.chdir original_path in
+
+    if run then 
+      let output = codegen sast (Filename.remove_extension (Filename.basename fname)) in
+      List.iter print_endline output; flush stdout;
+
+  with
+    | Not_found -> Printf.printf "NotFoundError: unknown error!\n"; flush stdout
+    | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout
+    | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout
+
+(* Coral main interpreter loop. Parses command line arguments, including a single
+anonymous argument (file path) and runs either the interpreter or the from_file compiler *)
+
+let () =
+  Arg.parse speclist (fun path -> if not !fpath_set then fpath := path; fpath_set := true; ) usage; (* parse command line arguments *)
+  let emptymap = StringMap.empty in 
+
+  if !fpath_set then from_file emptymap !fpath !run
+  else
+  ( 
+    Printf.printf "Welcome to the Coral programming language!\n\n"; flush stdout; 
+    try 
+      from_console emptymap [] !run 
+    with Scanner.Eof -> exit 0
+  )
+
