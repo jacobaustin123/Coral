@@ -7,6 +7,7 @@ The **Coral** programming language: a blazingly-fast, gradually typed Python-lik
 * [Using the Coral Compiler and Interpreter](#using-the-coral-compiler-and-interpreter)
 * [Adding Type Annotations](#adding-type-annotations)
 * [Exceptions](#exceptions)
+* [More Examples](#more-examples)
 * [Differences from Python](#differences-from-python)
 
 # Examples
@@ -329,6 +330,55 @@ RuntimeError: list index out of bounds
 
 While it is not recommended, runtime exceptions can be disabled using the ```-no-except``` compiler flag, which will significantly improve performance at the expense of possible segmentation faults or invalid type usage.
 
+# More Examples
+
+Coral is able to compile and run standard quicksort for Python (code taken from [here](http://interactivepython.org/courselib/static/pythonds/SortSearch/TheQuickSort.html)). This code involves recursion on lists and while loops. This code is relatively slow, since it uses unoptimized lists and recursion, but can be sped up considerably with explicit typing.
+
+```python
+def quickSort(alist, length):
+    quickSortHelper(alist, 0, length - 1)
+
+def quickSortHelper(alist, first, last):
+    if first < last:
+        splitpoint = partition(alist, first, last)
+
+        quickSortHelper(alist, first, splitpoint - 1)
+        quickSortHelper(alist, splitpoint + 1, last)
+
+def partition(alist, first, last):
+    pivotvalue = alist[first]
+
+    leftmark = first + 1
+    rightmark = last
+
+    done = False
+    while not done:
+        while leftmark <= rightmark and alist[leftmark] <= pivotvalue: # this can fail since no short-circuit
+            leftmark = leftmark + 1
+
+        while alist[rightmark] >= pivotvalue and rightmark >= leftmark:
+            rightmark = rightmark - 1
+
+        if rightmark < leftmark:
+            done = True
+
+        else:
+            temp = alist[leftmark]
+            alist[leftmark] = alist[rightmark]
+            alist[rightmark] = temp
+
+    temp = alist[first]
+    alist[first] = alist[rightmark]
+    alist[rightmark] = temp
+
+    return rightmark
+
+alist = [54,26,93,17,77,31,44,55,20]
+quickSort(alist, 9)
+print(alist)
+```
+
+
 # Differences from Python
 
 Coral strives to be syntactically identical to Python, and as close as possible to Python in runtime behavior. There are a few differences in behavior and many limitations, mostly due to the scope of the Coral project. These features could be added at a later date, and we welcome contributions.
@@ -369,6 +419,12 @@ elif, break, continue, pass, class, global, await, from, as, nonlocal, yield, as
 ```
 
 These should be implemented, and we again welcome contributions to support these features. The primary limitation is adding support for them in the codegen/LLVM IR generation steps.
+
+### Other
+
+* Coral does not support short-circuit evaluation on and and or clauses. This can can easily be added by modifying the and operator, but we have not had the time to do so.
+* No multi-line comments. These are somewhat tricky to implement in the current lexing setup, but can be done.
+* Coral has a slightly different indentation-based parsing system than Python. It is significantly more lenient, and you are able to mix tabs and spaces freely (one tab is equivalent to 8 spaces - this is controlled by the tabwidth parameter).
 
 # Acknowledgments
 
