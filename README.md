@@ -240,7 +240,7 @@ Coral uses a gradual typing system that places type-inferred immutable variables
 which runs much faster in Coral than Python. Type annotations make this optimization even more robust. Often types cannot be fully type inferred, but type hints allow more code to be placed on the stack. For example, in this gcd code:
 
 ```python
->>> def gcd(a : int, b : int) -> int
+>>> def gcd(a : int, b : int) -> int:
 ...     while a != b: 
 ...         if a > b: 
 ...             a = a - b
