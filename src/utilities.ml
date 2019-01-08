@@ -203,14 +203,6 @@ module TypeMap = Map.Make(struct type t = stmt * typ list let compare = Pervasiv
 (* map with string keys, used for variable lookup *)
 module StringMap = Map.Make(String)
 
-(* merge: merge function used to reconcile the global lookup map after a conditional branch. *)
-let merge m1 m2 = StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge two lists while keeping type inference intact *)
-    | Some (a, b, c), Some (d, e, f) -> Some (compare_types a d, compare_types b e, compare_data c f)
-    | Some (a, b, c), None -> Some(Dyn, Dyn, c)
-    | None, Some(a, b, c) -> Some(Dyn, Dyn, c)
-    | None, None -> None
-  ) m1 m2
-
 let rec1 = ref [] (* these are used to extract Transform objects for use in codegen from merge *)
 let rec2 = ref []
 
@@ -246,6 +238,7 @@ let from_sblock block = match block with
 (* check if two maps are equal *)
 let equals m1 m2 = (StringMap.equal (fun x y -> (compare x y) = 0) m1 m2) (* check if two maps are equal *)
 
+(* flag passed around semant holding information about the current environment *)
 type flag = {
   stack : bool TypeMap.t;
   noeval : bool; (* in a SFunc doing a generic analysis *)
@@ -253,7 +246,12 @@ type flag = {
   forloop : bool; (* in a for loop? *)
 }
 
+(* make a list of binds all dynamic *)
 let make_dynamic bindlist = List.map (fun (Bind(name, typ)) -> Bind(name, Dyn)) bindlist
+
+(* convert a lookup table to a list of binds with the name and inferred type. used to handle
+calling weakly defined functions. when this occurs, we don't know what types globals will be,
+so we have to assume they are dynamic and convert them to dynamic types *)
 
 let globals_to_list globals = 
   let current = StringMap.bindings globals in

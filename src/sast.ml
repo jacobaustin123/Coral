@@ -1,14 +1,27 @@
 open Ast
 
-(*
+(* sast.ml: contains the definitions of the algebraic types which make up the semantically checked abstract 
+syntax tree. 
 
-What semant does:
+The overall semantically checked program is an sprogram, with a list of semantically checked statements
+(sstmt list) and a list of global variables and their inferred types (bind list). 
 
-  1. undeclared identifiers (get a list of globals and locals for each function, check to make sure they are all declared at some poiont
-  2. correct number of arguments in function call
-  3. correct types of explicitly declared variables
-  4. return types in the right place
-  5. duplicate formal arguments
+Semantically checked functions are stored as sfunc_decl records, containing their return type (styp), their
+name (sfname), a list of formal variables (sformals), a list of local variables (slocals), and the sbody, an
+SBlock sstmt. 
+
+sexp is the type that stores semantically checked expressions. SListSlice, SMethod, and SField have not been
+implemented. sexpr is merely an sexp with an associated type. In general, that type is the type inferred 
+by semant, while any binds found in sexprs or sstmts contain types that need to be checked at runtime. 
+
+sstmt is the type that stores semantically checked statements. SClass has not been implemented. STransform
+is an internal type used to handle some of the boxing and unboxing required by the gradual type system. This
+is usually inserted when conditional branches are merged or when generic (unknown) functions are called.
+
+lvalues are the types that can occur on the left-hand side of an assignment. SLListSlice has not been
+implemented. These can be expanded as more kinds of features are added, including classes.
+
+The various print functions are pretty-printing functions for debugging and viewing the generated SAST.
 *)
 
 type sprogram = sstmt list * bind list
@@ -54,7 +67,6 @@ and lvalue =
   | SLVar of bind
   | SLListAccess of sexpr * sexpr
   | SLListSlice of sexpr * sexpr * sexpr
-  | SLExpr of sexpr
 
 let concat_end delim = List.fold_left (fun a c -> a ^ delim ^ c) ""
 let append_list v = List.map (fun c -> c ^ v)
@@ -95,6 +107,5 @@ and string_of_lvalue = function
   | SLVar(sbind) -> string_of_sbind sbind
   | SLListAccess(e1, e2) ->  string_of_sexpr e1 ^ "[" ^ string_of_sexpr e2 ^ "]"
   | SLListSlice(e1, e2, e3) -> string_of_sexpr e1 ^ "[" ^ string_of_sexpr e2 ^ ":" ^ string_of_sexpr e3 ^ "]"
-  | SLExpr(e) -> string_of_sexpr e
 
 and string_of_sprogram (sl, bl) = String.concat "\n" (List.map (string_of_sstmt 1) sl) ^ "\n\nGlobals: [" ^ String.concat ", " (List.map string_of_sbind bl) ^ "]"

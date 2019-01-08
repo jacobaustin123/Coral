@@ -106,29 +106,34 @@ and exp map = function
 
   | Call(exp, args) -> (* parse Call, checking that the LHS is a function, matching arguments and types, evaluating the body *)
     let (t, e, data) = expr map exp in
-    if t <> Dyn && t <> FuncType 
+    if t <> Dyn && t <> FuncType (* if it's known not to be a function, throw an error *)
       then raise (Failure ("STypeError: cannot call objects of type " ^ type_to_string t)) 
     else (match data with 
-      | Some(x) -> (* if evaluating the expression returns a function *)
+      | Some(x) -> 
         (match x with 
-          | Func(name, formals, body) -> if t <> FuncType && t <> Dyn then (* if that function is fully defined *)
-            (raise (Failure ("STypeError: cannot call variable"))) else
+          | Func(name, formals, body) -> (* if evaluating the expression returns a function *)
             let param_length = List.length args in
             if List.length formals <> param_length 
             then raise (Failure ("SSyntaxError: unexpected number of arguments in function call"))
 
-            else let rec aux (map, map', bindout, exprout) v1 v2 = match v1, v2 with
-              | b, e -> let data = expr map e in let (t', e', _) = data in 
-                let (map1, name, inferred_t, explicit_t) = assign map' data b in (map, map1, ((Bind(name, explicit_t)) :: bindout), (e' :: exprout))
+            else let rec handle_args (globals, locals, bindout, exprout) bind exp = 
+                let data = expr globals exp in 
+                let (t', e', _) = data in 
+                let (locals, name, inferred_t, explicit_t) = assign locals data bind in 
+                (globals, locals, ((Bind(name, explicit_t)) :: bindout), (e' :: exprout))
+            
+            in 
+            
+            let clear_explicit_types map = StringMap.map (fun (a, b, c) -> (Dyn, b, c)) map in (* ignore dynamic types when not in same scope *)
 
-            in let map' = StringMap.map (fun (a, b, c) -> (Dyn, b, c)) map (* ignore dynamic types when not in same scope *)
-            in let (_, map1, bindout, exprout) = (List.fold_left2 aux (map, map', [], []) formals args) in
+            let fn_namespace = clear_explicit_types map in (* we use this map to allow us to overwrite explicit global types *)
+            let (_, fn_namespace, bindout, exprout) = (List.fold_left2 handle_args (map, fn_namespace, [], []) formals args) in
 
             let (_, types) = split_sbind bindout in
-            let stack = TypeMap.empty in
+            let stack = TypeMap.empty in (* start call stack - used to avoid infinite recursion *)
             let stack' = TypeMap.add (x, types) true stack in
 
-            let (map2, block, data, locals) = (func_stmt map map1 {stack = stack'; cond = false; forloop = false; noeval = false; } body) in
+            let (map2, block, data, locals) = (func_stmt map fn_namespace {stack = stack'; cond = false; forloop = false; noeval = false; } body) in
 
             (match data with (* match return type with *)
               | Some (typ2, e', d) -> (* it did return something *)
@@ -141,16 +146,16 @@ and exp map = function
                   (typ2, (SCall(e, (List.rev exprout), SFunc(func))), d)
               
               | None -> (* function didn't return anything, null function *)
-                  let Bind(n1, btype) = name in if btype <> Dyn then  
+                  let Bind(n1, btype) = name in if btype <> Dyn then
                   raise (Failure ("STypeError: invalid return type")) else 
                   let func = { styp = Null; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in
                   (Null, (SCall(e, (List.rev exprout), SFunc(func))), None))
           
           | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation"))) (* can be expanded to allow classes in the future *)
       
-      | None -> Printf.eprintf "%s\n" "SWarning: called unknown/undefined function"; (* TODO probably not necessary, may be a problem for recursion *)
+      | None -> (* Printf.eprintf "%s\n" "SWarning: called unknown/undefined function"; (* TODO probably not necessary, may be a problem for recursion *) *)
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr map e' in e' :: acc) [] args) in
-          let transforms = make_transforms (globals_to_list map) in
+          let transforms = make_transforms (globals_to_list map) in (* make_transforms transforms all current globals to dynamics and back for unknown/undefined functions *)
           (Dyn, (SCall(e, eout, transforms)), None)
         )
 
@@ -171,11 +176,16 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
     let (t2, e2, _) = func_expr globals locals the_state b in 
     let t3 = binop t1 t2 op in (t3, SBinop(e1, op, e2), None)
 
-  | Var(Bind(x, t)) -> 
+  (* if a variable is not found and we are evaluating a Func, 
+  add it to the list of possible globals. this causes a dynamic
+  version of it to be created so that it can be used even if that
+  variable is never defined *)
+  | Var(Bind(x, t)) ->
     if StringMap.mem x locals then
       if (StringMap.mem x globals) && the_state.noeval then (Dyn, SVar(x), None)
       else let (typ, t', data) = StringMap.find x locals in (t', SVar(x), data)
-    else if the_state.noeval then let () = possible_globals := (Bind(x, Dyn)) :: !possible_globals in (Dyn, SVar(x), None) 
+    else if the_state.noeval then 
+      let () = possible_globals := (Bind(x, Dyn)) :: !possible_globals in (Dyn, SVar(x), None) 
     else raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
 
   | ListAccess(e, x) ->
@@ -197,25 +207,28 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
     (match data with (* data is either the Func info *)
       | Some(x) -> 
         (match x with 
-          | Func(name, formals, body) -> if t <> FuncType && t <> Dyn then 
-            (raise (Failure ("STypeError: cannot call variable"))) else
+          | Func(name, formals, body) -> 
             let param_length = List.length args in
             if List.length formals <> param_length 
             then raise (Failure ("SSyntaxError: unexpected number of arguments in function call"))
 
-            else let rec aux (globals, locals, bindout, exprout) v1 v2 = match v1, v2 with 
-              | b, e -> let data = func_expr globals locals the_state e in let (t', e', _) = data in 
-              let (map', name, inferred_t, explicit_t) = assign globals data b in (map', locals, ((Bind(name, explicit_t)) :: bindout), (e' :: exprout)) in
+            else let handle_args (globals, locals, bindout, exprout) bind exp = 
+              let data = func_expr globals locals the_state exp in 
+              let (t', e', _) = data in 
+              let (map', name, inferred_t, explicit_t) = assign globals data bind in 
+              (map', locals, ((Bind(name, explicit_t)) :: bindout), (e' :: exprout)) in
 
-            let map' = StringMap.map (fun (a, b, c) -> (Dyn, b, c)) locals in
-            let (map1, _, bindout, exprout) = (List.fold_left2 aux (globals, map', [], []) formals args) in
-            let (map'', _, _, _) = assign map1 (Dyn, (SCall (e, [], SNop), Dyn), data) name in
+            let clear_explicit_types map = StringMap.map (fun (a, b, c) -> (Dyn, b, c)) map in (* ignore dynamic types when not in same scope *)
+
+            let fn_namespace = clear_explicit_types locals in
+            let (fn_namespace, _, bindout, exprout) = (List.fold_left2 handle_args (globals, fn_namespace, [], []) formals args) in
+            let (fn_namespace, _, _, _) = assign fn_namespace (Dyn, (SCall (e, [], SNop), Dyn), data) name in (* add the function itself to the namespace *)
 
             let (_, types) = split_sbind bindout in (* avoid recursive calls by checking if the type has already been called. *)
-            if TypeMap.mem (x, types) the_state.stack then (Dyn, SCall(e, (List.rev exprout), SNop), None) 
-            else let stack' = TypeMap.add (x, types) true the_state.stack in
+            if TypeMap.mem (x, types) the_state.stack then (Dyn, SCall(e, (List.rev exprout), SNop), None) (* if recursive, return a dynamic function *)
+            else let stack' = TypeMap.add (x, types) true the_state.stack in (* otherwise add it to the stack *)
 
-            let (map2, block, data, locals) = (func_stmt globals map'' { noeval = false; cond = false; forloop = false; stack = stack'; } body) in
+            let (map2, block, data, locals) = (func_stmt globals fn_namespace { noeval = false; cond = false; forloop = false; stack = stack'; } body) in
             (match data with
               | Some (typ2, e', d) -> let Bind(n1, btype) = name in if btype <> Dyn && btype <> typ2 then 
                   if typ2 <> Dyn then raise (Failure ("STypeError: invalid return type")) else 
@@ -231,7 +244,7 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
           
           | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation")))
       
-      | None -> if not the_state.noeval then Printf.eprintf "%s\n" "SWarning: called unknown/undefined function";
+      | None -> (* if not the_state.noeval then Printf.eprintf "%s\n" "SWarning: called unknown/undefined function"; *)
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals the_state e' in e'' :: acc) [] args) in
           let transforms = make_transforms (globals_to_list globals) in
           (Dyn, (SCall(e, eout, transforms)), None)
@@ -362,12 +375,6 @@ and func_stmt globals locals the_state = function
 
       | ListSlice(e, low, high) :: t -> raise (Failure "SNotImplementedError: List slicing has not been implemented")
 
-(*         let (t1, e1, _) = func_expr globals locals the_state e in
-        let (t2, e2, _) = func_expr globals locals the_state low in
-        let (t3, e3, _) = func_expr globals locals the_state high in
-        if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t3 <> Int && t3 <> Dyn then raise (Failure ("STypeError: invalid types for list access"))
-        else (aux (m, SLListSlice(e1, e2, e3) :: out, binds) t) *)
-
       | Field(a, b) :: t -> raise (Failure "NotImplementedError: Fields are not implemented")
       | _ -> raise (Failure ("STypeError: invalid types for assignment."))
      
@@ -485,12 +492,6 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
 
       | ListSlice(e, low, high) :: t ->
           raise (Failure "NotImplementedError: List slicing has not been implemented")
-
-       (*  let (t1, e1, _) = expr map e in
-        let (t2, e2, _) = expr map low in
-        let (t3, e3, _) = expr map high in
-        if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t3 <> Int && t3 <> Dyn then raise (Failure ("STypeError: invalid types for list access"))
-        else (aux (m, SLListSlice(e1, e2, e3) :: binds, locals) t) *)
 
       | Field(a, b) :: t -> raise (Failure "NotImplementedError: Fields are not implemented")
       | _ -> raise (Failure ("STypeError: invalid types for assignment."))
