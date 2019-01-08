@@ -148,7 +148,7 @@ and exp map = function
           
           | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation"))) (* can be expanded to allow classes in the future *)
       
-      | None -> print_endline "SWarning: called unknown/undefined function"; (* TODO probably not necessary, may be a problem for recursion *)
+      | None -> Printf.eprintf "%s\n" "SWarning: called unknown/undefined function"; (* TODO probably not necessary, may be a problem for recursion *)
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e', _) = expr map e' in e' :: acc) [] args) in
           let transforms = make_transforms (globals_to_list map) in
           (Dyn, (SCall(e, eout, transforms)), None)
@@ -231,7 +231,7 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
           
           | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation")))
       
-      | None -> if not the_state.noeval then print_endline "SWarning: called unknown/undefined function";
+      | None -> if not the_state.noeval then Printf.eprintf "%s\n" "SWarning: called unknown/undefined function";
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals the_state e' in e'' :: acc) [] args) in
           let transforms = make_transforms (globals_to_list globals) in
           (Dyn, (SCall(e, eout, transforms)), None)
@@ -391,13 +391,13 @@ and func_stmt globals locals the_state = function
     let (map', _, _, _) = assign locals (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in
     let (semantmap, _, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in
 
-    let (map'', bind) = List.fold_left 
+    let (map'', binds) = List.fold_left 
         (fun (map, out) (Bind (x, t)) -> 
-          let (map', name, inferred_t, explicit_t) = assign map (t, (SNoexpr, t), None) (Bind (x, t)) in 
+          let (map', name, inferred_t, explicit_t) = assign map (Dyn, (SNoexpr, Dyn), None) (Bind (x, Dyn)) in 
           (map', Bind(name, explicit_t) :: out)
         ) (semantmap, []) b in
 
-    let bindout = List.rev bind in
+    let bindout = List.rev binds in
 
     let (map2, block, data, locals) = (func_stmt StringMap.empty map'' { forloop = false; cond = false; noeval = true; stack = TypeMap.empty;} c) in
 
@@ -405,15 +405,15 @@ and func_stmt globals locals the_state = function
       | Some (typ2, e', d) ->
         if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
         raise (Failure ("STypeError: invalid return type")) 
-        else let func = { styp = btype; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
+        else let func = { styp = btype; sfname = name; sformals = b; slocals = locals; sbody = block } in 
           (map', SFunc(func), None, [Bind(name, FuncType)]) 
-        else let func = { styp = typ2; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
+        else let func = { styp = typ2; sfname = name; sformals = b; slocals = locals; sbody = block } in 
         (map', SFunc(func), None, [Bind(name, FuncType)])
 
       | None -> 
         if btype <> Dyn then 
         raise (Failure ("STypeError: invalid return type")) else 
-        let func = { styp = Null; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
+        let func = { styp = Null; sfname = name; sformals = b; slocals = locals; sbody = block } in 
         (map', SFunc(func), None, [Bind(name, FuncType)]))
 
   | If(a, b, c) -> let (typ, e', _) = func_expr globals locals the_state a in 
@@ -511,7 +511,7 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
 
     let (map'', binds) = List.fold_left 
       (fun (map, out) (Bind(x, t)) -> 
-        let (map', name, inferred_t, explicit_t) = assign map (t, (SNoexpr, t), None) (Bind(x, t)) in 
+        let (map', name, inferred_t, explicit_t) = assign map (Dyn, (SNoexpr, Dyn), None) (Bind(x, Dyn)) in 
         (map', (Bind(name, explicit_t)) :: out)
       ) (semantmap, []) b in
 
@@ -521,15 +521,15 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
         | Some (typ2, e', d) ->
             if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
             raise (Failure ("STypeError: invalid return type")) else 
-            let func = { styp = btype; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
+            let func = { styp = btype; sfname = name; sformals = b; slocals = locals; sbody = block } in 
               (map', SFunc(func), [Bind(name, FuncType)]) else
-              let func = { styp = typ2; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
+              let func = { styp = typ2; sfname = name; sformals = b; slocals = locals; sbody = block } in 
             (map', SFunc(func), [Bind(name, FuncType)])
         
         | None -> 
           if btype <> Dyn then 
           raise (Failure ("STypeError: invalid return type")) else 
-          let func = { styp = Null; sfname = name; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
+          let func = { styp = Null; sfname = name; sformals = b; slocals = locals; sbody = block } in 
           (map', SFunc(func), [Bind(name, FuncType)]))
 
   | If(a, b, c) -> 

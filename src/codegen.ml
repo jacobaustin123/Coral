@@ -1487,7 +1487,7 @@ let add_lists fn b =
         (* let (_, func_typ) = fexpr in  *)
         (* let BoxAddr(addr, _) = lookup the_state.namespace (Bind(sfdecl.sfname, func_typ)) in
         let the_state = check_defined addr ("RuntimeError: function " ^ sfdecl.sfname ^ " is not defined.") the_state in *)
-        
+
         let eval_arg aggreg e =
             let (the_state, args) = aggreg in
             let (res, the_state) = expr the_state e in
@@ -1865,6 +1865,7 @@ let add_lists fn b =
         (* update the namespace in this big section *)
         let local_names = names_of_bindlist sfdecl.slocals
         and formal_names = names_of_bindlist sfdecl.sformals in
+        
         let argc = List.length formal_names
         and argv = Array.get (L.params the_function) 0 in (* argv is first/only arg *)
         let cobj_p_arr_pt = L.pointer_type (L.array_type cobj_pt argc) in
@@ -1885,7 +1886,7 @@ let add_lists fn b =
             L.set_value_name name cobj_p;  (* cosmetic *)
             let alloca = L.build_alloca cobj_pt name fn_b in
             ignore(L.build_store cobj_p alloca fn_b);
-            BindMap.add (Bind(name,Dyn)) (BoxAddr(alloca,false)) nspace
+            BindMap.add (Bind(name, Dyn)) (BoxAddr(alloca,false)) nspace
         in
         let fn_namespace = build_binding_list (Some(fn_b)) sfdecl.slocals false in
         let fn_namespace = List.fold_left2 add_formal fn_namespace formal_names formal_vals in
