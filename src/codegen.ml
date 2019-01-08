@@ -1974,6 +1974,5 @@ let add_lists fn b =
 
   ignore(L.build_ret (L.const_int int_t 0) final_state.b);
     (* prints module *)
-  pm();
 
   the_module  (* return the resulting llvm module with all code!! *)
