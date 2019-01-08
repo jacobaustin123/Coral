@@ -7,4 +7,4 @@ def foo():
         return 4
         4 + 4
 
-foo()
+print(foo())
