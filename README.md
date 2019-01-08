@@ -422,7 +422,7 @@ These should be implemented, and we again welcome contributions to support these
 
 ### Other
 
-* Coral does not support short-circuit evaluation on and and or clauses. This can can easily be added by modifying the and operator, but we have not had the time to do so.
+* Coral does not support short-circuit evaluation for 'and' and 'or' clauses. This could easily be added by modifying the and operator, but we have not had the time to do so.
 * No multi-line comments. These are somewhat tricky to implement in the current lexing setup, but can be done.
 * Coral has a slightly different indentation-based parsing system than Python. It is significantly more lenient, and you are able to mix tabs and spaces freely (one tab is equivalent to 8 spaces - this is controlled by the tabwidth parameter).
 
