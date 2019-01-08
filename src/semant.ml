@@ -180,7 +180,7 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
   add it to the list of possible globals. this causes a dynamic
   version of it to be created so that it can be used even if that
   variable is never defined *)
-  | Var(Bind(x, t)) ->
+  | Var(Bind(x, t)) -> (* Printf.printf "[%b %b %s]\n" the_state.noeval the_state.cond x; *)
     if StringMap.mem x locals then
       if (StringMap.mem x globals) && the_state.noeval then (Dyn, SVar(x), None)
       else let (typ, t', data) = StringMap.find x locals in (t', SVar(x), data)
@@ -204,6 +204,8 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
   | Call(exp, args) ->
     let (t, e, data) = func_expr globals locals the_state exp in 
     if t <> Dyn && t <> FuncType then raise (Failure ("STypeError: cannot call objects of type " ^ type_to_string t)) else
+    let transforms = make_transforms (globals_to_list globals) in
+
     (match data with (* data is either the Func info *)
       | Some(x) -> 
         (match x with 
@@ -222,13 +224,13 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
 
             let fn_namespace = clear_explicit_types locals in
             let (fn_namespace, _, bindout, exprout) = (List.fold_left2 handle_args (globals, fn_namespace, [], []) formals args) in
-            let (fn_namespace, _, _, _) = assign fn_namespace (Dyn, (SCall (e, [], SNop), Dyn), data) name in (* add the function itself to the namespace *)
+            let (fn_namespace, _, _, _) = assign fn_namespace (Dyn, (SCall (e, (List.rev exprout), transforms), Dyn), data) name in (* add the function itself to the namespace *)
 
             let (_, types) = split_sbind bindout in (* avoid recursive calls by checking if the type has already been called. *)
-            if TypeMap.mem (x, types) the_state.stack then (Dyn, SCall(e, (List.rev exprout), SNop), None) (* if recursive, return a dynamic function *)
+            if TypeMap.mem (x, types) the_state.stack then let () = debug "recursive callstack return" in (Dyn, SCall(e, (List.rev exprout), transforms), None) (* if recursive, return a dynamic function *)
             else let stack' = TypeMap.add (x, types) true the_state.stack in (* otherwise add it to the stack *)
 
-            let (map2, block, data, locals) = (func_stmt globals fn_namespace { noeval = false; cond = false; forloop = false; stack = stack'; } body) in
+            let (map2, block, data, locals) = (func_stmt globals fn_namespace { the_state with cond = false; forloop = false; stack = stack'; } body) in
             (match data with
               | Some (typ2, e', d) -> let Bind(n1, btype) = name in if btype <> Dyn && btype <> typ2 then 
                   if typ2 <> Dyn then raise (Failure ("STypeError: invalid return type")) else 
@@ -246,7 +248,6 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
       
       | None -> (* if not the_state.noeval then Printf.eprintf "%s\n" "SWarning: called unknown/undefined function"; *)
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals the_state e' in e'' :: acc) [] args) in
-          let transforms = make_transforms (globals_to_list globals) in
           (Dyn, (SCall(e, eout, transforms)), None)
         )
 

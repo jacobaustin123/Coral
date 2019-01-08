@@ -1330,7 +1330,7 @@ let add_lists fn b =
   let rec expr the_state typed_e = 
       let (namespace,the_function) = (the_state.namespace,the_state.func) in
       let (e, ty) = typed_e in
-      match e with
+      (match e with
     | SLit lit -> let (res, the_state) = (match lit with
         | IntLit i -> (Raw(L.const_int int_t i), the_state)
         | BoolLit i -> (Raw(L.const_int bool_t (if i then 1 else 0)), the_state)
