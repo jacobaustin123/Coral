@@ -2,4 +2,4 @@
 # true: package(llvm), package(llvm.analysis)
 
 # Enable almost all compiler warnings
-true : warn(+a-4)
+true : warn(+a-4-8-27)

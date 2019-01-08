@@ -3,7 +3,7 @@
 OCB_FLAGS = -tag bin_annot -I src/getopt -I src
 OCB = ocamlbuild $(OCB_FLAGS)
 
-all: native byte 
+all: native
 
 clean:
 	$(OCB) -clean
