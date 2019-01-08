@@ -1838,8 +1838,17 @@ let add_lists fn b =
           )
           | true -> tstp "generic function return"; 
             let (data, the_state) = (match res with
-              | Box(v) -> tstp "box generic return"; (v, the_state)
-              | Raw(v) -> tstp "raw generic return"; (match (build_temp_box v ty the_state.b) with Box(v) -> (v, the_state))
+              | Box(v) -> tstp "box generic return"; 
+                  (match the_state.ret_typ with
+                    | Dyn -> (v, the_state)
+                    | _ -> let the_state = check_explicit_type the_state.ret_typ v ("RuntimeError: invalid return type (expected " ^ (string_of_typ the_state.ret_typ) ^ ")") the_state in
+                        (v, the_state))
+              | Raw(v) -> tstp "raw generic return"; 
+                  (match the_state.ret_typ with
+                    | Dyn -> (match (build_temp_box v ty the_state.b) with Box(v) -> (v, the_state))
+                    | _ -> if ty <> the_state.ret_typ then 
+                      let the_state = raise_failure ("RuntimeError: invalid return type (expected " ^ (string_of_typ the_state.ret_typ) ^ ")") the_state in (L.const_null cobj_pt, the_state)
+                      else (match (build_temp_box v ty the_state.b) with Box(v) -> (v, the_state)))
             ) in ignore(L.build_ret data the_state.b); the_state
         ) in the_state
 
@@ -1880,9 +1889,8 @@ let add_lists fn b =
           List.rev (List.fold_left (fun acc n -> (Bind(n,Dyn))::acc) [] names)
         in
         
-        let fn_state = change_state the_state (S_list([S_b(fn_b); S_func(the_function); S_generic_func(true)])) in
+        let fn_state = change_state the_state (S_list([S_b(fn_b); S_func(the_function); S_generic_func(true); S_rettyp(sfdecl.styp)])) in
 
-(* all formals should be dyns! *)
         (*let fn_namespace = build_binding_list (Some(fn_b)) (names_to_dynlist formal_names) in*)
         let add_formal (nspace, fn_state) bind cobj_p =  (* alloc a formal *)
           let Bind((name, typ)) = bind in
