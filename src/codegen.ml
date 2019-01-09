@@ -1281,7 +1281,7 @@ let add_lists fn b =
        ignore(L.build_cond_br outofbounds bad_acc_bb proceed_bb the_state.b);
 
      let err_message =
-       let info = "RuntimeError: list index out of bounds" in
+       let info = message in
          L.build_global_string info "error message" bad_acc_bd in
      let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_acc_bd in
        ignore(L.build_call printf_func [| str_format_str1; err_message |] "printf" bad_acc_bd);
@@ -1625,7 +1625,7 @@ let add_lists fn b =
       let (objptr, dataptr) = build_new_cobj clist_t the_state.b in
        let elements = List.map (fun (elem, t) -> match (transform_if_needed t elem) with Box(v) -> v) elements in
       let _ = build_new_clist dataptr elements the_state.b in
-        (Box(objptr), the_state)
+        (Box(objptr), the_state))
         
   and add_terminal the_state instr = 
       (match (L.block_terminator (L.insertion_block the_state.b)) with  

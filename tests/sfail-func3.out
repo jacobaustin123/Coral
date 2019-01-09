@@ -1,1 +1,1 @@
-STypeError: invalid type assigned to arr
+STypeError: expression of type float cannot be assigned to variable 'arr' with explicit type str

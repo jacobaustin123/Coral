@@ -1,1 +1,1 @@
-STypeError: invalid array type in for loop.
+STypeError: cannot iterate over type int in 'for' loop

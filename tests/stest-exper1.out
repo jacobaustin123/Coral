@@ -1,1 +1,1 @@
-STypeError: invalid boolean type in 'if'
+STypeError: invalid boolean type in 'if' statement (found int but expected bool)
