@@ -31,6 +31,7 @@ main
 a.out
 *.ll
 *.s
+__pycache__
 
 # IntelliJ nonsense
 .idea/*

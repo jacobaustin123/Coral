@@ -78,16 +78,17 @@ and exp map = function
     let (t1, e1, _) = expr map e in
     let (t2, e2, _) = expr map x in
     if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn 
-      then raise (Failure ("STypeError: invalid types for list access"))
+      then raise (Failure (Printf.sprintf "STypeError: invalid types (%s, %s) for list access" (type_to_string t1) (type_to_string t2)))
     else (Dyn, SListAccess(e1, e2), None)
 
-  | ListSlice(e, x1, x2) -> (* parse List Slice to determine the LHS is a list and the two RHS elements are ints if possible *)
-    let (t1, e1, _) = expr map e in
+  | ListSlice(e, x1, x2) -> raise (Failure "SNotImplementedError: List Slicing has not been implemented")
+
+    (* let (t1, e1, _) = expr map e in
     let (t2, e2, _) = expr map x1 in
     let (t3, e3, _) = expr map x2 in
     if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t3 <> Int && t3 <> Dyn 
-      then raise (Failure ("STypeError: invalid types for list access"))
-    else (Dyn, SListSlice(e1, e2, e3), None)
+      then raise (Failure ("STypeError: invalid types for list slice"))
+    else (Dyn, SListSlice(e1, e2, e3), None) *)
 
   | Var(Bind(x, t)) -> (* parse Variables, throwing an error if they are not found in the global lookup table *)
     if StringMap.mem x map then 
@@ -114,7 +115,7 @@ and exp map = function
           | Func(name, formals, body) -> (* if evaluating the expression returns a function *)
             let param_length = List.length args in
             if List.length formals <> param_length 
-            then raise (Failure ("SSyntaxError: unexpected number of arguments in function call"))
+            then raise (Failure (Printf.sprintf "SSyntaxError: unexpected number of arguments in function call (expected %d but found %d)" (List.length formals) param_length))
 
             else let rec handle_args (globals, locals, bindout, exprout) bind exp = 
                 let data = expr globals exp in 
@@ -139,7 +140,7 @@ and exp map = function
               | Some (typ2, e', d) -> (* it did return something *)
                   let Bind(n1, btype) = name in 
                   if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn 
-                  then raise (Failure ("STypeError: invalid return type")) 
+                  then raise (Failure (Printf.sprintf "STypeError: invalid return type (expected %s but found %s)" (string_of_typ btype) (string_of_typ typ2))) 
                   else let func = { styp = btype; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
                     (btype, (SCall(e, (List.rev exprout), SFunc(func))), d) 
                   else let func = { styp = typ2; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in (* case where definite return type and Dynamic inferrence still has  bind*)
@@ -147,7 +148,7 @@ and exp map = function
               
               | None -> (* function didn't return anything, null function *)
                   let Bind(n1, btype) = name in if btype <> Dyn then
-                  raise (Failure ("STypeError: invalid return type")) else 
+                  raise (Failure (Printf.sprintf "STypeError: invalid return type (expected %s but found None)" (string_of_typ btype))) else
                   let func = { styp = Null; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in
                   (Null, (SCall(e, (List.rev exprout), SFunc(func))), None))
           
@@ -180,7 +181,7 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
   add it to the list of possible globals. this causes a dynamic
   version of it to be created so that it can be used even if that
   variable is never defined *)
-  | Var(Bind(x, t)) ->
+  | Var(Bind(x, t)) -> (* Printf.printf "[%b %b %s]\n" the_state.noeval the_state.cond x; *)
     if StringMap.mem x locals then
       if (StringMap.mem x globals) && the_state.noeval then (Dyn, SVar(x), None)
       else let (typ, t', data) = StringMap.find x locals in (t', SVar(x), data)
@@ -191,26 +192,30 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
   | ListAccess(e, x) ->
     let (t1, e1, _) = func_expr globals locals the_state e in
     let (t2, e2, _) = func_expr globals locals the_state x in
-    if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn then raise (Failure ("STypeError: invalid types for list access"))
+    if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn 
+      then raise (Failure (Printf.sprintf "STypeError: invalid types (%s, %s) for list access" (type_to_string t1) (type_to_string t2)))
     else (Dyn, SListAccess(e1, e2), None)
 
-  | ListSlice(e, x1, x2) ->
-    let (t1, e1, _) = func_expr globals locals the_state e in
+  | ListSlice(e, x1, x2) -> raise (Failure "SNotImplementedError: List Slicing has not been implemented")
+    (* let (t1, e1, _) = func_expr globals locals the_state e in
     let (t2, e2, _) = func_expr globals locals the_state x1 in
     let (t3, e3, _) = func_expr globals locals the_state x2 in
-    if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t3 <> Int && t3 <> Dyn then raise (Failure ("STypeError: invalid types for list access"))
-    else (Dyn, SListSlice(e1, e2, e3), None)
+    if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t3 <> Int && t3 <> Dyn 
+      then raise (Failure ("STypeError: invalid types for list access"))
+    else (Dyn, SListSlice(e1, e2, e3), None) *)
 
   | Call(exp, args) ->
     let (t, e, data) = func_expr globals locals the_state exp in 
     if t <> Dyn && t <> FuncType then raise (Failure ("STypeError: cannot call objects of type " ^ type_to_string t)) else
+    let transforms = make_transforms (globals_to_list globals) in
+
     (match data with (* data is either the Func info *)
       | Some(x) -> 
         (match x with 
           | Func(name, formals, body) -> 
             let param_length = List.length args in
             if List.length formals <> param_length 
-            then raise (Failure ("SSyntaxError: unexpected number of arguments in function call"))
+            then raise (Failure (Printf.sprintf "SSyntaxError: unexpected number of arguments in function call (expected %d but found %d)" (List.length formals) param_length))
 
             else let handle_args (globals, locals, bindout, exprout) bind exp = 
               let data = func_expr globals locals the_state exp in 
@@ -222,23 +227,23 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
 
             let fn_namespace = clear_explicit_types locals in
             let (fn_namespace, _, bindout, exprout) = (List.fold_left2 handle_args (globals, fn_namespace, [], []) formals args) in
-            let (fn_namespace, _, _, _) = assign fn_namespace (Dyn, (SCall (e, [], SNop), Dyn), data) name in (* add the function itself to the namespace *)
+            let (fn_namespace, _, _, _) = assign fn_namespace (Dyn, (SCall (e, (List.rev exprout), transforms), Dyn), data) name in (* add the function itself to the namespace *)
 
             let (_, types) = split_sbind bindout in (* avoid recursive calls by checking if the type has already been called. *)
-            if TypeMap.mem (x, types) the_state.stack then (Dyn, SCall(e, (List.rev exprout), SNop), None) (* if recursive, return a dynamic function *)
+            if TypeMap.mem (x, types) the_state.stack then let () = debug "recursive callstack return" in (Dyn, SCall(e, (List.rev exprout), transforms), None) (* if recursive, return a dynamic function *)
             else let stack' = TypeMap.add (x, types) true the_state.stack in (* otherwise add it to the stack *)
 
-            let (map2, block, data, locals) = (func_stmt globals fn_namespace { noeval = false; cond = false; forloop = false; stack = stack'; } body) in
+            let (map2, block, data, locals) = (func_stmt globals fn_namespace { the_state with cond = false; forloop = false; stack = stack'; } body) in
             (match data with
               | Some (typ2, e', d) -> let Bind(n1, btype) = name in if btype <> Dyn && btype <> typ2 then 
-                  if typ2 <> Dyn then raise (Failure ("STypeError: invalid return type")) else 
-                  let func = { styp = btype; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in
+                  if typ2 <> Dyn then raise (Failure (Printf.sprintf "STypeError: invalid return type (expected %s but found %s)" (string_of_typ btype) (string_of_typ typ2)))
+                  else let func = { styp = btype; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in
                   (btype, (SCall(e, (List.rev exprout), SFunc(func))), d) else (* case where definite return type and Dynamic inferrence still has  bind*)
                   let func = { styp = typ2; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in
                   (typ2, (SCall(e, (List.rev exprout), SFunc(func))), d) (* TODO fix this somehow *)
               
               | None -> let Bind(n1, btype) = name in if btype <> Dyn 
-                then raise (Failure ("STypeError: invalid return type")) 
+                then raise (Failure (Printf.sprintf "STypeError: invalid return type (expected %s but found None)" (string_of_typ btype))) 
                 else let func = { styp = Null; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
                 (Null, (SCall(e, (List.rev exprout), SFunc(func))), None)) (* TODO fix this somehow *)
           
@@ -246,7 +251,6 @@ and func_exp globals locals the_state = function (* evaluate expressions, return
       
       | None -> (* if not the_state.noeval then Printf.eprintf "%s\n" "SWarning: called unknown/undefined function"; *)
           let eout = List.rev (List.fold_left (fun acc e' -> let (_, e'', _) = func_expr globals locals the_state e' in e'' :: acc) [] args) in
-          let transforms = make_transforms (globals_to_list globals) in
           (Dyn, (SCall(e, eout, transforms)), None)
         )
 
@@ -283,24 +287,24 @@ and assign map data bind =
         | Dyn -> (match t with 
           | Dyn -> let map' = StringMap.add n (Dyn, typ, data) map in (map', n, typ, Dyn) (*  *)
           | _ when t = typ -> let m' = StringMap.add n (t, t, data) map in (m', n, t, Dyn) (*  *)
-          | _ -> raise (Failure ("STypeError: invalid type assigned to " ^ n)))
+          | _ -> raise (Failure (Printf.sprintf "STypeError: expression of type %s cannot be assigned to variable '%s' with explicit type %s" (string_of_typ typ) n (string_of_typ t))))
         | _ -> (match t with
           | Dyn when t' = typ -> let m' = StringMap.add n (t', typ, data) map in (m', n, t', Dyn) (*  *)
           | _ when t = typ -> let m' = StringMap.add n (t, t, data) map in (m', n, t, Dyn) (*  *)
-          | _ -> raise (Failure ("STypeError: invalid type assigned to " ^ n)))
-        | _ -> raise (Failure ("STypeError: invalid type assigned to " ^ n))))
+          | _ -> raise (Failure (Printf.sprintf "STypeError: expression of type %s cannot be assigned to variable '%s' with explicit type %s" (string_of_typ typ) n (string_of_typ t'))))))
   else if t = typ 
   then let m' = StringMap.add n (t, t, data) map in (m', n, t, Dyn) (*  *)
   else if t = Dyn then let m' = StringMap.add n (Dyn, typ, data) map in (m', n, typ, Dyn) (*  *)
   else if typ = Dyn then let m' = StringMap.add n (t, t, data) map in (m', n, t, t) (*  *)
-  else raise (Failure ("STypeError: invalid type assigned to " ^ n))
+  else raise (Failure (Printf.sprintf "STypeError: expression of type %s cannot be assigned to variable '%s' with explicit type %s" (string_of_typ typ) n (string_of_typ t)))
+
 
 (* makes sure an array type can be assigned to a given variable. used for for loops mostly *)
 and check_array map e b = 
   let (typ, e', data) = expr map e in
   (match typ with
   | String | Arr | Dyn -> assign map (Dyn, e', data) b
-  | _ -> raise (Failure ("STypeError: invalid array type in for loop.")))
+  | _ -> raise (Failure (Printf.sprintf "STypeError: cannot iterate over type %s in 'for' loop" (string_of_typ typ))))
 
 
 (* check_func: checks an entire function. 
@@ -363,20 +367,21 @@ and func_stmt globals locals the_state = function
       | Var x :: t -> 
         let Bind (x1, t1) = x in 
         if the_state.cond && t1 <> Dyn then 
-        raise (Failure ("SSyntaxError: cannot explicitly type variables in conditional branches")) 
+        raise (Failure ("SSyntaxError: cannot explicitly type variable '" ^ x1 ^ "' while in conditional branches")) 
         else let (m', name, inferred_t, explicit_t) = assign locals data x in 
         (aux (m', SLVar (Bind (name, explicit_t)) :: lvalues, Bind(name, inferred_t) :: lcls) t)
 
       | ListAccess(e, index) :: t -> 
         let (t1, e1, _) = func_expr globals locals the_state e in
         let (t2, e2, _) = func_expr globals locals the_state index in
-        if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t1 == String then raise (Failure ("STypeError: invalid types for list assignment"))
+        if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t1 == String 
+          then raise (Failure ("STypeError: invalid types (" ^ string_of_typ t1 ^ ", " ^ string_of_typ t2 ^ ") for list assignment"))
         else (aux (m, SLListAccess (e1, e2) :: lvalues, lcls) t)
 
-      | ListSlice(e, low, high) :: t -> raise (Failure "SNotImplementedError: List slicing has not been implemented")
+      | ListSlice(e, low, high) :: t -> raise (Failure "SNotImplementedError: List Slicing has not been implemented")
 
-      | Field(a, b) :: t -> raise (Failure "NotImplementedError: Fields are not implemented")
-      | _ -> raise (Failure ("STypeError: invalid types for assignment."))
+      | Field(a, b) :: t -> raise (Failure "NotImplementedError: Fields have not been implemented")
+      | _ -> raise (Failure ("STypeError: invalid expression as left-hand side of assignment."))
      
     in let (m, lvalues, locals) = aux (locals, [], []) exprs in (m, SAsn(lvalues, e'), None, locals)
 
@@ -384,19 +389,19 @@ and func_stmt globals locals the_state = function
       let (t, e', data) = func_expr globals locals the_state e in (locals, SExpr(e'), None, [])
   
   | Func(a, b, c) ->
+    let Bind(fn_name, btype) = a in 
     let rec dups = function (* check duplicate argument names *)
       | [] -> ()
-      | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SSyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
+      | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> 
+        raise (Failure ("SSyntaxError: duplicate argument '" ^ n1 ^ "' in definition of function " ^ fn_name))
       | _ :: t -> dups t
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in 
-
-    let Bind(name, btype) = a in 
 
     (* we assign Bind(name, Dyn) because we want to allow reassignment of functions. this weakens the type inference in 
     exchange for reasonable flexibility. i.e. this allows us to do def foo(x) -> int and then def foo(x) -> float later *)
 
-    let (map', _, _, _) = assign locals (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in
-    let (semantmap, _, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in
+    let (map', _, _, _) = assign locals (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(fn_name, Dyn)) in
+    let (semantmap, _, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(fn_name, Dyn)) in
 
     let (map'', binds) = List.fold_left 
         (fun (map, out) (Bind (x, t)) -> 
@@ -411,20 +416,21 @@ and func_stmt globals locals the_state = function
     (match data with
       | Some (typ2, e', d) ->
         if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
-        raise (Failure ("STypeError: invalid return type")) 
-        else let func = { styp = btype; sfname = name; sformals = bindout; slocals = locals; sbody = block } in 
-          (map', SFunc(func), None, [Bind(name, FuncType)]) 
-        else let func = { styp = typ2; sfname = name; sformals = bindout; slocals = locals; sbody = block } in 
-        (map', SFunc(func), None, [Bind(name, FuncType)])
+          raise (Failure ("STypeError: invalid return type " ^ string_of_typ typ2 ^ " from function " ^ fn_name)) 
+        else let func = { styp = btype; sfname = fn_name; sformals = bindout; slocals = locals; sbody = block } in 
+          (map', SFunc(func), None, [Bind(fn_name, FuncType)]) 
+        else let func = { styp = typ2; sfname = fn_name; sformals = bindout; slocals = locals; sbody = block } in 
+        (map', SFunc(func), None, [Bind(fn_name, FuncType)])
 
       | None -> 
         if btype <> Dyn then 
-        raise (Failure ("STypeError: invalid return type")) else 
-        let func = { styp = Null; sfname = name; sformals = bindout; slocals = locals; sbody = block } in 
-        (map', SFunc(func), None, [Bind(name, FuncType)]))
+          raise (Failure ("STypeError: expected return type " ^ (string_of_typ btype) ^ " from function " ^ fn_name ^ " but found None")) else 
+        let func = { styp = Null; sfname = fn_name; sformals = bindout; slocals = locals; sbody = block } in 
+        (map', SFunc(func), None, [Bind(fn_name, FuncType)]))
 
   | If(a, b, c) -> let (typ, e', _) = func_expr globals locals the_state a in 
-        if typ <> Bool && typ <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
+        if typ <> Bool && typ <> Dyn 
+          then raise (Failure (Printf.sprintf "STypeError: invalid boolean type in 'if' statement (found %s but expected bool)" (string_of_typ typ)))
         else let (map', value, data, out) = func_stmt globals locals {the_state with cond = true;} b in 
         let (map'', value', data', out') = func_stmt globals locals {the_state with cond = true;} c in 
         if equals map' map'' then (map', SIf(e', value, value'), match_data data data', out) 
@@ -450,7 +456,8 @@ and func_stmt globals locals the_state = function
         func_stmt globals locals the_state a4 
 
   | While(a, b) -> let (typ, e, data) = func_expr globals locals the_state a in 
-        if typ <> Bool && typ <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
+        if typ <> Bool && typ <> Dyn 
+          then raise (Failure (Printf.sprintf "STypeError: invalid boolean type in 'while' statement (found %s but expected bool)" (string_of_typ typ)))
         else let (m', x', d, out) = func_stmt globals locals {the_state with cond = true;} b in 
         if equals locals m' then (m', SWhile(e, x'), d, out) else
         let merged = transform locals m' in 
@@ -480,35 +487,39 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
       | Var x :: t -> 
         let Bind (x1, t1) = x in 
         if the_state.cond && t1 <> Dyn then 
-        raise (Failure ("SSyntaxError: cannot explicitly type variables in conditional branches")) 
+        raise (Failure ("SSyntaxError: cannot explicitly type variable '" ^ x1 ^ "' while in conditional branches")) 
         else let (m', name, inferred_t, explicit_t) = assign m data x in 
         (aux (m', SLVar (Bind (name, explicit_t)) :: lvalues, Bind(name, inferred_t) :: locals) t)
 
       | ListAccess(e, index) :: t ->
         let (t1, e1, _) = expr map e in
         let (t2, e2, _) = expr map index in
-        if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t1 == String then raise (Failure ("STypeError: invalid types for list assignment"))
+        if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn || t1 == String 
+          then raise (Failure ("STypeError: invalid types (" ^ string_of_typ t1 ^ ", " ^ string_of_typ t2 ^ ") for list assignment"))
         else (aux (m, SLListAccess (e1, e2) :: lvalues, locals) t)
 
-      | ListSlice(e, low, high) :: t ->
-          raise (Failure "NotImplementedError: List slicing has not been implemented")
+      | ListSlice(e, low, high) :: t -> raise (Failure "SNotImplementedError: List Slicing has not been implemented")
 
-      | Field(a, b) :: t -> raise (Failure "NotImplementedError: Fields are not implemented")
-      | _ -> raise (Failure ("STypeError: invalid types for assignment."))
+      | Field(a, b) :: t -> raise (Failure "SNotImplementedError: Fields have not been implemented")
+      | _ -> raise (Failure ("STypeError: invalid expression as left-hand side of assignment."))
       
     in let (m, lvalues, locals) = aux (map, [], []) exprs in (m, SAsn(lvalues, e'), locals)
 
   | Expr(e) -> let (t, e', _) = expr map e in (map, SExpr(e'), [])
   | Block(s) -> let ((value, globals), map') = check map [] [] the_state s in (map', SBlock(value), globals)
   | Return(e) -> raise (Failure ("SSyntaxError: return statement outside of function"))
-  | Func(a, b, c) -> let rec dups = function (* check duplicate argument names *)
-      | [] -> ()
-      | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> raise (Failure ("SSyntaxError: duplicate argument '" ^ n1 ^ "' in function definition"))
-      | _ :: t -> dups t
-    in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in let Bind(name, btype) = a in 
+  | Func(a, b, c) -> 
+    let Bind(fn_name, btype) = a in
     
-    let (map', _, _, _) = assign map (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in
-    let (semantmap, _, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(name, Dyn)) in (* empty map for semantic checking *)
+    let rec dups = function (* check duplicate argument names *)
+      | [] -> ()
+      | (Bind(n1, _) :: Bind(n2, _) :: _) when n1 = n2 -> 
+          raise (Failure ("SSyntaxError: duplicate argument '" ^ n1 ^ "' in definition of function " ^ fn_name))
+      | _ :: t -> dups t
+    in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in 
+    
+    let (map', _, _, _) = assign map (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(fn_name, Dyn)) in
+    let (semantmap, _, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(fn_name, Dyn)) in (* empty map for semantic checking *)
 
     let (map'', binds) = List.fold_left 
       (fun (map, out) (Bind(x, t)) -> 
@@ -521,21 +532,22 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
       (match data with
         | Some (typ2, e', d) ->
             if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
-            raise (Failure ("STypeError: invalid return type")) else 
-            let func = { styp = btype; sfname = name; sformals = bindout; slocals = locals; sbody = block } in 
-              (map', SFunc(func), [Bind(name, FuncType)]) else
-              let func = { styp = typ2; sfname = name; sformals = bindout; slocals = locals; sbody = block } in 
-            (map', SFunc(func), [Bind(name, FuncType)])
+            raise (Failure ("STypeError: invalid return type " ^ string_of_typ typ2 ^ " from function " ^ fn_name)) else 
+            let func = { styp = btype; sfname = fn_name; sformals = bindout; slocals = locals; sbody = block } in 
+              (map', SFunc(func), [Bind(fn_name, FuncType)]) else
+              let func = { styp = typ2; sfname = fn_name; sformals = bindout; slocals = locals; sbody = block } in 
+            (map', SFunc(func), [Bind(fn_name, FuncType)])
         
         | None -> 
           if btype <> Dyn then 
-          raise (Failure ("STypeError: invalid return type")) else 
-          let func = { styp = Null; sfname = name; sformals = bindout; slocals = locals; sbody = block } in 
-          (map', SFunc(func), [Bind(name, FuncType)]))
+          raise (Failure ("STypeError: expected return type " ^ (string_of_typ btype) ^ " from function " ^ fn_name ^ " but found None")) else 
+          let func = { styp = Null; sfname = fn_name; sformals = bindout; slocals = locals; sbody = block } in 
+          (map', SFunc(func), [Bind(fn_name, FuncType)]))
 
   | If(a, b, c) -> 
     let (typ, e', _) = expr map a in 
-    if typ <> Bool && typ <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
+    if typ <> Bool && typ <> Dyn 
+      then raise (Failure (Printf.sprintf "STypeError: invalid boolean type in 'if' statement (found %s but expected bool)" (string_of_typ typ)))
     else let (map', value, out) = stmt map {the_state with cond = true;} b in 
     let (map'', value', out') = stmt map {the_state with cond = true;} c in 
     if equals map' map'' then (map', SIf(e', value, value'), out') 
@@ -563,7 +575,7 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
 
   | While(a, b) -> 
     let (t, e, _) = expr map a in 
-    if t <> Bool && t <> Dyn then raise (Failure ("STypeError: invalid boolean type in 'if'"))
+    if t <> Bool && t <> Dyn then raise (Failure (Printf.sprintf "STypeError: invalid boolean type in 'while' statement (found %s but expected bool)" (string_of_typ t)))
     else let (m', x', out) = stmt map {the_state with cond = true; }b in 
     if equals map m' then (m', SWhile(e, x'), out) 
     else let merged = transform map m' in 
@@ -578,7 +590,7 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
     (map, SNop, [])
 
   | _ as temp -> 
-    print_endline ("NotImplementedError: '" ^ (stmt_to_string temp) ^ "' semantic checking not implemented"); (map, SNop, [])
+    print_endline ("SNotImplementedError: '" ^ (stmt_to_string temp) ^ "' semantic checking not implemented"); (map, SNop, [])
 
 (* check: master function to check the entire program by iterating over the list of
 statements and returning a list of sstmts, a list of globals, and the updated map *)

@@ -81,7 +81,7 @@ and string_of_sexp = function
   | SLit(l) -> string_of_lit l
   | SVar(str) -> str
   | SUnop(o, e) -> string_of_uop o ^ string_of_sexpr e
-  | SCall(e, el, s) -> string_of_sexpr e ^ "(" ^ String.concat ", " (List.map string_of_sexpr el) ^ "):\n" ^ string_of_sstmt 0 s
+  | SCall(e, el, s) -> string_of_sexpr e ^ "(" ^ String.concat ", " (List.map string_of_sexpr el) ^ "):\n" ^ string_of_sstmt 1 s
   | SMethod(obj, m, el) -> string_of_sexpr obj ^ "." ^ m ^ "(" ^ String.concat ", " (List.map string_of_sexpr el) ^ ")"
   | SField(obj, s) -> string_of_sexpr obj ^ "." ^ s
   | SList(el, t) -> string_of_typ t ^ " list : " ^ String.concat ", " (List.map string_of_sexpr el)

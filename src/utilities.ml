@@ -1,8 +1,11 @@
 open Ast
 open Sast
 
-(* Runtime: exception type used for the interpreter *)
+(* Runtime: exception type used for the interpreter. KeyboardInterrupt: used to handle ctrl-c *)
 exception Runtime of string
+exception KeyboardInterrupt
+
+let debug str = (* Printf.eprintf "%s\n" str; *) ()
 
 (* float_of_bool: converts floats to bools, so we can hack in support for if statements. 1.0 is true, etc. *)
 let float_of_bool b = if b then 1.0 else 0.0 

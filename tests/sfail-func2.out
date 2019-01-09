@@ -1,1 +1,1 @@
-STypeError: invalid type assigned to foo
+STypeError: expression of type func cannot be assigned to variable 'foo' with explicit type str
