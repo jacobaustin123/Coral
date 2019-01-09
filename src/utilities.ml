@@ -203,18 +203,11 @@ module TypeMap = Map.Make(struct type t = stmt * typ list let compare = Pervasiv
 (* map with string keys, used for variable lookup *)
 module StringMap = Map.Make(String)
 
-(* merge: merge function used to reconcile the global lookup map after a conditional branch. *)
-let merge m1 m2 = StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge two lists while keeping type inference intact *)
-    | Some (a, b, c), Some (d, e, f) -> Some (compare_types a d, compare_types b e, compare_data c f)
-    | Some (a, b, c), None -> Some(Dyn, Dyn, c)
-    | None, Some(a, b, c) -> Some(Dyn, Dyn, c)
-    | None, None -> None
-  ) m1 m2
-
 let rec1 = ref [] (* these are used to extract Transform objects for use in codegen from merge *)
 let rec2 = ref []
 
 let binds = ref []
+let possible_globals = ref []
 
 (* transform: merge function used to reconcile the global lookup map after a conditional branch.
 extracts objects with transformed type for use in codegen. *)
@@ -226,8 +219,8 @@ let transform m1 m2 = rec1 := []; rec2 := []; binds := []; StringMap.merge (fun 
         let () = if e <> t then (rec2 := ((STransform(key, e, Dyn)) :: !rec2); binds := ((Bind(key, Dyn) :: !binds))) in
         Some (compare_types a d, compare_types b e, compare_data c f)
 
-    | Some (a, b, c), None -> let () = if b <> Dyn then (rec1 := (STransform(key, b, Dyn) :: !rec1); binds := (Bind(key, Dyn) :: !binds)) in Some(Dyn, Dyn, c)
-    | None, Some(a, b, c) -> let () = if b <> Dyn then (rec2 := (STransform(key, b, Dyn) :: !rec2); binds := (Bind(key, Dyn) :: !binds)) in Some(Dyn, Dyn, c)
+    | Some (a, b, c), None -> let () = if b <> Dyn then (rec1 := (STransform(key, b, Dyn) :: !rec1); binds := (Bind(key, Dyn) :: !binds)) in Some(Dyn, Dyn, None)
+    | None, Some(a, b, c) -> let () = if b <> Dyn then (rec2 := (STransform(key, b, Dyn) :: !rec2); binds := (Bind(key, Dyn) :: !binds)) in Some(Dyn, Dyn, None)
     | None, None -> None
   ) m1 m2
 
@@ -245,9 +238,28 @@ let from_sblock block = match block with
 (* check if two maps are equal *)
 let equals m1 m2 = (StringMap.equal (fun x y -> (compare x y) = 0) m1 m2) (* check if two maps are equal *)
 
+(* flag passed around semant holding information about the current environment *)
 type flag = {
   stack : bool TypeMap.t;
   noeval : bool; (* in a SFunc doing a generic analysis *)
   cond : bool; (* in a conditional branch? *)
   forloop : bool; (* in a for loop? *)
 }
+
+(* make a list of binds all dynamic *)
+let make_dynamic bindlist = List.map (fun (Bind(name, typ)) -> Bind(name, Dyn)) bindlist
+
+(* convert a lookup table to a list of binds with the name and inferred type. used to handle
+calling weakly defined functions. when this occurs, we don't know what types globals will be,
+so we have to assume they are dynamic and convert them to dynamic types *)
+
+let globals_to_list globals = 
+  let current = StringMap.bindings globals in
+  let bindings = List.map (fun (name, (_, typ, _)) -> Bind(name, typ)) current in
+  bindings
+
+let make_transforms globals = 
+  possible_globals := (make_dynamic globals) @ !possible_globals;
+  let entry = List.map (fun (Bind(name, typ)) -> STransform(name, typ, Dyn)) globals in
+  let exit = List.map (fun (Bind(name, typ)) -> STransform(name, Dyn, typ)) globals in
+  SBlock(SBlock(entry) :: [SBlock(exit)])

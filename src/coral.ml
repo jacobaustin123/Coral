@@ -1,7 +1,11 @@
 open Ast
 open Sast
 open Utilities
-open Interpret
+
+(* coral.ml: the main compiler file for the Coral Programming Language. coral.ml handles command line
+parsing, generating and interpretering the compiler and interpreter, handling tab-based indentation, 
+parsing import statements, launching the lexer, parser, semantic checker, and code generation programs,
+and handling errors that might arise. *)
 
 let () = Sys.set_signal Sys.sigint
   (Sys.Signal_handle 
@@ -191,6 +195,34 @@ let rec strip_stmt = function
 
 and strip_print ast = List.rev (List.fold_left (fun acc x -> (strip_stmt x) :: acc) [] ast)
 
+(* strip_return: no LLVM statement can occur in a basic block which has already returned.
+this utility makes sure there are no statements in any given block after a return statement has
+already occured. the most common occurence of this is when STransforms are inserted *)
+
+let rec strip_return_stmt = function 
+  | SIf(a, b, c) -> SIf(strip_return_expr a, strip_return_stmt b, strip_return_stmt c)
+  | SWhile(a, b) -> SWhile(strip_return_expr a, strip_return_stmt b)
+  | SFor(a, b, c) -> SFor(a, strip_return_expr b, strip_return_stmt c)
+  | SBlock(x) -> SBlock(strip_return [] x)
+  | SFunc({ styp; sfname; sformals; slocals; sbody }) -> SFunc({ styp; sfname; sformals; slocals; sbody = strip_return_stmt sbody; })
+  | SExpr(e) -> SExpr(strip_return_expr e)
+  | SReturn(e) -> SReturn(strip_return_expr e)
+  | SAsn(a, e) -> SAsn(a, strip_return_expr e)
+  | SPrint(e) -> SPrint(strip_return_expr e)
+  | SClass(a, b) -> SClass(a, strip_return_stmt b)
+  | _ as x -> x
+
+and strip_return_expr sexpr = let (e, t) = sexpr in 
+  let e' = (match e with
+  | SCall(e, el, s) -> SCall(e, el, strip_return_stmt s)
+  | _ as x -> x) in
+  (e', t)
+
+and strip_return out = function
+  | [] -> List.rev out
+  | SReturn e :: t -> List.rev ((strip_return_stmt (SReturn e)) :: out)
+  | a :: t -> strip_return ((strip_return_stmt a) :: out) t
+
 (* codegen: command to run codegen to a generated sast, save it to a file (source.ll), compile and
 evaluate it, and return the output *)
 
@@ -200,18 +232,18 @@ let codegen sast fname =
     let m = Codegen.translate sast !exceptions in
     Llvm_analysis.assert_valid_module m;
 
-    let llvm_name = (match String.length !executable_name with
+    let llvm_name = (match String.length !executable_name with (* get the name of the generated llvm file *)
       | 0 -> fname ^ ".ll"
       | _ -> !executable_name ^ ".ll") in
 
     let oc = open_out llvm_name in
     Printf.fprintf oc "%s\n" (Llvm.string_of_llmodule m); close_out oc;
 
-    let assembly_name = (match String.length !executable_name with
+    let assembly_name = (match String.length !executable_name with (* get the name of the generated assembly file *)
       | 0 -> fname ^ ".s"
       | _ -> !executable_name ^ ".s") in
 
-    let executable_name = (match String.length !executable_name with
+    let executable_name = (match String.length !executable_name with (* get the name of the generated executable file *)
       | 0 -> "a.out"
       | _ -> !executable_name) in
     
@@ -239,7 +271,9 @@ let is_empty tokens = match tokens with
   | Parser.NOP :: [Parser.EOL] -> true
   | _ -> false
 
-let block = ref false
+let block = ref false (* flag to see if we're in a block. used for the REPL handling *)
+
+(* from console: launches the interpreter, lexes and parses the input, performs code genration *)
 
 let rec from_console map past run = 
   try 
@@ -272,6 +306,8 @@ let rec from_console map past run =
     let imported_program = parse_imports program in
 
     let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; stack = TypeMap.empty; } imported_program) in (* temporarily here to check validity of SAST *)
+    let (sast, globals) = sast in
+    let sast = (strip_return [] sast, globals) in 
     let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
     
     if run then
@@ -298,6 +334,8 @@ let rec from_file map fname run = (* todo combine with loop *)
     let imported_program = parse_imports program in
 
     let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; stack = TypeMap.empty; } imported_program) in (* temporarily here to check validity of SAST *)
+    let (sast, globals) = sast in
+    let sast = (strip_return [] sast, globals) in 
     let () = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)
     let () = Sys.chdir original_path in
 
