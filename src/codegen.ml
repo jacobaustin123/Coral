@@ -255,6 +255,51 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     (objptr, datafieldptr, ctypefieldptr)
   in
 
+  (* builds a new clist given the dataptr of a preexisting cobj and an OCaml list of pointers to the elements to be stored *)
+  let build_new_clist dataptr_of_cobj elm_pts builder =
+    (* len *)
+    let length = List.length elm_pts in
+    let len = L.const_int int_t length in
+
+    (* cap *)
+    let capacity = length in (* max length initial_list_size *)
+    let cap = L.const_int int_t capacity in
+
+    (* dataptr: mallocs empty CObj array *)
+    let dataptr = L.build_malloc (L.array_type cobj_pt capacity) "__new_dataptr" builder in
+    let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" builder in
+
+    (* elm_pts must be list of cobj* *)
+    let elm_pts_as_cobjptrs = List.map (fun e ->
+      let elm_pt_as_cobjptr = L.build_bitcast e cobj_pt "elm_ptr_as_cobjptr" builder
+      in elm_pt_as_cobjptr) elm_pts in
+
+    (* null pointers to fill empty capacity *)
+    let elms_w_nulls = if List.length elm_pts_as_cobjptrs < capacity
+      then elm_pts_as_cobjptrs @ (Array.to_list (Array.make (capacity - List.length elm_pts) (L.const_pointer_null cobj_pt)))
+      else elm_pts_as_cobjptrs in
+
+    (* stores the data *)
+    let store_elms elm idx =
+      let gep_addr = L.build_gep dataptr [|L.const_int int_t 0; L.const_int int_t idx|] "__elem_ptr" builder in
+      ignore(L.build_store elm gep_addr builder); ()
+    in
+    ignore(List.iter2 store_elms elms_w_nulls (seq capacity));
+
+    (* store dataptr the struct *)
+    let datafieldptr = L.build_struct_gep dataptr_of_cobj clist_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
+    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in
+    ignore(L.build_store dataptr_as_i8ptr datafieldptr_as_i8ptrptr builder);
+
+    (* store len in the struct *)
+    let lenfieldptr = L.build_struct_gep dataptr_of_cobj clist_len_idx "lenfieldptr" builder in  (* lenfieldptr: i32* *)
+    ignore(L.build_store len lenfieldptr builder);
+
+    (* store cap in the struct *)
+    let capfieldptr = L.build_struct_gep dataptr_of_cobj clist_cap_idx "capfieldptr" builder in  (* capfieldptr: i32* *)
+    ignore(L.build_store cap capfieldptr builder);
+  in
+
   (* builds a new clist with a pointer to an existing array of cobj pointers. used for adding lists *)
   let build_new_clist_init dataptr_of_cobj listptr_as_i8ptr length builder =
     let len = length in
@@ -711,49 +756,17 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       objptr
   in
 
-  (* builds a new clist given the dataptr of a preexisting cobj and an OCaml list of pointers to the elements to be stored *)
-  let build_new_clist dataptr_of_cobj elm_pts builder =
-    (* len *)
-    let length = List.length elm_pts in
-    let len = L.const_int int_t length in
+  let build_sidx self_p other_p name b =
+     (* get elememnt *)
+     let gep_addr = L.build_struct_gep self_p clist_data_idx "__gep_addr" b in
+     let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (L.pointer_type (L.pointer_type cobj_pt)) "__gep_addr_as_cobjptrptrptr" b in
+     let gep_addr_as_cobjptrptr = L.build_load gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
+     let gep_addr_as_cobjptrptr = L.build_gep gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
+     let cobjptr = L.build_load gep_addr_as_cobjptrptr "__cobjptr" b in
 
-    (* cap *)
-    let capacity = length in (* max length initial_list_size *)
-    let cap = L.const_int int_t capacity in
-
-    (* dataptr: mallocs empty CObj array *)
-    let dataptr = L.build_malloc (L.array_type cobj_pt capacity) "__new_dataptr" builder in
-    let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" builder in
-
-    (* elm_pts must be list of cobj* *)
-    let elm_pts_as_cobjptrs = List.map (fun e ->
-      let elm_pt_as_cobjptr = L.build_bitcast e cobj_pt "elm_ptr_as_cobjptr" builder
-      in elm_pt_as_cobjptr) elm_pts in
-
-    (* null pointers to fill empty capacity *)
-    let elms_w_nulls = if List.length elm_pts_as_cobjptrs < capacity
-      then elm_pts_as_cobjptrs @ (Array.to_list (Array.make (capacity - List.length elm_pts) (L.const_pointer_null cobj_pt)))
-      else elm_pts_as_cobjptrs in
-
-    (* stores the data *)
-    let store_elms elm idx =
-      let gep_addr = L.build_gep dataptr [|L.const_int int_t 0; L.const_int int_t idx|] "__elem_ptr" builder in
-      ignore(L.build_store elm gep_addr builder); ()
-    in
-    ignore(List.iter2 store_elms elms_w_nulls (seq capacity));
-
-    (* store dataptr the struct *)
-    let datafieldptr = L.build_struct_gep dataptr_of_cobj clist_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
-    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in
-    ignore(L.build_store dataptr_as_i8ptr datafieldptr_as_i8ptrptr builder);
-
-    (* store len in the struct *)
-    let lenfieldptr = L.build_struct_gep dataptr_of_cobj clist_len_idx "lenfieldptr" builder in  (* lenfieldptr: i32* *)
-    ignore(L.build_store len lenfieldptr builder);
-
-    (* store cap in the struct *)
-    let capfieldptr = L.build_struct_gep dataptr_of_cobj clist_cap_idx "capfieldptr" builder in  (* capfieldptr: i32* *)
-    ignore(L.build_store cap capfieldptr builder);
+     let (objptr, dataptr) = build_new_cobj cstring_t b in
+     let _ = build_new_clist dataptr [cobjptr] b in
+     objptr
   in
 
   let add_lists self_data other_data b =
@@ -821,14 +834,23 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   (* creates the ctype functions for all standard (not-special functions *)
   List.iter (fun (t, bops) -> List.iter (function
     | BOprt(fn, o) -> (match fn with
-      | "idx" | "idx_parent" -> (match o with
-        | Some(((fn, bd), tfn)) ->
-          let (tf, tp) = tfn in
-          let (self_data, other_data) = boilerplate_idxop fn bd in
-          let result_data = tf self_data other_data "result_data" bd in
-          let result = result_data in
-          ignore(L.build_ret result bd)
-        | None -> ())
+      | "idx" | "idx_parent" -> (match t with
+        | "string" -> (match o with
+          | Some(((fn, bd), tfn)) ->
+            let (tf, tp) = tfn in
+            let (self_data, other_data) = boilerplate_idxop fn bd in
+            let result_data = build_sidx self_data other_data "result_data" bd in
+            let result = result_data in
+            ignore(L.build_ret result bd)
+          | None -> ())
+        | _ -> (match o with
+          | Some(((fn, bd), tfn)) ->
+            let (tf, tp) = tfn in
+            let (self_data, other_data) = boilerplate_idxop fn bd in
+            let result_data = tf self_data other_data "result_data" bd in
+            let result = result_data in
+            ignore(L.build_ret result bd)
+          | None -> ()))
       | "add" -> (match t with
         | "list" -> (match o with
           | Some(((fn, bd), tfn)) ->
