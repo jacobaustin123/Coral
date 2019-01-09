@@ -51,28 +51,20 @@ let seq len =
   in aux (len - 1) []
 
 type binop_builder = ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)
-type listop_builder = ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)
+type call_builder = ((L.llvalue -> L.llvalue array -> string -> L.llbuilder -> L.llvalue) * L.lltype)
 type unop_builder = ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)
+
 (* operator generation! *)
 type oprt =
   | Oprt of
-      string * binop_builder option * binop_builder option * binop_builder option * binop_builder option * binop_builder option * binop_builder option
+      string * binop_builder option * binop_builder option * binop_builder option * binop_builder option * binop_builder option * binop_builder option * binop_builder option
+  | Coprt of
+      string * call_builder option * call_builder option * call_builder option * call_builder option * call_builder option * call_builder option * call_builder option
   | Uoprt of
-      string * unop_builder option * unop_builder option * unop_builder option * unop_builder option * unop_builder option * unop_builder option
-  | Loprt of
-      string * listop_builder option * listop_builder option * listop_builder option * listop_builder option * listop_builder option * listop_builder option
+      string * unop_builder option * unop_builder option * unop_builder option * unop_builder option * unop_builder option * unop_builder option * unop_builder option
 
 (* operators after they've been built *)
 type built_oprt =
   | BOprt of string * (((L.llvalue * L.llbuilder) * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)) option)
+  | BCoprt of string * (((L.llvalue * L.llbuilder) * ((L.llvalue -> L.llvalue array -> string -> L.llbuilder -> L.llvalue) * L.lltype)) option)
   | BUoprt of string * (((L.llvalue * L.llbuilder) * ((L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)) option)
-  | BLoprt of string * (((L.llvalue * L.llbuilder) * ((L.llvalue -> L.llvalue -> string -> L.llbuilder -> L.llvalue) * L.lltype)) option)
-
-
-type special_ctype_fn = FPrint | FHeapify | FCall | FAdd
-
-let string_of_special_ctype_fn = function
-    | FPrint -> "print"
-    | FHeapify -> "heapify"
-    | FCall -> "call"
-    | FAdd -> "add"
