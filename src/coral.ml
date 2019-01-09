@@ -197,7 +197,9 @@ and strip_print ast = List.rev (List.fold_left (fun acc x -> (strip_stmt x) :: a
 
 (* strip_return: no LLVM statement can occur in a basic block which has already returned.
 this utility makes sure there are no statements in any given block after a return statement has
-already occured. the most common occurence of this is when STransforms are inserted *)
+already occured. the most common occurence of this is when STransforms are inserted. 
+
+This also handles printing the types of expressions. *)
 
 let rec strip_return_stmt = function 
   | SIf(a, b, c) -> SIf(strip_return_expr a, strip_return_stmt b, strip_return_stmt c)
@@ -210,6 +212,8 @@ let rec strip_return_stmt = function
   | SAsn(a, e) -> SAsn(a, strip_return_expr e)
   | SPrint(e) -> SPrint(strip_return_expr e)
   | SClass(a, b) -> SClass(a, strip_return_stmt b)
+  | SStage(a, b, c) -> SStage(strip_return_stmt a, strip_return_stmt b, strip_return_stmt c)
+  | SType(e) -> let (e', typ) = e in print_endline (string_of_typ typ); let _ = strip_return_expr e in SNop
   | _ as x -> x
 
 and strip_return_expr sexpr = let (e, t) = sexpr in 

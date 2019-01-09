@@ -363,6 +363,18 @@ SNameError: name 'x' is not defined
 
 Coral does not have classes, structs, or any kind of object oriented programming model. These could easily be added using the same model as lists, but they have not been so far.
 
+### No Casting
+
+For no particular reason, Coral does not support casting between types. That means there is no int, float, bool, or str keyword to convert between types explicitly. Likewise, you cannot perform arithmetic operations that mix types, as in 
+
+```python
+x = 3
+y = 4.0
+print(x + y)
+```
+
+This is an important feature, and will hopefully be added soon.
+
 ### Unsupported Keywords
 
 Coral does not support several common Python keywords, including:

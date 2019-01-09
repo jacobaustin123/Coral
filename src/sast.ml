@@ -60,7 +60,9 @@ and sstmt = (* this can be refactored using Blocks, but I haven't quite figured 
   | SClass of bind * sstmt (* not implemented *)
   | SAsn of lvalue list * sexpr (* x : int = sexpr, (Bind(x, int), sexpr) *)
   | STransform of string * typ * typ 
+  | SStage of sstmt * sstmt * sstmt (* entry, body, exit *)
   | SPrint of sexpr
+  | SType of sexpr
   | SNop
 
 and lvalue = 
@@ -100,6 +102,7 @@ and string_of_sstmt depth = function
   | SClass(b, s) -> "class " ^ string_of_sbind b ^ ":\n" ^ string_of_sstmt depth s
   | SAsn(lvalues, e) -> String.concat ", " (List.map string_of_lvalue lvalues) ^ " = "  ^ string_of_sexpr e
   | STransform(s, t1, t2) -> "transform " ^ s ^ ": " ^ string_of_typ t1 ^ " -> " ^ string_of_typ t2
+  | SStage(s1, s2, s3) -> "entry: " ^ string_of_sstmt depth s1 ^ " body: " ^ string_of_sstmt depth s2 ^ " exit: " ^ string_of_sstmt depth s3
   | SPrint(e) -> "print(" ^ string_of_sexpr e ^ ")"
   | SNop -> ""
 

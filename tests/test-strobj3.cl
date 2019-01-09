@@ -1,7 +1,9 @@
-s = "hello"
-x = "c"
+def foo(x : str):
+    return x
 
-if False:
-	s = 1.0
+temp = "hi"
+for i in temp:
+    x = i
 
-s[0] = x
+print(foo(x))
+print(foo(i))
