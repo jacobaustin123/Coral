@@ -1,5 +1,5 @@
 def reverse(x : str) -> str:
- 	out = []
+ 	out = ""
  	for i in x:
 		out = i + out
  	return out

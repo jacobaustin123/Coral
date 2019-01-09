@@ -711,7 +711,9 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       objptr
   in
 
-  (* builds a new clist given the dataptr of a preexisting cobj and an OCaml list of pointers to the elements to be stored *)
+  (* builds a new clist given the dataptr of a preexisting cobj and an OCaml list of 
+  pointers to the elements to be stored *)
+
   let build_new_clist dataptr_of_cobj elm_pts builder =
     (* len *)
     let length = List.length elm_pts in
@@ -756,6 +758,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     ignore(L.build_store cap capfieldptr builder);
   in
 
+  (* body of the add function for lists and strings *)
   let add_lists self_data other_data b =
     let self_ln = build_getlen_clist self_data b in
     let other_ln = build_getlen_clist other_data b in
@@ -818,17 +821,50 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     (builder, newobjptr)
   in
 
+  let build_string_idx self_p other_p name b =
+     (* get elememnt *)
+     let gep_addr = L.build_struct_gep self_p clist_data_idx "__gep_addr" b in
+     let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (L.pointer_type (L.pointer_type cobj_pt)) "__gep_addr_as_cobjptrptrptr" b in
+     let gep_addr_as_cobjptrptr = L.build_load gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
+     let gep_addr_as_cobjptrptr = L.build_gep gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
+     let cobjptr = L.build_load gep_addr_as_cobjptrptr "__cobjptr" b in
+    
+     let (objptr, dataptr) = build_new_cobj cstring_t b in 
+     let _ = build_new_clist dataptr [cobjptr] b in
+     objptr
+  in
+
   (* creates the ctype functions for all standard (not-special functions *)
   List.iter (fun (t, bops) -> List.iter (function
     | BOprt(fn, o) -> (match fn with
-      | "idx" | "idx_parent" -> (match o with
-        | Some(((fn, bd), tfn)) ->
-          let (tf, tp) = tfn in
-          let (self_data, other_data) = boilerplate_idxop fn bd in
-          let result_data = tf self_data other_data "result_data" bd in
-          let result = result_data in
-          ignore(L.build_ret result bd)
-        | None -> ())
+      | "idx" -> (match t with
+        | "string" -> (match o with
+          | Some(((fn, bd), tfn)) ->
+            let (tf, tp) = tfn in
+            let (self_data, other_data) = boilerplate_idxop fn bd in
+            let result_data = build_string_idx self_data other_data "result_data" bd in
+            let result = result_data in
+            ignore(L.build_ret result bd)
+          | None -> ())
+        | _ -> (match o with
+          | Some(((fn, bd), tfn)) ->
+            let (tf, tp) = tfn in
+            let (self_data, other_data) = boilerplate_idxop fn bd in
+            let result_data = tf self_data other_data "result_data" bd in
+            let result = result_data in
+            ignore(L.build_ret result bd)
+          | None -> ())
+        )
+
+      | "idx_parent" -> (match o with
+          | Some(((fn, bd), tfn)) ->
+            let (tf, tp) = tfn in
+            let (self_data, other_data) = boilerplate_idxop fn bd in
+            let result_data = tf self_data other_data "result_data" bd in
+            let result = result_data in
+            ignore(L.build_ret result bd)
+          | None -> ())
+
       | "add" -> (match t with
         | "list" -> (match o with
           | Some(((fn, bd), tfn)) ->
@@ -1692,31 +1728,48 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         let merge_state = change_state the_state (S_b(L.builder_at_end context merge_bb)) in 
         merge_state
 
-      | SFor(var, lst, body) ->
-         (* initialize list index variable and list length *)
+      | SFor(var, lst, body) -> (* initialize list index variable and list length *)
          let (Box(objptr), the_state) = expr the_state lst in  (* TODO update box if needed *)
          let listptr = build_getlist_cobj objptr the_state.b in
-         let nptr = L.build_alloca int_t "nptr" the_state.b in
-           ignore(L.build_store (L.const_int int_t (0)) nptr the_state.b);
-         let n = L.build_load nptr "n" the_state.b in
+         (* let nptr = L.build_alloca int_t "nptr" the_state.b in *)
+          (* ignore(L.build_store (L.const_int int_t (0)) nptr the_state.b); *)
+         let (idxptr, nptr) = build_new_cobj int_t the_state.b in
+         ignore(L.build_store (L.const_int int_t 0) nptr the_state.b);
+         (* let n = build_getdata_cobj int_t idxptr the_state.b in *)
+
+         (* ignore(L.build_call printf_func [| int_format_str ; n|] "printf" the_state.b); *)
+
+         (* let nptr = build_new_cobj_init int_t (L.const_int int_t 0) the_state.b in  *)
+         (* let n = build_getdata_cobj int_t nptr the_state.b in pm(); *)
+
+         (* let n = L.build_load nptr "n" the_state.b in *)
          let ln = build_getlen_clist listptr the_state.b in
+         (* ignore(L.build_call printf_func [| int_format_str ; ln|] "printf" the_state.b); *)
 
          (* iter block *)
          let iter_bb = L.append_block context "iter" the_function in
            ignore(L.build_br iter_bb the_state.b);
 
          let iter_builder = L.builder_at_end context iter_bb in
+         (* let n = build_getdata_cobj int_t nptr iter_builder in  *)
+
          let n = L.build_load nptr "n" iter_builder in
          let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
-           ignore(L.build_store nnext nptr iter_builder);
 
          let iter_complete = (L.build_icmp L.Icmp.Sge) n ln "iter_complete" iter_builder in (* true if n exceeds list length *)
 
          (* body of for loop *)
          let body_bb = L.append_block context "for_body" the_function in
          let body_builder = L.builder_at_end context body_bb in
+        
+         let fn_p = build_getctypefn_cobj ctype_idx_idx objptr body_builder in
+         let elmptr = L.build_call fn_p [|objptr; idxptr|] "idx_cob" body_builder in
 
-         let elmptr = build_idx listptr n "binop_result" body_builder in
+         (* let n = build_getdata_cobj int_t idxptr body_builder in  *)
+         (* L.dump_value n;  *)
+        ignore(L.build_store nnext nptr body_builder);
+
+         (* let elmptr = build_idx listptr n "binop_result" body_builder in *)
          let the_state = change_state the_state (S_b(body_builder)) in
 
          let Bind(name, explicit_t) = var in 
@@ -1877,7 +1930,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
          and RawAddr(raw_addr) = lookup the_state.namespace (Bind(name, raw_ty)) in
 
         let rawval = L.build_load raw_addr "__load_raw" the_state.b in
-         let tempobj = build_new_cobj_init (ltyp_of_typ raw_ty) rawval the_state.b in
+        let tempobj = build_new_cobj_init (ltyp_of_typ raw_ty) rawval the_state.b in
 (*       
          (* gep for direct pointers to the type and data fields of box *)
          let cobj_addr = L.build_load box_addr "load_cobj" the_state.b in
