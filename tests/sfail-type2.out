@@ -1,1 +1,1 @@
-STypeError: invalid type assigned to x
+STypeError: expression of type int cannot be assigned to variable 'x' with explicit type float
