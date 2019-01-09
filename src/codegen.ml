@@ -232,14 +232,6 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     capacity
   in
 
-  let build_getctypefn_cobj ctype_fn_idx cobj_p b =
-    let x2 = L.build_struct_gep cobj_p cobj_type_idx "x2" b in
-    let x3 = L.build_load x2 "x3" b in  (* x3: ctype_pt *)
-    let x4 = L.build_struct_gep x3 ctype_fn_idx "x4" b in
-    let fn_ptr = L.build_load x4 "fn_ptr" b in
-    fn_ptr
-  in
-
   let build_fnptr_of_cfo cobj_p b =
     let x2 = L.build_struct_gep cobj_p cobj_data_idx "x2" b in
     let x3 = L.build_load x2 "x3" b in
@@ -319,7 +311,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     (self_data)
   in
 
-  let boilerplate_lop binop fn b =
+  let boilerplate_lop fn b =
     let formals_llvalues = (Array.to_list (L.params fn)) in
     let [ remote_self_p; remote_other_p ] = formals_llvalues in
 
@@ -333,7 +325,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     (self_data, other_data)
   in
 
-  let boilerplate_idxop data_type fn b =
+  let boilerplate_idxop fn b =
       (* TODO: throw error if array bounds exceeded *)
     let formals_llvalues = Array.to_list (L.params fn) in
     let [ remote_self_p; remote_other_p ] = formals_llvalues in
@@ -552,7 +544,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   	 let typs = ["int"; "float"; "bool"; "char"; "list"; "string"; "func"] in
 
   	 let ops = [
-  	   Oprt("add", Some((L.build_add), int_t), Some((L.build_fadd), float_t), None, None, Some((L.build_add), cobj_pt), Some((L.build_add), cobj_pt), None);
+  	   Oprt("add", Some((L.build_add), int_t), Some((L.build_fadd), float_t), None, None, Some((L.build_add), clist_t), Some((L.build_add), cstring_t), None);
        Oprt("sub", Some((L.build_sub), int_t), Some((L.build_fsub), float_t), None, None, None, None, None);
        Oprt("mul", Some((L.build_mul), int_t), Some((L.build_fmul), float_t), None, None, None, None, None);
        Oprt("div", Some((L.build_sdiv), int_t), Some((L.build_fdiv), float_t), None, None, None, None, None);
@@ -832,7 +824,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       | "idx" | "idx_parent" -> (match o with
         | Some(((fn, bd), tfn)) ->
           let (tf, tp) = tfn in
-          let (self_data, other_data) = boilerplate_idxop (get_t t) fn bd in
+          let (self_data, other_data) = boilerplate_idxop fn bd in
           let result_data = tf self_data other_data "result_data" bd in
           let result = result_data in
           ignore(L.build_ret result bd)
@@ -841,7 +833,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         | "list" -> (match o with
           | Some(((fn, bd), tfn)) ->
             let (tf, tp) = tfn in
-            let (self_data, other_data) = boilerplate_lop (get_t t) fn bd in
+            let (self_data, other_data) = boilerplate_lop fn bd in
             let (newbuilder, result_data) = build_ladd self_data other_data "result_data" bd in
             let result = result_data in
             ignore(L.build_ret result newbuilder)
@@ -849,7 +841,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         | "string" -> (match o with
           | Some(((fn, bd), tfn)) ->
             let (tf, tp) = tfn in
-            let (self_data, other_data) = boilerplate_lop (get_t t) fn bd in
+            let (self_data, other_data) = boilerplate_lop fn bd in
             let (newbuilder, result_data) = build_sadd self_data other_data "result_data" bd in
             let result = result_data in
             ignore(L.build_ret result newbuilder)
@@ -913,8 +905,6 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       | Int -> int_t
       | Float -> float_t
       | Bool -> bool_t
-      | String -> cstring_t
-      | Arr -> clist_t
       | _ -> cobj_pt
   in
 
@@ -1622,7 +1612,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
       | SNop -> the_state
 
-      | SPrint e -> 
+      | SPrint e ->
             let (_, t) = e in
             let (res, the_state) = expr the_state e in
             (match res with
@@ -1632,7 +1622,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
                     | Bool -> ignore(L.build_call printf_func [| int_format_str ; v |] "printf" the_state.b);  the_state
                     | _ -> ignore(L.build_call printf_func [| string_format_str ; v |] "printf" the_state.b);  the_state
                 )
-                | Box(v) -> tstp "box print"; 
+                | Box(v) -> tstp "box print";
                     (* let the_state = check_explicit_type String v ("RuntimeError: invalid char type in print (reset this later)") the_state in *)
                     (*let cobjptr = L.build_alloca cobj_t "tmp" b in
                     ignore(L.build_store v cobjptr b);*)
@@ -1872,7 +1862,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
   let final_state = stmt init_state (SBlock(fst prgm)) in
 
-  ignore(L.build_ret (L.const_int int_t 0) final_state.b); pm();
+  ignore(L.build_ret (L.const_int int_t 0) final_state.b);
     (* prints module *)
 
   the_module  (* return the resulting llvm module with all code!! *)
