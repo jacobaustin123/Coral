@@ -1,1 +1,1 @@
-STypeError: invalid types for list assignment
+RuntimeError: unsupported operand type(s) for list access

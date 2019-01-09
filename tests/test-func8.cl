@@ -1,13 +1,12 @@
 def foo():
-	if x == 3:
-		return 3.0
+    if x == 3:
+	return 3.0
 
-	else:
-		return 4
+    else:
+	return 4
 
 def bar(x):
-	return x + 4.0
-
+    return x + 4.0
 
 x = 3
 

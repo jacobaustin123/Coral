@@ -1,1 +1,1 @@
-STypeError: invalid types for list assignment
+STypeError: invalid types (str, int) for list assignment

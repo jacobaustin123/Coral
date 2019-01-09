@@ -1022,7 +1022,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   in
   let lookup_global_binding bind =   (*pbind bind;*)
     try BindMap.find bind globals_map
-    with Not_found -> tstp "Not found in globals:"; pbind bind; BindMap.find bind globals_map (* reraise error *)
+    with Not_found -> tstp (string_of_bind bind ^ " not found in globals:"); pbind bind; BindMap.find bind globals_map (* reraise error *)
   in
 
   (** setup main() where all the code will go **)
@@ -1468,13 +1468,15 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         let arg_types = List.map (fun (Bind(_, ty), _) -> ty) binds in
         let arg_lltypes = List.map ltyp_of_typ arg_types in (* arg inferred types *)
 
-
         let (the_state, arg_dataunits) = List.fold_left eval_arg (the_state, []) (List.rev arg_expr_list) in
         let unwrap_if_raw (the_state, out) (box, (Bind(name, _), tp_lhs)) = (match (box, tp_lhs) with  (* maybe will crash, who knows. trying to get Dyn to work. *)
             | Raw(v), _ -> (the_state, v :: out)
             | Box(v), Dyn -> (the_state, v :: out)
-            | Box(v), _ -> let the_state = check_explicit_type tp_lhs v ("RuntimeError: invalid type assigned to " ^ name) the_state in 
-                let data = build_getdata_cobj (ltyp_of_typ tp_lhs) v the_state.b in (the_state, data :: out)
+            | Box(v), typ -> let the_state = check_explicit_type tp_lhs v ("RuntimeError: invalid type assigned to " ^ name) the_state in 
+                (match typ with 
+                  | FuncType | Arr | String -> (the_state, v :: out)
+                  | _ -> let data = build_getdata_cobj (ltyp_of_typ tp_lhs) v the_state.b in (the_state, data :: out)
+                )
           )
 
         in let (the_state, arg_vals) = List.fold_left unwrap_if_raw (the_state, []) (List.combine arg_dataunits binds) in
@@ -1658,6 +1660,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         the_state
 
       | SNop -> the_state
+      | SType e -> the_state
 
       | SPrint e ->
             let (_, t) = e in
@@ -1773,6 +1776,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
          let the_state = change_state the_state (S_b(body_builder)) in
 
          let Bind(name, explicit_t) = var in 
+        
          let the_state = (match (lookup namespace var) with (*assignment so ok to throw away the needs_update bool*)
               | BoxAddr(var_addr, _) -> ignore(L.build_store elmptr var_addr the_state.b); the_state
               | RawAddr(var_addr) -> 
@@ -1900,6 +1904,11 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         let fn_state = add_terminal (stmt fn_state sfdecl.sbody) build_return in
         let the_state = change_state the_state (S_optimfuncs(fn_state.optim_funcs)) in (* grab optimfuncs from inner *)
         the_state  (* SFunc() returns the original builder *)
+
+    | SStage (entry, body, exit) -> 
+      let the_state = stmt the_state entry in 
+      let the_state = stmt the_state body in 
+      let the_state = stmt the_state exit in the_state
 
     (* used to handle heapify calls *)
     | STransform (name, from_ty, to_ty) -> 

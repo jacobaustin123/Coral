@@ -5,7 +5,7 @@ open Sast
 exception Runtime of string
 exception KeyboardInterrupt
 
-let debug str = (* Printf.eprintf "%s\n" str; *) ()
+let debug str = Printf.eprintf "%s\n" str; ()
 
 (* float_of_bool: converts floats to bools, so we can hack in support for if statements. 1.0 is true, etc. *)
 let float_of_bool b = if b then 1.0 else 0.0 
