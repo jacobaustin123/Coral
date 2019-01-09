@@ -183,10 +183,16 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
      L.declare_function "printf" printf_t the_module in
 
    (* define exit *)
-   let exit_t : L.lltype =   (* define the type that the printf function should be *)
+   let exit_t : L.lltype =   (* define the type that the exit function should be *)
      L.function_type (int_t) [| int_t |] in
-   let exit_func : L.llvalue =   (* now use that type to declare printf (dont fill out the body just declare it in the context) *)
+   let exit_func : L.llvalue =   (* now use that type to declare exit (dont fill out the body just declare it in the context) *)
      L.declare_function "exit" exit_t the_module in
+
+   (* define pow for floats *)
+   let pow_t : L.lltype =   (* define the type that the pow function should be *)
+     L.function_type (float_t) [| float_t; float_t |] in
+   let pow_func : L.llvalue =   (* now use that type to declare pow (dont fill out the body just declare it in the context) *)
+     L.declare_function "pow" pow_t the_module in
 
    let build_ctype_fn fname ftype = (* ftype = "ctype_add_t" etc *)
      let the_function = L.define_function fname ftype the_module in
@@ -383,6 +389,19 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let self_data = build_getlist_cobj self_p b in
     let other_data = build_getdata_cobj int_t other_p b in
     (self_data, other_data)
+  in
+
+  let build_pow self_p other_p name b =
+    let self_as_float = L.build_sitofp self_p float_t "self_as_float" b in
+    let other_as_float = L.build_sitofp other_p float_t "other_as_float" b in
+    let result = L.build_call pow_func [| self_as_float; other_as_float |] "pow" b in
+    let result_as_int = L.build_fptosi result int_t "result_as_int" b in
+    result_as_int
+  in
+
+  let build_fpow self_p other_p name b =
+    let result = L.build_call pow_func [| self_p ; other_p |] "pow" b in
+    result
   in
 
   let build_idx self_p other_p name b =
@@ -593,7 +612,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
        Oprt("sub", Some((L.build_sub), int_t), Some((L.build_fsub), float_t), None, None, None, None, None);
        Oprt("mul", Some((L.build_mul), int_t), Some((L.build_fmul), float_t), None, None, None, None, None);
        Oprt("div", Some((L.build_sdiv), int_t), Some((L.build_fdiv), float_t), None, None, None, None, None);
-       Oprt("exp", None, None, None, None, None, None, None);
+       Oprt("exp", Some((build_pow), int_t), Some((build_fpow), float_t), None, None, None, None, None);
        Oprt("eq", Some((L.build_icmp L.Icmp.Eq), bool_t), Some((L.build_fcmp L.Fcmp.Ueq), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t), None, None, None);
        Oprt("neq", Some((L.build_icmp L.Icmp.Ne), bool_t), Some((L.build_fcmp L.Fcmp.Une), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t), Some((L.build_icmp L.Icmp.Eq), bool_t), None, None, None);
        Oprt("lesser", Some((L.build_icmp L.Icmp.Slt), bool_t), Some((L.build_fcmp L.Fcmp.Ult), bool_t), Some((L.build_icmp L.Icmp.Slt), bool_t), Some((L.build_icmp L.Icmp.Slt), bool_t), None, None, None);
@@ -1019,9 +1038,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   and string_format_str = L.build_global_stringptr "%s\n" "fmt" main_builder
   and float_format_str = L.build_global_stringptr "%g\n" "fmt" main_builder
   and newline_format_str = L.build_global_stringptr "\n" "fmt" main_builder in
-
   let init_state:state = {ret_typ=Int;namespace=BindMap.empty; func=main_function; b=main_builder;optim_funcs=SfdeclMap.empty;generic_func=false} in
-
 
   (* useful utility functions! *)
   (* helper fn: seq 4 == [0;1;2;3] *)
@@ -1346,21 +1363,23 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
                   | Sub     -> L.build_sub
                   | Mul    -> L.build_mul
                   | Div     -> L.build_sdiv
-                  | And     -> L.build_and
-                  | Or      -> L.build_or
+                  | Exp     -> build_pow
                   | Eq   -> L.build_icmp L.Icmp.Eq
                   | Neq     -> L.build_icmp L.Icmp.Ne
                   | Less    -> L.build_icmp L.Icmp.Slt
                   | Leq     -> L.build_icmp L.Icmp.Sle
                   | Greater -> L.build_icmp L.Icmp.Sgt
                   | Geq     -> L.build_icmp L.Icmp.Sge
+                  | And     -> L.build_and
+                  | Or      -> L.build_or
                 )
                 |Float -> (match op with
                   | Add     -> L.build_fadd
                   | Sub     -> L.build_fsub
-                  | Mul    -> L.build_fmul
-                  | Div     -> L.build_fdiv 
-                  | Eq   -> L.build_fcmp L.Fcmp.Oeq
+                  | Mul     -> L.build_fmul
+                  | Div     -> L.build_fdiv
+                  | Exp     -> build_fpow
+                  | Eq      -> L.build_fcmp L.Fcmp.Oeq
                   | Neq     -> L.build_fcmp L.Fcmp.One
                   | Less    -> L.build_fcmp L.Fcmp.Olt
                   | Leq     -> L.build_fcmp L.Fcmp.Ole
@@ -1919,7 +1938,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
   let final_state = stmt init_state (SBlock(fst prgm)) in
 
-  ignore(L.build_ret (L.const_int int_t 0) final_state.b);
+  ignore(L.build_ret (L.const_int int_t 0) final_state.b); pm();
     (* prints module *)
 
   the_module  (* return the resulting llvm module with all code!! *)
