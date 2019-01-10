@@ -36,9 +36,9 @@ Coral supports Python 3.7 style type annotations, as seen in the add function he
 
 # Installation
 
-The Coral GitHub page provides installers for MacOS and several Linux distributions. These installers can be found on the [Releases page](https://github.com/ja3067/Coral/releases). 
+The Coral GitHub page provides installers for MacOS and several Linux distributions. These installers can be found on the [Releases page](https://github.com/ja3067/Coral/releases). These require that clang be installed.
 
-To build the language from the source, you must have OCaml, ocaml-llvm, and gcc/clang already installed. To build Coral from the source *with OCaml, ocaml-llvm, and gcc/clang already installed*, run:
+To build the language from the source, you must have OCaml, ocaml-llvm, and clang already installed. To build Coral from the source *with OCaml, ocaml-llvm, and gcc/clang already installed*, run:
 
 ```bash
 > git clone https://github.com/ja3067/Coral.git
