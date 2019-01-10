@@ -32,6 +32,7 @@ a.out
 *.ll
 *.s
 __pycache__
+./coral
 
 # IntelliJ nonsense
 .idea/*
