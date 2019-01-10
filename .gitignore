@@ -1,35 +1,5 @@
-*.annot
-*.cmo
-*.cma
-*.cmi
-*.a
-*.o
-*.cmx
-*.cmxs
-*.cmxa
+# .DS_Store files!
+.DS_Store
 
-# ocamlbuild working directory
-_build/
-
-# ocamlbuild targets
-*.byte
-*.native
-
-# oasis generated files
-setup.data
-setup.log
-
-# Merlin configuring file for Vim and Emacs
-.merlin
-
-# for testing, not source code
-gcd.coral
-*.log
-source.*
-main
-*.diff
-coral
-
-# IntelliJ nonsense
-.idea/*
-.vscode
+# our build directory
+build/

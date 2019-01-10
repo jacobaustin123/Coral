@@ -1,0 +1,7 @@
+S src
+
+B _build/src
+
+PKG unix llvm
+
+FLG -w -8
