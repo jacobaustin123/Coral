@@ -234,6 +234,9 @@ and strip_return out = function
   | SReturn e :: t -> List.rev ((strip_return_stmt (SReturn e)) :: out)
   | a :: t -> strip_return ((strip_return_stmt a) :: out) t
 
+(* safe_remove: try Sys.remove with full error handling *)
+let safe_remove name = try Sys.remove name with _ -> () (* cleanup files *)
+
 (* codegen: command to run codegen to a generated sast, save it to a file (source.ll), compile and
 evaluate it, and return the output *)
 
@@ -261,11 +264,11 @@ let codegen sast fname =
     let output = (match (!emit_llvm, !assembly) with
       | (true, _) -> [] 
       | (false, true) -> 
-        let output = cmd_to_list ("llc " ^ !llvm_name ^ " -o " ^ !assembly_name) in
-        Sys.remove !llvm_name; output
+        let output = cmd_to_list ("clang -w " ^ !llvm_name ^ " -S -o " ^ !assembly_name) in
+        safe_remove !llvm_name; output
       | (false, false) -> 
-        let output = cmd_to_list ("llc " ^ !llvm_name ^ " -o " ^ !assembly_name ^ " && gcc " ^ !assembly_name ^ " -o " ^ !executable_name ^ " && ./" ^ !executable_name) in
-        Sys.remove !llvm_name; Sys.remove !assembly_name; output)
+        let output = cmd_to_list ("clang -w " ^ !llvm_name ^ " -o " ^ !executable_name ^ " && ./" ^ !executable_name) in
+        safe_remove !llvm_name; safe_remove !assembly_name; output)
 
     in output
   with
@@ -283,8 +286,6 @@ let is_empty tokens = match tokens with
   | _ -> false
 
 let block = ref false (* flag to see if we're in a block. used for the REPL handling *)
-
-let safe_remove name = try Sys.remove name with _ -> () (* cleanup files *)
 
 let print_error str = Printf.printf str; flush stdout; ()
 
