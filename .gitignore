@@ -23,7 +23,6 @@ setup.log
 .merlin
 
 # for testing, not source code
-coral
 gcd.coral
 *.log
 source.*
