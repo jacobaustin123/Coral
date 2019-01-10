@@ -36,7 +36,9 @@ Coral supports Python 3.7 style type annotations, as seen in the add function he
 
 # Installation
 
-The Coral language is written in OCaml and compiles target programs to LLVM IR. To build the language *with OCaml, ocaml-llvm, and gcc/clang already installed*, run:
+The Coral GitHub page provides installers for MacOS and several Linux distributions. These installers can be found on the [Releases page](https://github.com/ja3067/Coral/releases). 
+
+To build the language from the source, you must have OCaml, ocaml-llvm, and gcc/clang already installed. To build Coral from the source *with OCaml, ocaml-llvm, and gcc/clang already installed*, run:
 
 ```bash
 > git clone https://github.com/ja3067/Coral.git
@@ -51,14 +53,13 @@ This will generate an executable called coral which acts as a compiler and inter
 > opam install llvm
 ```
 
-and on Linux run:
+and on Linux follow the OCaml/Opam installation instructions [here](https://opam.ocaml.org/doc/Install.html) and then run
 
 ```bash
-> sudo apt-get install opam llvm
 > opam install llvm
 ```
 
-Other Linux distributions can be installed similarly using your distribution's package manager. If the above fails, try instead running the following on Mac OS (or the equivalent on Linux):
+If the above fails, try instead running the following on Mac OS (or the equivalent on Linux):
 
 ```bash
 > brew install opam llvm
