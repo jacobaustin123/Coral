@@ -2,3 +2,5 @@ theme: jekyll-theme-cayman
 title: <div align="center"><img src="https://i.ibb.co/y5rZ1ft/coral3.png" width="50%"><br></div>
 head_title: Coral Programming Language
 show_downloads: true
+release_url: https://github.com/ja3067/Coral/releases
+
