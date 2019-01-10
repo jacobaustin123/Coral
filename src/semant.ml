@@ -446,21 +446,35 @@ and func_stmt globals locals the_state = function
         let bind_for_sast = Bind(name, explicit_t) in
         let (m', x', d, out) = func_stmt globals m {the_state with cond = true; forloop = true; } c in 
         if equals locals m' then let () = debug "equal first time" in (m', SFor(bind_for_sast, e', x'), d, bind_for_locals :: out)
-        else let merged = transform m m' in 
-        let merged_out = transform locals m' in
-        let entry = SBlock(!rec1) in 
+        else let merged_out = transform locals m' in
         let exit = SBlock(!rec2) in 
+        let binds = !binds in 
+        let merged = transform m m' in 
+        let entry = SBlock(!rec1) in 
         let (m', x', d, out) = func_stmt globals merged {the_state with cond = true; forloop = true; } c in 
-        if equals merged m' then let () = debug "equal second time" in (merged_out, SStage(entry, SFor(bind_for_sast, e', x'), SNop), match_data d None, bind_for_locals :: out @ !binds) 
+        if equals merged m' then let () = debug "equal second time" in (merged_out, SStage(entry, SFor(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ binds) 
         else let merged = transform merged_out m' in 
-        (merged, SStage(entry, SFor(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ !binds) 
+        (merged, SStage(entry, SFor(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ binds) 
 
-  | Range(a, b, c) -> 
-        let a1 = Asn([Var a], Lit(IntLit(0))) in
-        let a2 = Asn([Var a], Binop(Var a, Add, Lit(IntLit(1)))) in
-        let a3 = While(Binop(Var a, Less, b), Block(from_block c @ [a2])) in
-        let a4 = If(Binop(b, Greater, Lit(IntLit(0))), Block(a1 :: [a3]), Block([])) in
-        func_stmt globals locals the_state a4 
+ | Range(a, b, c) -> 
+      let (typ, e', _) = func_expr globals locals the_state b in 
+      if typ <> Dyn && typ <> Int 
+          then raise (Failure (Printf.sprintf "STypeError: invalid type in 'range' statement (found %s but expected int)" (string_of_typ typ)))
+      else let (m, name, inferred_t, explicit_t) = check_array locals (List([Lit(IntLit(0))])) a in 
+
+      let bind_for_locals = Bind(name, inferred_t) in
+      let bind_for_sast = Bind(name, explicit_t) in
+      let (m', x', d, out) = func_stmt globals m {the_state with cond = true; forloop = true; } c in 
+      if equals locals m' then let () = debug "equal first time" in (m', SRange(bind_for_sast, e', x'), d, bind_for_locals :: out @ !binds)
+      else let merged_out = transform m m' in
+      let exit = SBlock(!rec2) in 
+      let binds = !binds in 
+      let merged = transform locals m' in 
+      let entry = SBlock(!rec1) in 
+      let (m', x', d, out) = func_stmt globals m {the_state with cond = true; forloop = true; } c in 
+      if equals merged m' then let () = debug "equal second time" in (merged_out, SStage(entry, SRange(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ binds) 
+      else let merged = transform merged_out m' in
+      (merged, SStage(entry, SRange(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ binds) 
 
   | While(a, b) -> 
         let (typ, e, data) = func_expr globals locals the_state a in 
@@ -575,20 +589,35 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
     let (m', x', out) = stmt m {the_state with cond = true; forloop = true; } c in 
     if equals map m' then let () = debug "equal first time" in (m', SFor(bind_for_sast, e', x'), bind_for_locals :: out) 
     else let merged_out = transform map m' in
+    let binds = !binds in 
+    let exit = SBlock(!rec2) in 
     let merged = transform m m' in 
     let entry = SBlock(!rec1) in 
-    let exit = SBlock(!rec2) in 
     let (m', x', out) = stmt merged {the_state with cond = true; forloop = true; } c in 
-    if equals merged m' then let () = debug "equal second time" in (merged_out, SStage(entry, SFor(bind_for_sast, e', x'), SNop), bind_for_locals :: out) 
+    if equals merged m' then let () = debug "equal second time" in (merged_out, SStage(entry, SFor(bind_for_sast, e', x'), exit), bind_for_locals :: out @ binds) 
     else let merged = transform merged_out m' in
-    (merged, SStage(entry, SFor(bind_for_sast, e', x'), exit), bind_for_locals :: out @ !binds)
+    (merged, SStage(entry, SFor(bind_for_sast, e', x'), exit), bind_for_locals :: out @ binds)
 
   | Range(a, b, c) -> 
-        let a1 = Asn([Var a], Lit(IntLit(0))) in
-        let a2 = Asn([Var a], Binop(Var a, Add, Lit(IntLit(1)))) in
-        let a3 = While(Binop(Var a, Less, b), Block(from_block c @ [a2])) in
-        let a4 = If(Binop(b, Greater, Lit(IntLit(0))), Block(a1 :: [a3]), Block([])) in
-        stmt map the_state a4
+    let (typ, e', _) = expr map b in 
+    if typ <> Dyn && typ <> Int 
+        then raise (Failure (Printf.sprintf "STypeError: invalid type in 'range' statement (found %s but expected int)" (string_of_typ typ)))
+    else let (m, name, inferred_t, explicit_t) = check_array map (List([Lit(IntLit(0))])) a in 
+
+    let bind_for_locals = Bind(name, inferred_t) in
+    let bind_for_sast = Bind(name, explicit_t) in
+    let (m', x', out) = stmt m {the_state with cond = true; forloop = true; } c in 
+    if equals map m' then let () = debug "equal first time" in (m', SRange(bind_for_sast, e', x'), bind_for_locals :: out) 
+    else let merged_out = transform map m' in
+    let exit = SBlock(!rec2) in 
+    let binds = !binds in 
+    let merged = transform m m' in 
+    let entry = SBlock(!rec1) in 
+    let (m', x', out) = stmt merged {the_state with cond = true; forloop = true; } c in 
+    if equals merged m' then let () = debug "equal second time" in (merged_out, SStage(entry, SRange(bind_for_sast, e', x'), exit), bind_for_locals :: out @ binds) 
+    else let merged = transform merged_out m' in
+    (merged, SStage(entry, SRange(bind_for_sast, e', x'), exit), bind_for_locals :: out @ binds)
+
 
   | While(a, b) -> 
     let (t, e, _) = expr map a in 

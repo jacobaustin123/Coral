@@ -65,8 +65,6 @@ a list of Parser.tokens for use by the indentation method in Coral.ml */
 
 tokenize:
   | seq EOL { $1 @ [EOL] }
-  | seq CEND { $1 @ [EOL] }
-  | CEND { CEND :: [EOL] }
   | EOL { NOP :: [EOL] }
 
 /* seq: an auxillary target used to handle shift reduce errors in tokenize */

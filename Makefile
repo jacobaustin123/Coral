@@ -18,3 +18,6 @@ byte:
 
 test: native
 	./testall.sh
+
+install: native
+	cp coral /usr/local/bin/coral

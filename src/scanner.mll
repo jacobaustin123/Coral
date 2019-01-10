@@ -92,5 +92,5 @@ rule token = parse
   | _ as char { raise (Failure("SyntaxError: invalid character in identifier " ^ Char.escaped char)) }
 
 and comment = parse
-  | '\n' { CEND }
+  | '\n' { EOL }
   | _ { comment lexbuf }

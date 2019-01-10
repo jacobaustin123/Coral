@@ -56,6 +56,7 @@ and sstmt = (* this can be refactored using Blocks, but I haven't quite figured 
   | SIf of sexpr * sstmt * sstmt (* condition, if, else *)
   | SFor of bind * sexpr * sstmt (* (variable, list, body (block)) *)
   | SWhile of sexpr * sstmt (* (condition, body (block)) *)
+  | SRange of bind * sexpr * sstmt
   | SReturn of sexpr (* return statement *)
   | SClass of bind * sstmt (* not implemented *)
   | SAsn of lvalue list * sexpr (* x : int = sexpr, (Bind(x, int), sexpr) *)
@@ -97,6 +98,7 @@ and string_of_sstmt depth = function
   | SExpr(e) -> string_of_sexpr e
   | SIf(e, s1, s2) ->  "if " ^ string_of_sexpr e ^ ":\n" ^ string_of_sstmt depth s1 ^ (String.make (2 * (depth - 1)) ' ') ^ "else:\n" ^ string_of_sstmt depth s2
   | SFor(b, e, s) -> "for " ^ string_of_sbind b ^ " in " ^ string_of_sexpr e ^ ":\n" ^ string_of_sstmt depth s
+  | SRange(b, e, s) -> "range " ^ string_of_sbind b ^ " in range (" ^ string_of_sexpr e ^ ") :\n" ^ string_of_sstmt depth s
   | SWhile(e, s) -> "while " ^ string_of_sexpr e ^ ":\n" ^ string_of_sstmt depth s
   | SReturn(e) -> "return " ^ string_of_sexpr e
   | SClass(b, s) -> "class " ^ string_of_sbind b ^ ":\n" ^ string_of_sstmt depth s

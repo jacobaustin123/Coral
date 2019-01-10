@@ -1441,7 +1441,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
         tstp ("OPTIMIZED SCALL of " ^ sfdecl.sfname ^ " with binds:"); List.iter pbind sfdecl.sformals; tstp ("returns:" ^ (string_of_typ sfdecl.styp));tstp "(end of binds)";
         (*ignore(expr the_state fexpr);*) (* I guess we dont care abt the result of this since we just recompile from the sfdecl anyways *)
-        (*let (_,the_state) = expr the_state fexpr in*)
+        let (_, the_state) = expr the_state fexpr in
 
         (* let (_, func_typ) = fexpr in  *)
         (* let BoxAddr(addr, _) = lookup the_state.namespace (Bind(sfdecl.sfname, func_typ)) in
@@ -1776,6 +1776,50 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
            ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
          let the_state = change_state the_state (S_b(L.builder_at_end context merge_bb)) in
            the_state
+
+    | SRange(var, upper, body) -> (* initialize list index variable and list length *)
+         let Bind(name, inferred_t) = var in 
+         let (upperdata, the_state) = (match (expr the_state upper) with  (* n variable *)
+          | (Box(objptr), the_state) -> let the_state = check_explicit_type Int objptr ("RuntimeError: invalid type in range loop" ^ name) the_state in
+              let data = build_getdata_cobj int_t objptr the_state.b in (data, the_state)
+          | (Raw(rawptr), the_state) -> (rawptr, the_state)) in 
+
+         let (idxptr, nptr) = build_new_cobj int_t the_state.b in
+         ignore(L.build_store (L.const_int int_t 0) nptr the_state.b);
+
+         (* iter block *)
+         let iter_bb = L.append_block context "iter" the_function in
+           ignore(L.build_br iter_bb the_state.b);
+
+         let iter_builder = L.builder_at_end context iter_bb in
+
+         let n = L.build_load nptr "n" iter_builder in
+         let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
+
+         let iter_complete = (L.build_icmp L.Icmp.Sge) n upperdata "iter_complete" iter_builder in (* true if n exceeds list length *)
+
+         (* body of for loop *)
+         let body_bb = L.append_block context "range_body" the_function in
+         let body_builder = L.builder_at_end context body_bb in
+        
+         let the_state = change_state the_state (S_b(body_builder)) in
+        
+         let the_state = (match (lookup namespace var) with (*assignment so ok to throw away the needs_update bool*)
+              | BoxAddr(var_addr, _) -> 
+                  let Box(data) = build_temp_box n Int the_state.b in 
+                  ignore(L.build_store data var_addr the_state.b); the_state
+              | RawAddr(var_addr) -> 
+                  ignore(L.build_store n var_addr the_state.b); the_state
+          ) in
+        
+         ignore(L.build_store nnext nptr the_state.b);
+         ignore(add_terminal (stmt the_state body) (L.build_br iter_bb));
+
+         let merge_bb = L.append_block context "merge" the_function in
+           ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
+         let the_state = change_state the_state (S_b(L.builder_at_end context merge_bb)) in
+           the_state
+
 
     | SReturn e -> let (_, ty) = e in
         let (res, the_state) = expr the_state e in

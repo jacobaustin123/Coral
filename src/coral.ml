@@ -58,7 +58,6 @@ let tabwidth = 8 (* width of tabs in spaces. can add an alttabwidth value and ke
 let indent tokens base current =
     let rec aux curr s out stack = match s with
     | [] -> (curr, stack, List.rev out)
-    | Parser.CEND :: (Parser.EOL :: t) -> aux 0 t out stack;
     | Parser.TAB :: t -> if not !indent_done then aux (curr + tabwidth) t out stack else aux curr t out stack
     | Parser.SPACE :: t -> if not !indent_done then aux (curr + 1) t out stack else aux curr t out stack
     | Parser.EOL :: t -> indent_done := false; aux 0 t (Parser.SEP :: out) stack 
@@ -99,6 +98,13 @@ let search_env_opt env name =
 (* get_ast: loads the ast from a given path if possible, lexing and parsing the file found 
 at that path. used for the file-based compiler, not the interpreter, which requires different behavior *)
 
+let empty_line tokens = 
+  let rec aux = function
+    | [] -> true
+    | Parser.NOP :: t | Parser.EOL :: t | Parser.SEP :: t | Parser.SPACE :: t | Parser.TAB :: t -> aux t
+    | _ -> false
+  in aux tokens
+  
 let get_ast path = 
   let chan = open_in path
   in let base = Stack.create() in let _ = Stack.push 0 base in
@@ -106,9 +112,9 @@ let get_ast path =
   let rec read current stack = (* logic of the interpreter *)
     try 
       let line = (input_line chan) ^ "\n" in (* add newline for parser, gets stripped by input_line *)
-      if String.length line = 1 then (read current stack)
-      else let lexbuf = (Lexing.from_string line) in
+      let lexbuf = (Lexing.from_string line) in
       let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
+      if empty_line temp then (read current stack) else
       let (curr, stack, formatted) = indent temp stack current in
       formatted @ (read curr stack)
    with End_of_file -> close_in chan; Array.make (Stack.length stack - 1) Parser.DEDENT |> Array.to_list
@@ -205,6 +211,7 @@ let rec strip_return_stmt = function
   | SIf(a, b, c) -> SIf(strip_return_expr a, strip_return_stmt b, strip_return_stmt c)
   | SWhile(a, b) -> SWhile(strip_return_expr a, strip_return_stmt b)
   | SFor(a, b, c) -> SFor(a, strip_return_expr b, strip_return_stmt c)
+  | SRange(a, b, c) -> SRange(a, strip_return_expr b, strip_return_stmt c)
   | SBlock(x) -> SBlock(strip_return [] x)
   | SFunc({ styp; sfname; sformals; slocals; sbody }) -> SFunc({ styp; sfname; sformals; slocals; sbody = strip_return_stmt sbody; })
   | SExpr(e) -> SExpr(strip_return_expr e)
@@ -279,6 +286,8 @@ let block = ref false (* flag to see if we're in a block. used for the REPL hand
 
 let safe_remove name = try Sys.remove name with _ -> () (* cleanup files *)
 
+let print_error str = Printf.printf str; flush stdout; ()
+
 (* from console: launches the interpreter, lexes and parses the input, performs code genration *)
 let rec from_console map past run = 
   try 
@@ -289,12 +298,20 @@ let rec from_console map past run =
         let line = (input_line stdin) ^ "\n" in (* add newline for parser, gets stripped by input_line *)
         let lexbuf = (Lexing.from_string line) in
         let temp = (Parser.tokenize Scanner.token) lexbuf in (* char buffer to token list *)
-        let (curr, stack, formatted) = indent temp stack current in 
-        if Filename.check_suffix (String.trim line) ":" then block := true (* if line ends with :, it's a block *)
-        else if Stack.top stack = 0 then block := false;
-        if is_empty temp || not !block then formatted else
+        let (curr, stack', formatted) = indent temp stack current in 
+        if String.length line = 1 then formatted
+
+        else if empty_line formatted then let () = Printf.printf "... "; flush stdout in read current stack
+        
+        else let () = (match List.rev formatted with 
+          | Parser.SEP :: (Parser.COLON :: t) -> block := true; () (* if line ends with :, it's a block *)
+          | _ when Stack.top stack' = 0 -> block := false; ()
+          | _ -> ()) in 
+
+        if not !block then formatted else
+
         (Printf.printf "... "; flush stdout;
-        formatted @ (read curr stack))
+        formatted @ (read curr stack'))
 
     in let formatted = ref (read 0 base) in
     let _ = if !debug then (Printf.printf "Lexer: ["; (List.iter (Printf.printf "%s ") (List.map print !formatted); print_endline "]\n")) in (* print debug messages *)
