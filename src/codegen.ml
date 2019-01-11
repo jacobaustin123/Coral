@@ -1760,8 +1760,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
          let the_state = change_state the_state (S_b(body_builder)) in
 
-         let Bind(name, explicit_t) = var in 
-        
+         let Bind(name, explicit_t) = var in
+
          let the_state = (match (lookup namespace var) with (*assignment so ok to throw away the needs_update bool*)
               | BoxAddr(var_addr, _) -> ignore(L.build_store elmptr var_addr the_state.b); the_state
               | RawAddr(var_addr) -> 
@@ -1778,7 +1778,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
            the_state
 
     | SRange(var, upper, body) -> (* initialize list index variable and list length *)
-         let Bind(name, inferred_t) = var in 
+         let Bind(name, explicit_t) = var in 
          let (upperdata, the_state) = (match (expr the_state upper) with  (* n variable *)
           | (Box(objptr), the_state) -> let the_state = check_explicit_type Int objptr ("RuntimeError: invalid type in range loop" ^ name) the_state in
               let data = build_getdata_cobj int_t objptr the_state.b in (data, the_state)
@@ -1803,7 +1803,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
          let body_builder = L.builder_at_end context body_bb in
         
          let the_state = change_state the_state (S_b(body_builder)) in
-        
+
          let the_state = (match (lookup namespace var) with (*assignment so ok to throw away the needs_update bool*)
               | BoxAddr(var_addr, _) -> 
                   let Box(data) = build_temp_box n Int the_state.b in 

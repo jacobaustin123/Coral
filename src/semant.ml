@@ -304,7 +304,8 @@ and assign map data bind =
 and check_array map e b = 
   let (typ, e', data) = expr map e in
   (match typ with
-  | String | Arr | Dyn -> assign map (Dyn, e', data) b
+  | String -> assign map (typ, e', data) b
+  | Arr | Dyn -> assign map (Dyn, e', data) b
   | _ -> raise (Failure (Printf.sprintf "STypeError: cannot iterate over type %s in 'for' loop" (string_of_typ typ))))
 
 
@@ -443,7 +444,7 @@ and func_stmt globals locals the_state = function
         let (typ, e', _) = func_expr globals locals the_state b in 
         let (m, name, inferred_t, explicit_t) = check_array locals b a in 
         let bind_for_locals = Bind(name, inferred_t) in
-        let bind_for_sast = Bind(name, explicit_t) in
+        let bind_for_sast = Bind(name, inferred_t) in
         let (m', x', d, out) = func_stmt globals m {the_state with cond = true; forloop = true; } c in 
         if equals locals m' then let () = debug "equal first time" in (m', SFor(bind_for_sast, e', x'), d, bind_for_locals :: out)
         else let merged_out = transform locals m' in
@@ -457,13 +458,14 @@ and func_stmt globals locals the_state = function
         (merged, SStage(entry, SFor(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ binds) 
 
  | Range(a, b, c) -> 
-      let (typ, e', _) = func_expr globals locals the_state b in 
+      let (typ, e', data) = func_expr globals locals the_state b in 
       if typ <> Dyn && typ <> Int 
           then raise (Failure (Printf.sprintf "STypeError: invalid type in 'range' statement (found %s but expected int)" (string_of_typ typ)))
-      else let (m, name, inferred_t, explicit_t) = check_array locals (List([Lit(IntLit(0))])) a in 
+
+      else let (m, name, inferred_t, explicit_t) = assign locals (typ, e', data) a in
 
       let bind_for_locals = Bind(name, inferred_t) in
-      let bind_for_sast = Bind(name, explicit_t) in
+      let bind_for_sast = Bind(name, inferred_t) in
       let (m', x', d, out) = func_stmt globals m {the_state with cond = true; forloop = true; } c in 
       if equals locals m' then let () = debug "equal first time" in (m', SRange(bind_for_sast, e', x'), d, bind_for_locals :: out @ !binds)
       else let merged_out = transform m m' in
@@ -585,7 +587,7 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
     let (m, name, inferred_t, explicit_t) = check_array map b a in 
 
     let bind_for_locals = Bind(name, inferred_t) in
-    let bind_for_sast = Bind(name, explicit_t) in
+    let bind_for_sast = Bind(name, inferred_t) in
     let (m', x', out) = stmt m {the_state with cond = true; forloop = true; } c in 
     if equals map m' then let () = debug "equal first time" in (m', SFor(bind_for_sast, e', x'), bind_for_locals :: out) 
     else let merged_out = transform map m' in
@@ -599,13 +601,13 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
     (merged, SStage(entry, SFor(bind_for_sast, e', x'), exit), bind_for_locals :: out @ binds)
 
   | Range(a, b, c) -> 
-    let (typ, e', _) = expr map b in 
+    let (typ, e', data) = expr map b in 
     if typ <> Dyn && typ <> Int 
         then raise (Failure (Printf.sprintf "STypeError: invalid type in 'range' statement (found %s but expected int)" (string_of_typ typ)))
-    else let (m, name, inferred_t, explicit_t) = check_array map (List([Lit(IntLit(0))])) a in 
+    else let (m, name, inferred_t, explicit_t) = assign map (typ, e', data) a in
 
     let bind_for_locals = Bind(name, inferred_t) in
-    let bind_for_sast = Bind(name, explicit_t) in
+    let bind_for_sast = Bind(name, inferred_t) in
     let (m', x', out) = stmt m {the_state with cond = true; forloop = true; } c in 
     if equals map m' then let () = debug "equal first time" in (m', SRange(bind_for_sast, e', x'), bind_for_locals :: out) 
     else let merged_out = transform map m' in
