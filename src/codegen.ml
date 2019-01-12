@@ -1265,8 +1265,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   the pointer to a given idx in a list, which can be used for assignment *)
   let build_getidx_parent_list list_pointer index_pointer the_state =
     let fn_p = build_getctypefn_cobj ctype_idx_parent_idx list_pointer the_state.b in
-    let the_state = check_null fn_p "RuntimeError: unsupported operand type(s) for list access" the_state in
-    let the_state = check_explicit_type Int index_pointer "RuntimeError: unsupported operand type(s) for list access" the_state in
+    let the_state = check_null fn_p "RuntimeError: unsupported operand type(s) for list assignment" the_state in
+    let the_state = check_explicit_type Int index_pointer "RuntimeError: unsupported index type for list access" the_state in
     let the_state = check_bounds list_pointer index_pointer "RuntimeError: list index out of bounds" the_state in
     let result = L.build_call fn_p [| list_pointer ; index_pointer |] "parent_binop_result" the_state.b in
     (Box(result), the_state)
@@ -1964,6 +1964,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       
        | (raw_ty, Dyn) when raw_ty = Int || raw_ty = Float || raw_ty = Bool ->
          (* get addresses for raw and boxed versions *)
+
          let BoxAddr(box_addr, _) = lookup the_state.namespace (Bind(name, Dyn)) (* no need to check needs_update flag bc this is assignment *)
          and RawAddr(raw_addr) = lookup the_state.namespace (Bind(name, raw_ty)) in
 

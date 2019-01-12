@@ -1,1 +1,1 @@
-RuntimeError: unsupported operand type(s) for list access
+RuntimeError: unsupported operand type(s) for list assignment

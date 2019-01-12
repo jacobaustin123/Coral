@@ -213,9 +213,13 @@ let binds = ref []
 let possible_globals = ref []
 
 (* transform: merge function used to reconcile the global lookup map after a conditional branch.
-extracts objects with transformed type for use in codegen. *)
+extracts objects with transformed type for use in codegen. 
 
-let transform m1 m2 = rec1 := []; rec2 := []; binds := []; StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge two lists while keeping type inference intact *)
+rec1 and rec2 are the STransforms that need to be added to the if and else branch, respectively. 
+binds is a list of dynamic binds that need to be added to the list of locals or globals*)
+
+let transform m1 m2 = rec1 := []; rec2 := []; binds := []; 
+  let map = StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge two lists while keeping type inference intact *)
     | Some (a, b, c), Some (d, e, f) -> 
         let t = compare_types b e in
         let () = if b <> t then (rec1 := ((STransform(key, b, Dyn) :: !rec1)); binds := ((Bind(key, Dyn) :: !binds))) in
@@ -225,7 +229,8 @@ let transform m1 m2 = rec1 := []; rec2 := []; binds := []; StringMap.merge (fun 
     | Some (a, b, c), None -> let () = if b <> Dyn then (rec1 := (STransform(key, b, Dyn) :: !rec1); binds := (Bind(key, Dyn) :: !binds)) in Some(Dyn, Dyn, None)
     | None, Some(a, b, c) -> let () = if b <> Dyn then (rec2 := (STransform(key, b, Dyn) :: !rec2); binds := (Bind(key, Dyn) :: !binds)) in Some(Dyn, Dyn, None)
     | None, None -> None
-  ) m1 m2
+  ) m1 m2 in 
+  (map, SBlock(!rec1), SBlock(!rec2), !binds)
 
 (* from_block: used to extract the slist from an SBlock in codegen *)
 let from_block block = match block with

@@ -350,6 +350,11 @@ and match_data d1 d2 = match d1, d2 with
   to simplify the code by merging this with stmt, but it will be challenging to do.
 *)
 
+and merge_blocks b1 b2 = 
+  let SBlock(body1) = b1 in 
+  let SBlock(body2) = b2 in 
+  SBlock(body1 @ body2)
+
 and func_stmt globals locals the_state = function 
   | Return(e) -> (* for closures, match t with FuncType, attach local scope *)
     let data = func_expr globals locals the_state e in 
@@ -436,26 +441,22 @@ and func_stmt globals locals the_state = function
         else let (map', value, data, out) = func_stmt globals locals {the_state with cond = true;} b in 
         let (map'', value', data', out') = func_stmt globals locals {the_state with cond = true;} c in 
         if equals map' map'' then (map', SIf(e', value, value'), match_data data data', out) 
-        else let merged = transform map' map'' in 
-        let slist = from_sblock value in let slist' = from_sblock value' in
-        (merged, SIf(e', SBlock(slist @ !rec1), SBlock(slist' @ !rec2)), match_data data data', !binds @ out @ out')
+        else let (merged, main, alt, binds) = transform map' map'' in 
+        (merged, SIf(e', merge_blocks value main, merge_blocks value' alt), match_data data data', binds @ out @ out')
 
   | For(a, b, c) -> 
-        let (typ, e', _) = func_expr globals locals the_state b in 
-        let (m, name, inferred_t, explicit_t) = check_array locals b a in 
-        let bind_for_locals = Bind(name, inferred_t) in
-        let bind_for_sast = Bind(name, inferred_t) in
-        let (m', x', d, out) = func_stmt globals m {the_state with cond = true; forloop = true; } c in 
-        if equals locals m' then let () = debug "equal first time" in (m', SFor(bind_for_sast, e', x'), d, bind_for_locals :: out)
-        else let merged_out = transform locals m' in
-        let exit = SBlock(!rec2) in 
-        let binds = !binds in 
-        let merged = transform m m' in 
-        let entry = SBlock(!rec1) in 
-        let (m', x', d, out) = func_stmt globals merged {the_state with cond = true; forloop = true; } c in 
-        if equals merged m' then let () = debug "equal second time" in (merged_out, SStage(entry, SFor(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ binds) 
-        else let merged = transform merged_out m' in 
-        (merged, SStage(entry, SFor(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ binds) 
+      let (typ, e', _) = func_expr globals locals the_state b in 
+      let (m, name, inferred_t, explicit_t) = check_array locals b a in 
+      let bind_for_locals = Bind(name, inferred_t) in
+      let bind_for_sast = Bind(name, inferred_t) in
+      let (m', x', d, out) = func_stmt globals m {the_state with cond = true; forloop = true; } c in 
+      if equals locals m' then let () = debug "equal first time" in (m', SFor(bind_for_sast, e', x'), d, bind_for_locals :: out)
+      else let (merged_out, _, exit, binds) = transform locals m' in
+      let (merged, entry, _, _) = transform m m' in 
+      let (m', x', d, out) = func_stmt globals merged {the_state with cond = true; forloop = true; } c in 
+      if equals merged m' then let () = debug "equal second time" in (merged_out, SStage(entry, SFor(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ binds) 
+      else let (merged, _, _, _) = transform merged_out m' in 
+      (merged, SStage(entry, SFor(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ binds) 
 
  | Range(a, b, c) -> 
       let (typ, e', data) = func_expr globals locals the_state b in 
@@ -467,30 +468,25 @@ and func_stmt globals locals the_state = function
       let bind_for_locals = Bind(name, inferred_t) in
       let bind_for_sast = Bind(name, inferred_t) in
       let (m', x', d, out) = func_stmt globals m {the_state with cond = true; forloop = true; } c in 
-      if equals locals m' then let () = debug "equal first time" in (m', SRange(bind_for_sast, e', x'), d, bind_for_locals :: out @ !binds)
-      else let merged_out = transform m m' in
-      let exit = SBlock(!rec2) in 
-      let binds = !binds in 
-      let merged = transform locals m' in 
-      let entry = SBlock(!rec1) in 
+      if equals locals m' then let () = debug "equal first time" in (m', SRange(bind_for_sast, e', x'), d, bind_for_locals :: out)
+      else let (merged_out, _, exit, binds) = transform m m' in
+      let (merged, entry, _, _) = transform locals m' in 
       let (m', x', d, out) = func_stmt globals m {the_state with cond = true; forloop = true; } c in 
       if equals merged m' then let () = debug "equal second time" in (merged_out, SStage(entry, SRange(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ binds) 
-      else let merged = transform merged_out m' in
+      else let (merged, _, _, _) = transform merged_out m' in
       (merged, SStage(entry, SRange(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ binds) 
 
   | While(a, b) -> 
-        let (typ, e, data) = func_expr globals locals the_state a in 
-        if typ <> Bool && typ <> Dyn 
-          then raise (Failure (Printf.sprintf "STypeError: invalid boolean type in 'while' statement (found %s but expected bool)" (string_of_typ typ)))
-        else let (m', x', d, out) = func_stmt globals locals {the_state with cond = true; forloop = true; } b in 
-        if equals locals m' then let () = debug "equal first time" in (m', SWhile(e, x'), d, out) else
-        let merged = transform locals m' in 
-        let entry = SBlock(!rec1) in
-        let exit = SBlock(!rec2) in  
-        let (m', x', d, out) = func_stmt globals merged {the_state with cond = true; forloop = true; } b in 
-        if equals merged m' then let () = debug "equal second time" in (m', SStage(entry, SWhile(e, x'), SNop), d, out)
-        else let merged = transform merged m' in 
-        (merged, SStage(entry, SWhile(e, x'), exit), match_data d None, out @ !binds)
+      let (typ, e, data) = func_expr globals locals the_state a in 
+      if typ <> Bool && typ <> Dyn 
+        then raise (Failure (Printf.sprintf "STypeError: invalid boolean type in 'while' statement (found %s but expected bool)" (string_of_typ typ)))
+      else let (m', x', d, out) = func_stmt globals locals {the_state with cond = true; forloop = true; } b in 
+      if equals locals m' then let () = debug "equal first time" in (m', SWhile(e, x'), d, out) else
+      let (merged, entry, exit, binds) = transform locals m' in 
+      let (m', x', d, out) = func_stmt globals merged {the_state with cond = true; forloop = true; } b in 
+      if equals merged m' then let () = debug "equal second time" in (m', SStage(entry, SWhile(e, x'), SNop), d, out @ binds)
+      else let (merged, _, _, _) = transform merged m' in 
+      (merged, SStage(entry, SWhile(e, x'), exit), match_data d None, out @ binds)
 
   | Nop -> (locals, SNop, None, [])
 
@@ -578,9 +574,8 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
     else let (map', value, out) = stmt map {the_state with cond = true;} b in 
     let (map'', value', out') = stmt map {the_state with cond = true;} c in 
     if equals map' map'' then (map', SIf(e', value, value'), out') 
-    else let merged = transform map' map'' in 
-    let slist = from_sblock value in let slist' = from_sblock value' in
-    (merged, SIf(e', SBlock(slist @ !rec1), SBlock(slist' @ !rec2)), out @ out' @ !binds)
+    else let (merged, main, alt, binds) = transform map' map'' in 
+    (merged, SIf(e', merge_blocks value main, merge_blocks value' alt), out @ out' @ binds)
 
   | For(a, b, c) -> 
     let (typ, e', _) = expr map b in 
@@ -590,14 +585,11 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
     let bind_for_sast = Bind(name, inferred_t) in
     let (m', x', out) = stmt m {the_state with cond = true; forloop = true; } c in 
     if equals map m' then let () = debug "equal first time" in (m', SFor(bind_for_sast, e', x'), bind_for_locals :: out) 
-    else let merged_out = transform map m' in
-    let binds = !binds in 
-    let exit = SBlock(!rec2) in 
-    let merged = transform m m' in 
-    let entry = SBlock(!rec1) in 
+    else let (merged_out, _, exit, binds) = transform map m' in (* this has the for loop variable as dynamic *)
+    let (merged, entry, _, _) = transform m m' in (* this keeps the for loop variable of known type if possible *)
     let (m', x', out) = stmt merged {the_state with cond = true; forloop = true; } c in 
     if equals merged m' then let () = debug "equal second time" in (merged_out, SStage(entry, SFor(bind_for_sast, e', x'), exit), bind_for_locals :: out @ binds) 
-    else let merged = transform merged_out m' in
+    else let (merged, _, _, _) = transform merged_out m' in
     (merged, SStage(entry, SFor(bind_for_sast, e', x'), exit), bind_for_locals :: out @ binds)
 
   | Range(a, b, c) -> 
@@ -610,14 +602,11 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
     let bind_for_sast = Bind(name, inferred_t) in
     let (m', x', out) = stmt m {the_state with cond = true; forloop = true; } c in 
     if equals map m' then let () = debug "equal first time" in (m', SRange(bind_for_sast, e', x'), bind_for_locals :: out) 
-    else let merged_out = transform map m' in
-    let exit = SBlock(!rec2) in 
-    let binds = !binds in 
-    let merged = transform m m' in 
-    let entry = SBlock(!rec1) in 
+    else let (merged_out, _, exit, binds) = transform map m' in
+    let (merged, entry, _, _) = transform m m' in 
     let (m', x', out) = stmt merged {the_state with cond = true; forloop = true; } c in 
     if equals merged m' then let () = debug "equal second time" in (merged_out, SStage(entry, SRange(bind_for_sast, e', x'), exit), bind_for_locals :: out @ binds) 
-    else let merged = transform merged_out m' in
+    else let (merged, _, _, _) = transform merged_out m' in
     (merged, SStage(entry, SRange(bind_for_sast, e', x'), exit), bind_for_locals :: out @ binds)
 
 
@@ -626,13 +615,11 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
     if t <> Bool && t <> Dyn then raise (Failure (Printf.sprintf "STypeError: invalid boolean type in 'while' statement (found %s but expected bool)" (string_of_typ t)))
     else let (m', x, out) = stmt map {the_state with cond = true; forloop = true; } b in 
     if equals map m' then let () = debug "equal first time" in (m', SWhile(e, x), out) 
-    else let merged = transform map m' in 
-    let entry = SBlock(!rec1) in 
-    let exit = SBlock(!rec2) in 
+    else let (merged, entry, exit, binds) = transform map m' in 
     let (m', x', out) = stmt merged {the_state with cond = true; forloop = true; } b in 
-    if equals merged m' then let () = debug "equal second time" in (merged, SStage(entry, SWhile(e, x'), SNop), out) 
-    else let merged = transform merged m' in 
-    (merged, SStage(entry, SWhile(e, x'), exit), out @ !binds)
+    if equals merged m' then let () = debug "equal second time" in (merged, SStage(entry, SWhile(e, x'), SNop), out @ binds) 
+    else let (merged, _, _, _) = transform merged m' in 
+    (merged, SStage(entry, SWhile(e, x'), exit), out @ binds)
 
   | Nop -> (map, SNop, [])
   | Print(e) -> let (t, e', _) = expr map e in (map, SPrint(e'), [])
