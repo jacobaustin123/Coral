@@ -1393,7 +1393,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
         ) in (res,the_state)
 
-      | SCall(fexpr, arg_expr_list, SBlock([entry_transforms; exit_transforms])) -> 
+      | SCall(fexpr, arg_expr_list, SStage(entry_transforms, _, exit_transforms)) -> 
         tstp ("GENERIC SCALL of "^(string_of_int (List.length arg_expr_list))^" args");
 
         let the_state = stmt the_state entry_transforms in

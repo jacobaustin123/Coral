@@ -484,7 +484,7 @@ and func_stmt globals locals the_state = function
       if equals locals m' then let () = debug "equal first time" in (m', SWhile(e, x'), d, out) else
       let (merged, entry, exit, binds) = transform locals m' in 
       let (m', x', d, out) = func_stmt globals merged {the_state with cond = true; forloop = true; } b in 
-      if equals merged m' then let () = debug "equal second time" in (m', SStage(entry, SWhile(e, x'), SNop), d, out @ binds)
+      if equals merged m' then let () = debug "equal second time" in (m', SStage(entry, SWhile(e, x'), exit), d, out @ binds)
       else let (merged, _, _, _) = transform merged m' in 
       (merged, SStage(entry, SWhile(e, x'), exit), match_data d None, out @ binds)
 
@@ -617,7 +617,7 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
     if equals map m' then let () = debug "equal first time" in (m', SWhile(e, x), out) 
     else let (merged, entry, exit, binds) = transform map m' in 
     let (m', x', out) = stmt merged {the_state with cond = true; forloop = true; } b in 
-    if equals merged m' then let () = debug "equal second time" in (merged, SStage(entry, SWhile(e, x'), SNop), out @ binds) 
+    if equals merged m' then let () = debug "equal second time" in (merged, SStage(entry, SWhile(e, x'), exit), out @ binds) 
     else let (merged, _, _, _) = transform merged m' in 
     (merged, SStage(entry, SWhile(e, x'), exit), out @ binds)
 
