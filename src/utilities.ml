@@ -29,74 +29,73 @@ let implode s = String.concat "" (List.map (String.make 1) s)
 
 (* print: utility function used for printing parsed tokens. can be replaced by menhir mostly. not exhaustive *)
 let print = function 
-  | Parser.COLON -> "COLON"
-  | Parser.TAB -> "TAB"
-  | Parser.SPACE -> "SPACE"
-  | Parser.NOT -> "NOT"
-  | Parser.IF -> "IF"
-  | Parser.ELSE -> "ELSE"
-  | Parser.FOR -> "FOR"
-  | Parser.WHILE -> "WHILE"
-  | Parser.DEF -> "DEF"
-  | Parser.COMMA -> "COMMA"
-  | Parser.NEQ -> "NEQ"
-  | Parser.LT -> "LT"
-  | Parser.GT -> "GT"
-  | Parser.LEQ -> "LEQ"
-  | Parser.GEQ -> "GEQ"
-  | Parser.AND -> "AND"
-  | Parser.OR -> "OR"
-  | Parser.IN -> "IN"
-  | Parser.TRUE -> "TRUE"
-  | Parser.FALSE -> "FALSE"
-  | Parser.IS -> "IS"
-  | Parser.PLUS -> "PLUS"
-  | Parser.MINUS -> "MINUS"
-  | Parser.TIMES -> "TIMES"
-  | Parser.DIVIDE -> "DIVIDE"
-  | Parser.EXP -> "EXP"
-  | Parser.RETURN -> "RETURN"
-  | Parser.LPAREN -> "LPAREN"
-  | Parser.RPAREN -> "RPAREN"
-  | Parser.LBRACK -> "LBRACK"
-  | Parser.RBRACK -> "RBRACK"
-  | Parser.EQ -> "EQ"
-  | Parser.ASN -> "ASN"
-  | Parser.CLASS -> "CLASS"
-  | Parser.SEP -> "SEP"
-  | Parser.EOF -> "EOF"
-  | Parser.EOL -> "EOL"
-  | Parser.DOT -> "DOT"
-  | Parser.INDENT -> "INDENT"
-  | Parser.DEDENT -> "DEDENT"
-  | Parser.VARIABLE(_) -> "VARIABLE" (*Printf.sprintf "Var(%s)" x *)
-  | Parser.STRING_LITERAL(x) -> Printf.sprintf "STRING_LITERAL(%s)" x
-  | Parser.FLOAT_LITERAL(_) -> "FLOAT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
-  | Parser.BOOL_LITERAL(_) -> "BOOL_ITERAL" (*Printf.sprintf "Lit(%f)" x *)
-  | Parser.INT_LITERAL(_) -> "INT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
-  | Parser.INT -> "INT"
-  | Parser.BOOL -> "BOOL"
-  | Parser.FLOAT -> "FLOAT"
-  | Parser.STRING -> "STRING"
-  | Parser.ARR -> "ARR"
-  | Parser.NOP -> "NOP"
-  | Parser.TYPE -> "TYPE"
-  | Parser.PLUSEQ -> "PLUSEQ"
-  | Parser.MINUSEQ -> "MINUSEQ"
-  | Parser.TIMESEQ -> "TIMESEQ"
-  | Parser.DIVIDEEQ -> "DIVIDEEQ"
-  | Parser.EXPEQ -> "EXPEQ"
-  | Parser.PRINT -> "PRINT"
-  | Parser.IMPORT -> "IMPORT"
-  | Parser.RANGE -> "RANGE"
-  | Parser.NOELSE -> "NOELSE"
-  | Parser.NEG -> "NEG"
-  | Parser.ARROW -> "ARROW"
-  | Parser.FUNC -> "FUNC"
-  | Parser.NONE -> "NONE"
-  | Parser.CEND -> "CEND"
-  | Parser.LBRACE -> "LBRACE"
-  | Parser.RBRACE -> "RBRACE"
+  | Parser.COLON(_) -> "COLON"
+  | Parser.TAB(_) -> "TAB"
+  | Parser.SPACE(_) -> "SPACE"
+  | Parser.NOT(_) -> "NOT"
+  | Parser.IF(_) -> "IF"
+  | Parser.ELSE(_) -> "ELSE"
+  | Parser.FOR(_) -> "FOR"
+  | Parser.WHILE(_) -> "WHILE"
+  | Parser.DEF(_) -> "DEF"
+  | Parser.COMMA(_) -> "COMMA"
+  | Parser.NEQ(_) -> "NEQ"
+  | Parser.LT(_) -> "LT"
+  | Parser.GT(_) -> "GT"
+  | Parser.LEQ(_) -> "LEQ"
+  | Parser.GEQ(_) -> "GEQ"
+  | Parser.AND(_) -> "AND"
+  | Parser.OR(_) -> "OR"
+  | Parser.IN(_) -> "IN"
+  | Parser.TRUE(_) -> "TRUE"
+  | Parser.FALSE(_) -> "FALSE"
+  | Parser.IS(_) -> "IS"
+  | Parser.PLUS(_) -> "PLUS"
+  | Parser.MINUS(_) -> "MINUS"
+  | Parser.TIMES(_) -> "TIMES"
+  | Parser.DIVIDE(_) -> "DIVIDE"
+  | Parser.EXP(_) -> "EXP"
+  | Parser.RETURN(_) -> "RETURN"
+  | Parser.LPAREN(_) -> "LPAREN"
+  | Parser.RPAREN(_) -> "RPAREN"
+  | Parser.LBRACK(_) -> "LBRACK"
+  | Parser.RBRACK(_) -> "RBRACK"
+  | Parser.EQ(_) -> "EQ"
+  | Parser.ASN(_) -> "ASN"
+  | Parser.SEP(_) -> "SEP"
+  | Parser.EOF(_) -> "EOF"
+  | Parser.EOL(_) -> "EOL"
+  | Parser.DOT(_) -> "DOT"
+  | Parser.INDENT(_) -> "INDENT"
+  | Parser.DEDENT(_) -> "DEDENT"
+  | Parser.VARIABLE(_, _) -> "VARIABLE" (*Printf.sprintf "Var(%s)" x *)
+  | Parser.STRING_LITERAL(x,_) -> Printf.sprintf "STRING_LITERAL(%s)" x
+  | Parser.FLOAT_LITERAL(_,_) -> "FLOAT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
+  | Parser.BOOL_LITERAL(_,_) -> "BOOL_ITERAL" (*Printf.sprintf "Lit(%f)" x *)
+  | Parser.INT_LITERAL(_,_) -> "INT_LITERAL" (*Printf.sprintf "Lit(%f)" x *)
+  | Parser.INT(_) -> "INT"
+  | Parser.BOOL(_) -> "BOOL"
+  | Parser.FLOAT(_) -> "FLOAT"
+  | Parser.STRING(_) -> "STRING"
+  | Parser.ARR(_) -> "ARR"
+  | Parser.NOP(_) -> "NOP"
+  | Parser.TYPE(_) -> "TYPE"
+  | Parser.PLUSEQ(_) -> "PLUSEQ"
+  | Parser.MINUSEQ(_) -> "MINUSEQ"
+  | Parser.TIMESEQ(_) -> "TIMESEQ"
+  | Parser.DIVIDEEQ(_) -> "DIVIDEEQ"
+  | Parser.EXPEQ(_) -> "EXPEQ"
+  | Parser.PRINT(_) -> "PRINT"
+  | Parser.IMPORT(_) -> "IMPORT"
+  | Parser.RANGE(_) -> "RANGE"
+  | Parser.NOELSE(_) -> "NOELSE"
+  | Parser.NEG(_) -> "NEG"
+  | Parser.ARROW(_) -> "ARROW"
+  | Parser.FUNC(_) -> "FUNC"
+  | Parser.NONE(_) -> "NONE"
+  | Parser.CEND(_) -> "CEND"
+  | Parser.LBRACE(_) -> "LBRACE"
+  | Parser.RBRACE(_) -> "RBRACE"
 
 (* stmt_to_string converts stmt to string for error handling *)
 let stmt_to_string = function
@@ -108,7 +107,6 @@ let stmt_to_string = function
   | Range(_, _, _) -> "range"
   | While(_, _) -> "while"
   | Return(_) -> "return"
-  | Class(_, _) -> "class"
   | Asn(_, _) -> "asn"
   | Type(_) -> "type"
   | Print(_) -> "print"
@@ -122,8 +120,6 @@ let expr_to_string = function
   | Var(_) -> "var"
   | Unop(_, _) -> "unop"
   | Call(_, _) -> "call"
-  | Method(_, _, _) -> "method"
-  | Field(_, _) -> "field"
   | List(_) -> "list"
   | ListAccess(_, _) -> "list access"
   | ListSlice(_, _, _) -> "list slice"
@@ -177,7 +173,7 @@ let split_sbind x =
   let rec aux a1 a2 = function
     | [] -> (List.rev a1, List.rev a2)
     | a :: t -> match a with
-      | Bind(c, d) -> aux (c :: a1) (d :: a2) t
+      | Bind(s) -> aux (s.name :: a1) (s.typ :: a2) t
       | _ -> raise (Failure "unknown failure in argument matching")
   in aux [] [] x
 ;;
@@ -206,6 +202,12 @@ module TypeMap = Map.Make(struct type t = stmt * typ list let compare = Pervasiv
 (* map with string keys, used for variable lookup *)
 module StringMap = Map.Make(String)
 
+let empty_pos = {line_n = 0; char_n = 0;}
+
+let stmt_of_rawstmt t = {value = t; pos = empty_pos; }
+
+let bind_of_rawbind name typ = Bind({name = name; typ = typ; pos = empty_pos; })
+
 let rec1 = ref [] (* these are used to extract Transform objects for use in codegen from merge *)
 let rec2 = ref []
 
@@ -219,18 +221,18 @@ rec1 and rec2 are the STransforms that need to be added to the if and else branc
 binds is a list of dynamic binds that need to be added to the list of locals or globals*)
 
 let transform m1 m2 = rec1 := []; rec2 := []; binds := []; 
-  let map = StringMap.merge (fun key v1 v2 -> match v1, v2 with (* merge two lists while keeping type inference intact *)
+  let map = StringMap.merge (fun key v1 v2 -> (match v1, v2 with (* merge two lists while keeping type inference intact *)
     | Some (a, b, c), Some (d, e, f) -> 
         let t = compare_types b e in
-        let () = if b <> t then (rec1 := ((STransform(key, b, Dyn) :: !rec1)); binds := ((Bind(key, Dyn) :: !binds))) in
-        let () = if e <> t then (rec2 := ((STransform(key, e, Dyn)) :: !rec2); binds := ((Bind(key, Dyn) :: !binds))) in
+        let () = if b <> t then (rec1 := (STransform(key, b, Dyn) :: !rec1)); binds := ((bind_of_rawbind key Dyn) :: !binds) in
+        let () = if e <> t then (rec2 := (STransform(key, e, Dyn) :: !rec2)); binds := ((bind_of_rawbind key Dyn) :: !binds) in
         Some (compare_types a d, compare_types b e, compare_data c f)
 
-    | Some (a, b, c), None -> let () = if b <> Dyn then (rec1 := (STransform(key, b, Dyn) :: !rec1); binds := (Bind(key, Dyn) :: !binds)) in Some(Dyn, Dyn, None)
-    | None, Some(a, b, c) -> let () = if b <> Dyn then (rec2 := (STransform(key, b, Dyn) :: !rec2); binds := (Bind(key, Dyn) :: !binds)) in Some(Dyn, Dyn, None)
+    | Some (a, b, c), None -> let () = if b <> Dyn then (rec1 := (STransform(key, b, Dyn) :: !rec1)); binds := ((bind_of_rawbind key Dyn) :: !binds) in Some(Dyn, Dyn, None)
+    | None, Some(a, b, c) -> let () = if b <> Dyn then (rec2 := (STransform(key, b, Dyn) :: !rec2)); binds := ((bind_of_rawbind key Dyn) :: !binds) in Some(Dyn, Dyn, None)
     | None, None -> None
-  ) m1 m2 in 
-  (map, SBlock(!rec1), SBlock(!rec2), !binds)
+  )) m1 m2 in 
+  (map,  SBlock(!rec1), SBlock(!rec2), !binds)
 
 (* from_block: used to extract the slist from an SBlock in codegen *)
 let from_block block = match block with
@@ -255,7 +257,7 @@ type flag = {
 }
 
 (* make a list of binds all dynamic *)
-let make_dynamic bindlist = List.map (fun (Bind(name, typ)) -> Bind(name, Dyn)) bindlist
+let make_dynamic bindlist = List.map (fun (Bind b) -> Bind {b with typ = Dyn}) bindlist
 
 (* convert a lookup table to a list of binds with the name and inferred type. used to handle
 calling weakly defined functions. when this occurs, we don't know what types globals will be,
@@ -263,11 +265,11 @@ so we have to assume they are dynamic and convert them to dynamic types *)
 
 let globals_to_list globals = 
   let current = StringMap.bindings globals in
-  let bindings = List.map (fun (name, (_, typ, _)) -> Bind(name, typ)) current in
+  let bindings = List.map (fun (name, (_, typ, _)) -> Bind({name = name; typ = typ; pos = empty_pos;})) current in
   bindings
 
 let make_transforms globals = 
   possible_globals := (make_dynamic globals) @ !possible_globals;
-  let entry = List.map (fun (Bind(name, typ)) -> STransform(name, typ, Dyn)) globals in
-  let exit = List.map (fun (Bind(name, typ)) -> STransform(name, Dyn, typ)) globals in
+  let entry = List.map (fun (Bind b) -> STransform(b.name, b.typ, Dyn)) globals in
+  let exit = List.map (fun (Bind b) -> STransform(b.name, Dyn, b.typ)) globals in
   SStage(SBlock(entry), SNop, SBlock(exit))

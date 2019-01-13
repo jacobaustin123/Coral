@@ -56,7 +56,7 @@ let rec expr map x = convert (exp map x)
 
 and exp map = function 
   | Lit(x) -> 
-    let typ = match x with 
+    let typ = match x.value with 
       | IntLit(x) -> Int 
       | BoolLit(x) -> Bool 
       | StringLit(x) -> String
@@ -65,12 +65,12 @@ and exp map = function
   
   | List(x) -> (* parse Lists to determine if they have uniform type, evaluate each expression separately *)
     let rec aux typ out = function
-      | [] -> (Arr, SList(List.rev out, Arr), None) (* replace Dyn with type_to_array typ to allow type inference on lists *)
+      | [] -> (Arr, SList({value = List.rev out;}, Arr), None) (* replace Dyn with type_to_array typ to allow type inference on lists *)
       | a :: rest -> 
         let (t, e, _) = expr map a in 
         if t = typ then aux typ (e :: out) rest 
         else aux Dyn (e :: out) rest in 
-      (match x with
+      (match x.value with
         | a :: rest -> let (t, e, _) = expr map a in aux t [e] rest
         | [] -> (Dyn, SList([], Dyn), None) (* TODO: maybe do something with this special case of empty list *)
       ) 
@@ -91,10 +91,10 @@ and exp map = function
       then raise (Failure ("STypeError: invalid types for list slice"))
     else (Dyn, SListSlice(e1, e2, e3), None) *)
 
-  | Var(Bind(x, t)) -> (* parse Variables, throwing an error if they are not found in the global lookup table *)
+  | Var(Bind b) -> (* parse Variables, throwing an error if they are not found in the global lookup table *)
     if StringMap.mem x map then 
     let (t', typ, data) = StringMap.find x map in 
-    (typ, SVar(x), data)
+    (typ, SVar(b.name), data)
     else raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
   
   | Unop(op, e) -> (* parse Unops, making sure the argument and ops have valid type combinations *)
@@ -122,7 +122,7 @@ and exp map = function
                 let data = expr globals exp in 
                 let (t', e', _) = data in 
                 let (locals, name, inferred_t, explicit_t) = assign locals data bind in 
-                (globals, locals, ((Bind(name, explicit_t)) :: bindout), (e' :: exprout))
+                (globals, locals, ((bind_of_rawbind name explicit_t) :: bindout), (e' :: exprout))
             
             in 
             

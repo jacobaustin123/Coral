@@ -1,5 +1,8 @@
 %{ 
 	open Ast
+
+  let make_expr rawexpr pos = { value = rawexpr; pos = pos; }
+  let make_stmt rawstmt pos = { value = rawstmt; pos = pos; }
 %}
 
 /* A simple LR parser in OcamlYacc implementing a minimal Python syntax with some
@@ -12,24 +15,21 @@ Python-style indentation based parsing scheme. The second is the full parser.
 Note: if any token is added here, it must also be added in the token target below 
 and in the print utility in utilities.ml */
 
-%token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE PLUSEQ MINUSEQ TIMESEQ DIVIDEEQ EXPEQ
-%token EXP NOT NEG SEP AND OR ARROW NOP TYPE PRINT FUNC
-%token TAB SPACE COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE DOT
-%token BOOL INT FLOAT STRING ARR
-%token CLASS IMPORT CEND RANGE
-%token INDENT DEDENT
-%token LPAREN RPAREN
-%token LBRACK RBRACK
-%token LBRACE RBRACE
-%token <string> VARIABLE
+%token <Ast.position> NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE PLUSEQ MINUSEQ TIMESEQ DIVIDEEQ EXPEQ
+%token <Ast.position> EXP NOT NEG SEP AND OR ARROW NOP TYPE PRINT FUNC
+%token <Ast.position> TAB SPACE COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE DOT
+%token <Ast.position> BOOL INT FLOAT STRING ARR
+%token <Ast.position> IMPORT CEND RANGE
+%token <Ast.position> INDENT DEDENT
+%token <Ast.position> LPAREN RPAREN
+%token <Ast.position> LBRACK RBRACK
+%token <Ast.position> LBRACE RBRACE
+%token <string * Ast.position> VARIABLE
 
-%token <float> FLOAT_LITERAL
-%token <string> STRING_LITERAL
-%token <int> INT_LITERAL
-%token <bool> BOOL_LITERAL
-
-%nonassoc NOFIELD /* handles shift-reduce error for fields and methods in classes */
-%nonassoc FIELD
+%token <float * Ast.position> FLOAT_LITERAL
+%token <string * Ast.position> STRING_LITERAL
+%token <int * Ast.position> INT_LITERAL
+%token <bool * Ast.position> BOOL_LITERAL
 
 %nonassoc NOELSE /* handles shift-reduce error for else and noelse clauses */
 %nonassoc ELSE
@@ -74,69 +74,68 @@ seq:
   | token seq { $1 :: $2 }
 
 token:
-  | COLON { COLON }
-  | TAB { TAB }
-  | SPACE { SPACE }
-  | ARROW { ARROW }
-  | RETURN { RETURN }
-  | NOT { NOT }
-  | IF { IF }
-  | ELSE { ELSE }
-  | FOR { FOR }
-  | WHILE { WHILE }
-  | DEF { DEF }
-  | COMMA { COMMA }
-  | NEQ { NEQ }
-  | LT { LT }
-  | GT { GT }
-  | LEQ { LEQ }
-  | GEQ { GEQ }
-  | AND { AND }
-  | OR { OR }
-  | IN { IN }
-  | TRUE { TRUE }
-  | FALSE { FALSE }
-  | IS { IS }
-  | PLUS { PLUS }
-  | MINUS { MINUS }
-  | TIMES { TIMES }
-  | DIVIDE { DIVIDE }
-  | EXP { EXP }
-  | PLUSEQ { PLUSEQ }
-  | MINUSEQ { MINUSEQ }
-  | TIMESEQ { TIMESEQ }
-  | DIVIDEEQ { DIVIDEEQ }
-  | EXPEQ { EXPEQ }
-  | LPAREN { LPAREN }
-  | RPAREN { RPAREN }
-  | LBRACK { LBRACK }
-  | RBRACK { RBRACK }
-  | LBRACE { LBRACE }
-  | RBRACE { RBRACE }
-  | EQ { EQ }
-  | ASN { ASN }
-  | SEP { SEP }
-  | BOOL { BOOL }
-  | INT { INT }
-  | FLOAT { FLOAT }
-  | FUNC { FUNC }
-  | ARR { ARR }
-  | STRING { STRING }
-  | INDENT { INDENT }
-  | DEDENT { DEDENT }
+  | COLON { COLON($1) }
+  | TAB { TAB($1) }
+  | SPACE { SPACE($1) }
+  | ARROW { ARROW($1) }
+  | RETURN { RETURN($1) }
+  | NOT { NOT($1) }
+  | IF { IF($1) }
+  | ELSE { ELSE($1) }
+  | FOR { FOR($1) }
+  | WHILE { WHILE($1) }
+  | DEF { DEF($1) }
+  | COMMA { COMMA($1) }
+  | NEQ { NEQ($1) }
+  | LT { LT($1) }
+  | GT { GT($1) }
+  | LEQ { LEQ($1) }
+  | GEQ { GEQ($1) }
+  | AND { AND($1) }
+  | OR { OR($1) }
+  | IN { IN($1) }
+  | TRUE { TRUE($1) }
+  | FALSE { FALSE($1) }
+  | IS { IS($1) }
+  | PLUS { PLUS($1) }
+  | MINUS { MINUS($1) }
+  | TIMES { TIMES($1) }
+  | DIVIDE { DIVIDE($1) }
+  | EXP { EXP($1) }
+  | PLUSEQ { PLUSEQ($1) }
+  | MINUSEQ { MINUSEQ($1) }
+  | TIMESEQ { TIMESEQ($1) }
+  | DIVIDEEQ { DIVIDEEQ($1) }
+  | EXPEQ { EXPEQ($1) }
+  | LPAREN { LPAREN($1) }
+  | RPAREN { RPAREN($1) }
+  | LBRACK { LBRACK($1) }
+  | RBRACK { RBRACK($1) }
+  | LBRACE { LBRACE($1) }
+  | RBRACE { RBRACE($1) }
+  | EQ { EQ($1) }
+  | ASN { ASN($1) }
+  | SEP { SEP($1) }
+  | BOOL { BOOL($1) }
+  | INT { INT($1) }
+  | FLOAT { FLOAT($1) }
+  | FUNC { FUNC($1) }
+  | ARR { ARR($1) }
+  | STRING { STRING($1) }
+  | INDENT { INDENT($1) }
+  | DEDENT { DEDENT($1) }
   | VARIABLE { VARIABLE($1) }
   | FLOAT_LITERAL { FLOAT_LITERAL($1) }
   | INT_LITERAL { INT_LITERAL($1) }
   | BOOL_LITERAL { BOOL_LITERAL($1) }
   | STRING_LITERAL { STRING_LITERAL($1) }
-  | EOF { EOF }
-  | CLASS { CLASS }
-  | NONE { NONE }
-  | DOT { DOT }
-  | TYPE { TYPE }
-  | PRINT { PRINT }
-  | IMPORT { IMPORT }
-  | RANGE { RANGE }
+  | EOF { EOF($1) }
+  | NONE { NONE($1) }
+  | DOT { DOT($1) }
+  | TYPE { TYPE($1) }
+  | PRINT { PRINT($1) }
+  | IMPORT { IMPORT($1) }
+  | RANGE { RANGE($1) }
 
 /* program: the main program parser target. read a list of statements until EOF is reached.
 constructed backwards per the usual OCaml functional list syntax. */
@@ -174,27 +173,26 @@ to the ast.ml stmt type.
 */
 
 stmt:
-  | expr SEP { Expr $1 }
+  | expr SEP { make_expr (Expr $1.value) $1.pos }
   | stmt SEP { $1 }
-  | IMPORT VARIABLE SEP { Import($2) }
-  | CLASS VARIABLE COLON SEP stmt_block { Class($2, $5) }
-  | DEF VARIABLE LPAREN formals_opt RPAREN COLON SEP stmt_block { Func(Bind($2, Dyn), $4, $8) }
-  | DEF VARIABLE LPAREN formals_opt RPAREN ARROW typ COLON SEP stmt_block { Func(Bind($2, $7), $4, $10) }
-  | RETURN expr SEP { Return $2 }
-  | IF expr COLON SEP stmt_block %prec NOELSE { If($2, $5, Block([])) }
-  | IF expr COLON SEP stmt_block ELSE COLON SEP stmt_block { If($2, $5, $9) } /* to do figure out (Block) */
-  | FOR bind_opt IN expr COLON SEP stmt_block { For($2, $4, $7) }
-  | FOR bind_opt IN RANGE LPAREN expr RPAREN COLON SEP stmt_block { Range($2, $6, $10) }
-  | WHILE expr COLON SEP stmt_block { While($2, $5) }
-  | formal_asn_list ASN expr { Asn(List.rev $1, $3) }
-  | lvalue PLUSEQ expr { Asn([$1], Binop($1, Add, $3)) }
-  | lvalue MINUSEQ expr { Asn([$1], Binop($1, Sub, $3)) }
-  | lvalue TIMESEQ expr { Asn([$1], Binop($1, Mul, $3)) }
-  | lvalue DIVIDEEQ expr { Asn([$1], Binop($1, Div, $3)) }
-  | lvalue EXPEQ expr { Asn([$1], Binop($1, Exp, $3)) }
-  | TYPE LPAREN expr RPAREN { Type($3) }
-  | PRINT LPAREN expr RPAREN { Print($3) }
-  | NOP { Nop }
+  | IMPORT VARIABLE SEP { make_stmt (Import $2.value) $1 }
+  | DEF VARIABLE LPAREN formals_opt RPAREN COLON SEP stmt_block { let bind = Bind({name = $2.value; typ = Dyn; pos = $2;}) in make_stmt (Func(bind, $4, $8)) $1 }
+  | DEF VARIABLE LPAREN formals_opt RPAREN ARROW typ COLON SEP stmt_block { let bind = Bind({name = $2.value; typ = $7; pos = $2;}) in make_stmt (Func(bind, $4, $7), $4, $10) $1 }
+  | RETURN expr SEP { make_stmt (Return $2) $1 }
+  | IF expr COLON SEP stmt_block %prec NOELSE { let else = (make_stmt Block([]) $1) in make_stmt (If($2, $5, else)) $1 }
+  | IF expr COLON SEP stmt_block ELSE COLON SEP stmt_block { make_stmt (If($2, $5, $9)) $1 } /* to do figure out (Block) */
+  | FOR bind_opt IN expr COLON SEP stmt_block { make_stmt (For($2, $4, $7)) $1 }
+  | FOR bind_opt IN RANGE LPAREN expr RPAREN COLON SEP stmt_block { make_stmt (Range($2, $6, $1)) $1 }
+  | WHILE expr COLON SEP stmt_block { make_stmt (While($2, $5)) $1 }
+  | formal_asn_list ASN expr { make_stmt (Asn(List.rev $1, $3)) $2 }
+  | lvalue PLUSEQ expr { let binop = make_stmt (Binop($1, Add, $3)) $1.pos in (make_stmt (Asn([$1], binop))) $2 }
+  | lvalue MINUSEQ expr { let binop = make_stmt (Binop($1, Sub, $3)) $1.pos in (make_stmt (Asn([$1], binop))) $2 }
+  | lvalue TIMESEQ expr { let binop = make_stmt (Binop($1, Mul, $3)) $1.pos in (make_stmt (Asn([$1], binop))) $2 }
+  | lvalue DIVIDEEQ expr { let binop = make_stmt (Binop($1, Div, $3)) $1.pos in (make_stmt (Asn([$1], binop))) $2 }
+  | lvalue DIVIDEEQ expr { let binop = make_stmt (Binop($1, Exp, $3)) $1.pos in (make_stmt (Asn([$1], binop))) $2 }
+  | TYPE LPAREN expr RPAREN { make_stmt (Type($3.value)) $1 }
+  | PRINT LPAREN expr RPAREN { make_stmt (Print($3.value)) $1 }
+  | NOP { make_stmt Nop $1 }
 
 formal_asn_list:
   | lvalue { [$1] }
@@ -205,34 +203,27 @@ Currently Coral only supports assignments to variables or to list index/access
 expressions. Further additions could include list slices, methods, and fields */
 
 lvalue:
-  | bind_opt { Var $1 }
+  | bind_opt { make_expr (Var $1.value) $1.pos }
   | list_access { $1 }
-
-/* inplace_op:
-  | lvalue PLUSEQ expr { Asn([$1], Binop($1, Add, $3)) }
-  | lvalue MINUSEQ expr { Asn([$1], Binop($1, Sub, $3)) }
-  | lvalue TIMESEQ expr { Asn([$1], Binop($1, Mul, $3)) }
-  | lvalue DIVIDEEQ expr { Asn([$1], Binop($1, Div, $3)) }
-  | lvalue EXPEQ expr { Asn([$1], Binop($1, Exp, $3)) } */
 
 /* bind_opt: optional type target, for variables of the form x or x : type */
 
 bind_opt:
-  | VARIABLE { Bind($1, Dyn) }
-  | VARIABLE COLON typ { Bind($1, $3) }
+  | VARIABLE { let (pos, name) = $1 in Bind({name = name; typ = Dyn; pos = name; }) }
+  | VARIABLE COLON typ { let (pos, name) = $1 in Bind({name = name; typ = $3; pos = pos; }) }
 
 /* list_access: list access of the form name[expr] or name[expr : expr]. 
 this permits invalid access and needs to be checked in semant and at runtime. */
 
 list_access:
-  | expr LBRACK expr RBRACK { ListAccess($1, $3) }
-  | expr LBRACK expr COLON expr RBRACK { ListSlice($1, $3, $5) }
+  | expr LBRACK expr RBRACK { make_stmt (ListAccess($1, $3)) $1.pos }
+  | expr LBRACK expr COLON expr RBRACK { make_stmt (ListSlice($1, $3, $5)) $1.pos }
 
 /* stmt_block: a statement block contained within a function, class, loop, or conditional.
 delimited by an indent and dedent block introduced by the indentation parser in coral.ml */
 
 stmt_block: 
-  | INDENT stmt_list DEDENT { Block(List.rev $2) }
+  | INDENT stmt_list DEDENT { make_stmt (Block(List.rev $2.value)) $1 }
 
 /* formals_opt: an optional formal name in a function declaration */
 
@@ -275,29 +266,27 @@ and list slice, methods and fields, function calls, binary and unary operations,
 
 expr:
 | list_access { $1 }
-| VARIABLE { Var(Bind($1, Dyn)) }
-| expr LPAREN actuals_opt RPAREN { Call($1, $3) }
-| expr DOT VARIABLE LPAREN actuals_opt RPAREN { Method($1, $3, $5) }
-| expr DOT VARIABLE %prec FIELD { Field($1, $3) }
-| MINUS expr %prec NEG { Unop(Neg, $2) }
-| NOT expr %prec NOT { Unop(Not, $2) }
+| VARIABLE { let (pos, name) = $1 in make_expr (Var(Bind(name, Dyn))) pos }
+| expr LPAREN actuals_opt RPAREN { make_expr (Call($1, $3)) $1.pos }
+| MINUS expr %prec NEG { make_expr (Unop(Neg, $2)) $1 }
+| NOT expr %prec NOT { make_expr (Unop(Not, $2)) $1 }
 | LPAREN expr RPAREN { $2 }
-| FLOAT_LITERAL { Lit(FloatLit($1)) }
-| BOOL_LITERAL { Lit(BoolLit($1)) }
-| INT_LITERAL { Lit(IntLit($1)) }
-| STRING_LITERAL { Lit(StringLit($1)) }
-| LBRACK actuals_opt RBRACK { List($2) }
-| expr EQ expr { Binop($1, Eq, $3) }
-| expr NEQ expr { Binop($1, Neq, $3) }
-| expr LT expr { Binop($1, Less, $3) }
-| expr GT expr { Binop($1, Greater, $3) }
-| expr LEQ expr { Binop($1, Leq, $3) }
-| expr GEQ expr { Binop($1, Geq, $3) }
-| expr AND expr { Binop($1, And, $3) }
-| expr OR expr { Binop($1, Or, $3) }
-| expr PLUS expr { Binop($1, Add, $3) }
-| expr MINUS expr { Binop($1, Sub, $3) }
-| expr TIMES expr { Binop($1, Mul, $3) }
-| expr DIVIDE expr { Binop($1, Div, $3) }
-| expr EXP expr { Binop($1, Exp, $3) }
+| FLOAT_LITERAL { let (pos, val) = $1 in make_expr (Lit(FloatLit(val))) pos }
+| BOOL_LITERAL { let (pos, val) = $1 in make_expr (Lit(BoolLit(val))) pos }
+| INT_LITERAL { let (pos, val) = $1 in make_expr (Lit(IntLit(val))) pos }
+| STRING_LITERAL { let (pos, val) = $1 in make_expr (Lit(StringLit(val))) pos }
+| LBRACK actuals_opt RBRACK { make_expr (List($2)) $1 }
+| expr EQ expr { make_expr (Binop($1, Eq, $3)) $1.pos }
+| expr NEQ expr { make_expr (Binop($1, Neq, $3)) $1.pos }
+| expr LT expr { make_expr (Binop($1, Less, $3)) $1.pos }
+| expr GT expr { make_expr (Binop($1, Greater, $3)) $1.pos }
+| expr LEQ expr { make_expr (Binop($1, Leq, $3)) $1.pos }
+| expr GEQ expr { make_expr (Binop($1, Geq, $3)) $1.pos }
+| expr AND expr { make_expr (Binop($1, And, $3)) $1.pos }
+| expr OR expr { make_expr (Binop($1, Or, $3)) $1.pos }
+| expr PLUS expr { make_expr (Binop($1, Add, $3)) $1.pos }
+| expr MINUS expr { make_expr (Binop($1, Sub, $3)) $1.pos }
+| expr TIMES expr { make_expr (Binop($1, Mul, $3)) $1.pos }
+| expr DIVIDE expr { make_expr (Binop($1, Div, $3)) $1.pos }
+| expr EXP expr { make_expr (Binop($1, Exp, $3)) $1.pos }
 ;

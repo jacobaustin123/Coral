@@ -21,21 +21,34 @@ type literal =
 
 type typ = Int | Float | Bool | String | Dyn | Arr | FuncType | Null
 
-type bind = Bind of string * typ
+type position = {
+  line_n : int;
+  char_n : int;
+}
 
-type expr =
+type bind = Bind of {name : string; typ : typ; pos : position; }
+
+type expr = {
+  value : rawexpr;
+  pos : position;
+}
+
+and rawexpr =
   | Binop of expr * operator * expr
   | Lit of literal
   | Var of bind
   | Unop of uop * expr
   | Call of expr * expr list
-  | Method of expr * string * expr list
-  | Field of expr * string
   | List of expr list
   | ListAccess of expr * expr (* expr, entry *)
   | ListSlice of expr * expr * expr (* expr, left, right *)
 
-type stmt =
+type stmt = {
+  value : rawstmt;
+  pos : position;
+}
+
+and rawstmt =
   | Func of bind * bind list * stmt
   | Block of stmt list
   | Expr of expr
@@ -44,13 +57,11 @@ type stmt =
   | Range of bind * expr * stmt
   | While of expr * stmt
   | Return of expr
-  | Class of string * stmt
   | Asn of expr list * expr
   | Type of expr
   | Print of expr
   | Import of string
   | Nop
-
 
 let rec string_of_op = function
   | Add -> "+"
@@ -89,21 +100,10 @@ let rec string_of_typ = function
   | Null -> "null"
 
 let rec string_of_bind = function
-  | Bind(s, t) -> s ^ ": " ^ string_of_typ t
+  | Bind(bind) -> bind.name ^ ": " ^ string_of_typ bind.typ
 
-let rec string_of_expr = function
-  | Binop(e1, o, e2) -> string_of_expr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_expr e2
-  | Lit(l) -> string_of_lit l
-  | Var(b) -> string_of_bind b
-  | Unop(o, e) -> string_of_uop o ^ string_of_expr e
-  | Call(e, el) -> string_of_expr e ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
-  | Method(obj, m, el) -> string_of_expr obj ^ "." ^ m ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
-  | Field(obj, s) -> string_of_expr obj ^ "." ^ s
-  | List(el) -> String.concat ", " (List.map string_of_expr el)
-  | ListAccess(e1, e2) -> string_of_expr e1 ^ "[" ^ string_of_expr e2 ^ "]"
-  | ListSlice(e1, e2, e3) -> string_of_expr e1 ^ "[" ^ string_of_expr e2 ^ ":" ^ string_of_expr e3 ^ "]"
-
-let rec string_of_stmt = function
+let rec string_of_stmt stmt = 
+  match stmt.value with
   | Func(b, bl, s) -> "def " ^ string_of_bind b ^ "(" ^ String.concat ", " (List.map string_of_bind bl) ^ ")\n" ^ string_of_stmt s
   | Block(sl) -> String.concat "\n" (List.map string_of_stmt sl) ^ "\n"
   | Expr(e) -> string_of_expr e
@@ -112,12 +112,22 @@ let rec string_of_stmt = function
   | Range(b, e, s) -> "for " ^ string_of_bind b ^ " in range (" ^ string_of_expr e ^ "):\n" ^ string_of_stmt s
   | While(e, s) -> "while " ^ string_of_expr e ^ ":\n" ^ string_of_stmt s
   | Return(e) -> "return " ^ string_of_expr e ^ "\n"
-  | Class(str, s) -> "class " ^ str ^ ":\n" ^ string_of_stmt s
   | Asn(el, e) -> String.concat ", " (List.map string_of_expr el) ^ " = "  ^ string_of_expr e
   | Type(e) -> string_of_expr e
   | Print(e) -> string_of_expr e
   | Import(e) -> "import " ^ e
   | Nop -> ""
+
+and string_of_expr expr = 
+  match expr.value with
+  | Binop(e1, o, e2) -> string_of_expr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_expr e2
+  | Lit(l) -> string_of_lit l
+  | Var(b) -> string_of_bind b
+  | Unop(o, e) -> string_of_uop o ^ string_of_expr e
+  | Call(e, el) -> string_of_expr e ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
+  | List(el) -> String.concat ", " (List.map string_of_expr el)
+  | ListAccess(e1, e2) -> string_of_expr e1 ^ "[" ^ string_of_expr e2 ^ "]"
+  | ListSlice(e1, e2, e3) -> string_of_expr e1 ^ "[" ^ string_of_expr e2 ^ ":" ^ string_of_expr e3 ^ "]"
 
 and string_of_program l = String.concat "" (List.map string_of_stmt l) ^ "\n\n"
 

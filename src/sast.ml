@@ -77,7 +77,7 @@ let append_list v = List.map (fun c -> c ^ v)
 let rec string_of_sexpr (e, t) = "(" ^ string_of_sexp e ^ ": " ^ string_of_typ t ^ ")"
 
 and string_of_sbind = function
-  | Bind(s, t) -> s ^ ": " ^ string_of_typ t
+  | Bind(bind) -> bind.name ^ ": " ^ string_of_typ bind.typ
 
 and string_of_sexp = function
   | SBinop(e1, o, e2) -> string_of_sexpr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_sexpr e2
