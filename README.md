@@ -1,6 +1,6 @@
 <div align="center"><img src="https://i.ibb.co/y5rZ1ft/coral3.png" width="75%"><br><br></div>
 
-The **Coral** programming language: a blazingly-fast, gradually typed Python-like language with powerful optional typing for improved safety and performance. Coral performs type inference on optionally typed Python code and seamlessly optimizes type-inferred objects to be nearly as efficient as equivalent C-code, orders of magnitude faster than Python. Coral also enforces types at compile and runtime, catching errors where possible before code is run, and otherwise throwing errors at runtime.
+The **Coral** programming language: a blazingly-fast, gradually typed Python-like language/compiler with powerful optional typing for improved safety and performance. Coral performs type inference on optionally typed Python code and seamlessly optimizes type-inferred objects to be nearly as efficient as equivalent C-code, orders of magnitude faster than Python. Coral also enforces types at compile and runtime, catching errors where possible before code is run, and otherwise throwing errors at runtime.
 
 # Table of Contents
 * [Examples](#examples)
@@ -36,7 +36,7 @@ Coral supports Python 3.7 style type annotations, as seen in the add function he
 
 # Installation
 
-The Coral GitHub page provides installers for MacOS and several Linux distributions. These installers can be found on the [Releases page](https://github.com/ja3067/Coral/releases). These require that clang be installed.
+The Coral GitHub page provides installers for MacOS and several Linux distributions. **These installers can be found on the [Releases page](https://github.com/ja3067/Coral/releases)**. These require that clang be installed.
 
 To build the language from the source, you must have OCaml, ocaml-llvm, and clang already installed. To build Coral from the source *with OCaml, ocaml-llvm, and gcc/clang already installed*, run:
 
