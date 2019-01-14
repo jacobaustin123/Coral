@@ -204,7 +204,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     data
   in
 
-  (* here's how you go from a cobj to the data value: *)
+  (* here's how you go from a cobj_p to the data value: *)
   let build_gettype_cobj cobj_p b =  (* data_type = int_t etc *)
     let x2 = L.build_struct_gep cobj_p cobj_type_idx "x2" b in
     let x3 = L.build_load x2 "x3" b in
@@ -218,6 +218,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     L.build_bitcast objptr clist_pt "__clistptr" b
   in
 
+  (* get list length *)
   let build_getlen_clist clist_p b =
     let gep_addr = L.build_struct_gep clist_p clist_len_idx "__gep_addr" b in
     let gep_addr_as_intptr = L.build_bitcast gep_addr int_pt "__gep_addr_as_intptr" b in
@@ -225,6 +226,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     length
   in
 
+  (* get list capacity *)
   let build_getcap_clist clist_p b =
     let gep_addr = L.build_struct_gep clist_p clist_cap_idx "__gep_addr" b in (* DA PROBLEM *)
     let gep_addr_as_intptr = L.build_bitcast gep_addr int_pt "__gep_addr_as_intptr" b in
@@ -232,6 +234,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     capacity
   in
 
+  (* get function pointer from function object cobj_p *)
   let build_fnptr_of_cfo cobj_p b =
     let x2 = L.build_struct_gep cobj_p cobj_data_idx "x2" b in
     let x3 = L.build_load x2 "x3" b in
@@ -239,6 +242,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     fnptr
   in
 
+  (* get the func pointer given the index of it in ctype and the cobj_p
+   * e.g. ctype_fn_idx=ctype_add_idx for the '+' operator's function ptr *)
   let build_getctypefn_cobj ctype_fn_idx cobj_p b =
     let x2 = L.build_struct_gep cobj_p cobj_type_idx "x2" b in
     let x3 = L.build_load x2 "x3" b in  (* x3: ctype_pt *)
@@ -247,7 +252,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     fn_ptr
   in
 
-  (** define helper functions for commonly used code snippets **)
+  (* new cobject with undefined type / undef data *)
   let build_new_cobj_empty builder =
     let objptr = L.build_malloc cobj_t "__new_objptr" builder in (* objptr: cobj_pt* *)
     let datafieldptr = L.build_struct_gep objptr cobj_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
@@ -320,8 +325,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     ignore(L.build_store cap capfieldptr builder);
   in
 
-  (** manually making the ctype_ functions **)
-  (* does alloca, store, then load *)  (* note you should not use this if youre not using the values right away !!!!!! *)
+  (* boilerplate: does alloca, store, then load *)
   let boilerplate_till_load remote_cobj_p prettyname b =
     ignore(L.set_value_name ("remote_" ^ prettyname) remote_cobj_p);
     let cobj_pp = L.build_alloca cobj_pt (prettyname ^ "_p") b in
@@ -330,6 +334,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     cobj_p
   in
 
+  (* boilerplate for funcs taking 2 args 'self' and 'other' *)
   let boilerplate_binop data_type fn b =
     let formals_llvalues = (Array.to_list (L.params fn)) in
     let [ remote_self_p; remote_other_p ] = formals_llvalues in
@@ -344,6 +349,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     (self_data, other_data)
   in
 
+  (* boilerplate for funcs taking 1 arg 'self' *)
   let boilerplate_uop data_type fn b =
     let formals_llvalues = (Array.to_list (L.params fn)) in
     let [ remote_self_p ] = formals_llvalues in
@@ -356,6 +362,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     (self_data)
   in
 
+  (* boilerplate for list operator *)
   let boilerplate_lop fn b =
     let formals_llvalues = (Array.to_list (L.params fn)) in
     let [ remote_self_p; remote_other_p ] = formals_llvalues in
@@ -370,6 +377,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     (self_data, other_data)
   in
 
+  (* boilerplate for list indexing operator *)
   let boilerplate_idxop fn b =
       (* TODO: throw error if array bounds exceeded *)
     let formals_llvalues = Array.to_list (L.params fn) in
@@ -961,9 +969,6 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
   (* pass in Some(builder) to do local vars alloca() or None to do globals non-alloca *)
   let build_binding_list local_builder_opt binds dynify_all =   (* returns a stringmap Bind -> Addr *) 
-  (* strip out all the FuncTypes from binds *)
-      (*let binds = List.rev (List.fold_left (fun binds bind -> if ((type_of_bind bind) = FuncType) then binds else (bind::binds)) [] binds) in*)
-      (** the commented code adds a Dyn version of every var. i wont use it for pure immutable phase-1 testing tho! **)
       let dynify bind =   (* turns a bind into dynamic. a helper fn *)
          let Bind(name,_) = bind in
            Bind(name, Dyn)
@@ -980,10 +985,6 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         | Float -> L.const_null float_t
         | Bool -> L.const_null bool_t
         | _ -> L.define_global ((prettyname_of_bind bind) ^ "_obj") (L.const_named_struct cobj_t [|L.const_pointer_null char_pt; L.const_pointer_null ctype_pt|]) the_module
-        (*L.define_global (prettyname_of_bind bind) (the_cobj) the_module*)
-
-        (*|_ -> L.define_global (prettyname_of_bind bind) (L.const_null cobj_t) the_module*)
-        (** TODO impl lists and everything! and strings. idk how these will work **)      
       in
 
       let allocate bind = 
@@ -1034,8 +1035,6 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
   let init_state:state = {ret_typ=Int;namespace=BindMap.empty; func=main_function; b=main_builder;optim_funcs=SfdeclMap.empty;generic_func=false} in
 
-
-  (* useful utility functions! *)
   (* helper fn: seq 4 == [0;1;2;3] *)
   let seq len =
     let rec aux len acc =
@@ -1400,28 +1399,32 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         (* eval the arg exprs *)
         let argc = List.length arg_expr_list in
 
+        (* eval an argument *)
         let eval_arg aggreg e =
             let (the_state, args) = aggreg in
             let (res, the_state) = expr the_state e in
             (the_state,res::args)
         in
+        (* eval all the args *)
         let (the_state, arg_dataunits) = List.fold_left eval_arg (the_state,[]) (List.rev arg_expr_list) in
   
         let arg_types = List.map (fun (_,ty) -> ty) arg_expr_list in
 
+        (* box everything *)
         let transform_if_needed raw_ty = function
             | Box(v) -> Box(v)
             | Raw(v) -> build_temp_box v raw_ty the_state.b
         in
 
         let boxed_args = List.map2 transform_if_needed arg_types arg_dataunits in
+        (* llargs = the llvalues for the args *)
         let llargs = List.map (fun b -> match b with Box(v) -> v) boxed_args in
         
         let cobj_p_arr_t = L.array_type cobj_pt argc in
         (* allocate stack space for argv *)
         let argv_as_arr = L.build_alloca cobj_p_arr_t "argv_arr" the_state.b in
-        (* store llargs values in argv *)
 
+        (* store llargs values in argv *)
         let store_arg llarg idx =
           let gep_addr = L.build_gep argv_as_arr [|L.const_int int_t 0; L.const_int int_t idx|] "arg" the_state.b in
           ignore(L.build_store llarg gep_addr the_state.b);()
@@ -1447,6 +1450,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         (* let BoxAddr(addr, _) = lookup the_state.namespace (Bind(sfdecl.sfname, func_typ)) in
         let the_state = check_defined addr ("RuntimeError: function " ^ sfdecl.sfname ^ " is not defined.") the_state in *)
 
+        (* eval an arg*)
         let eval_arg aggreg e =
             let (the_state, args) = aggreg in
             let (res, the_state) = expr the_state e in
@@ -1466,8 +1470,10 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         let arg_types = List.map (fun (Bind(_, ty), _) -> ty) binds in
         let arg_lltypes = List.map ltyp_of_typ arg_types in (* arg inferred types *)
 
+        (* eval the args *)
         let (the_state, arg_dataunits) = List.fold_left eval_arg (the_state, []) (List.rev arg_expr_list) in
-        let unwrap_if_raw (the_state, out) (box, (Bind(name, _), tp_lhs)) = (match (box, tp_lhs) with  (* maybe will crash, who knows. trying to get Dyn to work. *)
+
+        let unwrap (the_state, out) (box, (Bind(name, _), tp_lhs)) = (match (box, tp_lhs) with  
             | Raw(v), _ -> (the_state, v :: out)
             | Box(v), Dyn -> (the_state, v :: out)
             | Box(v), typ -> let the_state = check_explicit_type tp_lhs v ("RuntimeError: invalid type assigned to " ^ name) the_state in 
@@ -1477,8 +1483,9 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
                 )
           )
 
-        in let (the_state, arg_vals) = List.fold_left unwrap_if_raw (the_state, []) (List.combine arg_dataunits binds) in
+        in let (the_state, arg_vals) = List.fold_left unwrap (the_state, []) (List.combine arg_dataunits binds) in
         let arg_vals = List.rev arg_vals in
+        (* look for existing copy of optimized function, if it doesn't exist then create a new one *)
         let optim_func = (match (SfdeclMap.find_opt sfdecl the_state.optim_funcs) with
           | Some(optim_func) -> tstp ("(optimized version of " ^ sfdecl.sfname ^ " found!)"); optim_func
           | None -> tstp ("(no optimized version of " ^ sfdecl.sfname ^ " found, generating new one)");
@@ -1511,13 +1518,14 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
             let fn_state = stmt fn_state sfdecl.sbody in  
 
-            let instr = (match sfdecl.styp with
+            let ret_instr = (match sfdecl.styp with
               | Null -> (fun b -> tstp ("add_terminal invoked on Null for " ^ sfdecl.sfname); L.build_ret (build_new_cobj_init int_t (L.const_int int_t 0) b) b)
               | Dyn -> (fun b -> tstp ("add_terminal invoked on Dyn for " ^ sfdecl.sfname); L.build_ret (build_new_cobj_init int_t (L.const_int int_t 0) b) b)
               | _ -> (fun b -> tstp ("add_terminal invoked on known type for " ^ sfdecl.sfname); L.build_ret (const_of_typ sfdecl.styp) b)
             ) in 
 
-            let fn_state = add_terminal fn_state instr in optim_func
+            (* add terminal if needed (usually not needed) *)
+            let fn_state = add_terminal fn_state ret_instr in optim_func
         ) in
         let result = L.build_call optim_func (Array.of_list arg_vals) "result" the_state.b in
         let the_state = change_state the_state (S_optimfuncs(SfdeclMap.add sfdecl optim_func the_state.optim_funcs)) in
