@@ -19,9 +19,9 @@ Coral is syntactically identical to a subset of Python, so any valid Coral progr
 def gcd(a, b):
     while a != b:
         if a > b:
-        a = a - b
+            a = a - b
         else:
-        b = b - a
+            b = b - a
     return a
 
 def add(a : int, b : int) -> int:
