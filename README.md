@@ -19,14 +19,14 @@ Coral is syntactically identical to a subset of Python, so any valid Coral progr
 def gcd(a, b):
     while a != b:
         if a > b:
-	    a = a - b
+        a = a - b
         else:
-	    b = b - a
+        b = b - a
     return a
 
 def add(a : int, b : int) -> int:
-	return a + b
-	
+    return a + b
+
 x = add(50, 40)
 y = 100052312523
 gcd(x, y)
@@ -90,19 +90,19 @@ The core philosophy of Coral is that you don’t pay a penalty if you don’t ty
 
 # Using the Coral Compiler and Interpreter
 
-Once Coral has been compiled, you can begin writing your own Coral programs. Use the Language Reference Manual to learn syntax as well as the limitations of the Coral language. 
+Once Coral has been compiled, you can begin writing your own Coral programs. Use the Language Reference Manual to learn syntax as well as the limitations of the Coral language.
 
 The following sample code is an implementation of gcd, a simple program in Coral:
 
 ```python
-def gcd(a, b): 
-    while a != b: 
-        if a < b: 
+def gcd(a, b):
+    while a != b:
+        if a < b:
             b = b-a
-        else: 
+        else:
             a = a-b
     return a
-    
+
 a = 1234342213
 b = 334232
 print(gcd(a,b))
@@ -114,7 +114,7 @@ This code is syntactically identical to Python, and requires no type annotations
 > coral gcd.cl
 ```
 
-By default, this will generate the corresponding LLVM IR, compile it to an executable file called a.out, and run it. To change the name of the output file, run 
+By default, this will generate the corresponding LLVM IR, compile it to an executable file called a.out, and run it. To change the name of the output file, run
 
 ```bash
 > coral gcd.cl -o main
@@ -136,21 +136,21 @@ Coral also has a build-in **interpreter**. To use the interpreter, simply run ``
 > coral
 Welcome to the Coral programming language.
 >>> def gcd(a, b)
-...     while a != b: 
-...         if a > b: 
+...     while a != b:
+...         if a > b:
 ...             a = a - b
-...         else: 
+...         else:
 ...             b = b - a
 ...     return a
 ...
->>> gcd(5,10) 
+>>> gcd(5,10)
 5.
 >>>
 ```
 
 # Adding Type Annotations
 
-There are many cases in Python where types cannot be fully inferred at compile time due to the lack of strong static typing. There are also many cases where a function may be intended to only take a single kind of input or return a single kind of output. Both these cases can be addressed by the inclusion of optional static typing in Coral. These type hints or type annotations follow the Python 3.7 standard, for example: 
+There are many cases in Python where types cannot be fully inferred at compile time due to the lack of strong static typing. There are also many cases where a function may be intended to only take a single kind of input or return a single kind of output. Both these cases can be addressed by the inclusion of optional static typing in Coral. These type hints or type annotations follow the Python 3.7 standard, for example:
 
 ```python
 def foo(x : int, y : int) -> str:
@@ -177,8 +177,8 @@ def foo(x) -> str:
 will succeed if called with a string argument, like ```foo("hello")```, but will raise a compile-time error if called with an integer argument, like ```foo(3)```. For example:
 
 ```python
->>> def foo() -> int: 
-...     return "hello" 
+>>> def foo() -> int:
+...     return "hello"
 ...
 STypeError: invalid return type
 ```
@@ -186,14 +186,14 @@ STypeError: invalid return type
 Sometimes these kinds of errors will only be raised when the function is called, if type inference depends on the types of the arguments or global variables in the function. Coral also supports Python-style lists, and these can be specified in type annotations.
 
 ```python
->>> def add(x : list): 
-...     sum = 0 
-...     for i in x: 
-...         sum += i 
-...     return sum 
+>>> def add(x : list):
+...     sum = 0
+...     for i in x:
+...         sum += i
+...     return sum
 ...
 >>> print(add([1, 2, 3]))
-6 
+6
 >>> print(add(4.0))
 STypeError: invalid type assigned to x
 ```
@@ -201,11 +201,11 @@ STypeError: invalid type assigned to x
 In cases where type inference is not possible (due for example to a conditional branch), these errors will occur at runtime.
 
 ```python
->>> def dynamic() -> str: 
+>>> def dynamic() -> str:
 ...    if x == 3:
 ...        return 3
-...    else: 
-...        return "hello" 
+...    else:
+...        return "hello"
 ...
 >>> x = 4
 >>> print(dynamic())
@@ -245,17 +245,17 @@ which runs much faster in Coral than Python. Type annotations make this optimiza
 
 ```python
 >>> def gcd(a : int, b : int) -> int
-...     while a != b: 
-...         if a > b: 
+...     while a != b:
+...         if a > b:
 ...             a = a - b
-...         else: 
+...         else:
 ...             b = b - a
 ...     return a
 ...
->>> def dynamic(): 
+>>> def dynamic():
 ...    if x > 50:
 ...        return x
-...    else: 
+...    else:
 ...        return 4.0
 ...
 >>> x = 51
@@ -305,11 +305,11 @@ STypeError: invalid type assigned to x
 All errors prefixed by an "S" are caught at compile time. Some errors cannot be caught by the compiler, and will only be caught at runtime. Runtime checks are only added to the LLVM IR when the code is not provably correct at compile-time. This saves needless computation at runtime. For example, in this example, the return type of the dynamic function is unknown, so if it ultimately returns a string at runtime, the error will be thrown then.
 
 ```python
->>> def dynamic(): 
+>>> def dynamic():
 ...    if x == 3:
 ...        return 3
-...    else: 
-...        return "hello" 
+...    else:
+...        return "hello"
 ...
 >>> x = 3
 >>> print(dynamic() * dynamic())
@@ -366,7 +366,7 @@ Coral does not have classes, structs, or any kind of object oriented programming
 
 ### No Casting
 
-For no particular reason, Coral does not support casting between types. That means there is no int, float, bool, or str keyword to convert between types explicitly. Likewise, you cannot perform arithmetic operations that mix types, as in 
+For no particular reason, Coral does not support casting between types. That means there is no int, float, bool, or str keyword to convert between types explicitly. Likewise, you cannot perform arithmetic operations that mix types, as in
 
 ```python
 x = 3
