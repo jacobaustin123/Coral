@@ -29,7 +29,7 @@ def add(a : int, b : int) -> int:
 
 x = add(50, 40)
 y = 100052312523
-gcd(x, y)
+print(gcd(x, y))
 ```
 
 Coral supports Python 3.7 style type annotations, as seen in the add function here. These type annotations are not just cosmetic - they allow the compiler to further type-infer ambiguous code segments and perform additional optimization and compile-time error checking.
