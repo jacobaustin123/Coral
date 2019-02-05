@@ -38,7 +38,7 @@ Coral supports Python 3.7 style type annotations, as seen in the add function he
 
 The Coral GitHub page provides installers for MacOS and several Linux distributions. **These installers can be found on the [Releases page](https://github.com/ja3067/Coral/releases)**. These require that clang be installed.
 
-To build the language from the source, you must have OCaml 4.07.0, ocaml-llvm, and clang already installed. To build Coral from the source *with OCaml, ocaml-llvm, and gcc/clang already installed*, run:
+To build the language from the source, **you must have OCaml 4.07.\*, ocaml-llvm, and clang already installed**. To build Coral from the source with OCaml, ocaml-llvm, and gcc/clang already installed, run:
 
 ```bash
 > git clone https://github.com/ja3067/Coral.git
@@ -50,16 +50,12 @@ This will generate an executable called coral which acts as a compiler and inter
 
 ```bash
 > brew install opam llvm
-> opam install llvm
+> opam init
+> opam switch create 4.07.1
+> opam install llvm ocamlbuild ocamlfind
 ```
 
-and on Linux follow the OCaml/Opam installation instructions [here](https://opam.ocaml.org/doc/Install.html) and then run
-
-```bash
-> opam install llvm
-```
-
-If the above fails, try instead running the following on Mac OS (or the equivalent on Linux):
+If the above fails, you may need to run `eval $(opam env)` after opam init and opam switch. The following may also be useful instead:
 
 ```bash
 > brew install opam llvm
@@ -68,7 +64,13 @@ If the above fails, try instead running the following on Mac OS (or the equivale
 > export PATH=/usr/local/opt/llvm@6/bin:$PATH
 ```
 
-To add the llvm installation to your \$PATH variable permanently, you can copy the last line above to your .bashrc or .bash\_profile file.
+On Linux, follow the OCaml/Opam installation instructions [here](https://opam.ocaml.org/doc/Install.html) for your distribution, install llvm following instructions [here](https://apt.llvm.org/), and then run
+
+```
+> opam install llvm ocamlbuild ocamlfind
+```
+
+You may need to add the llvm path (on Mac usually /usr/local/opt/llvm@6/bin:$PATH) to your PATH variable using bashrc.
 
 # Goals
 
