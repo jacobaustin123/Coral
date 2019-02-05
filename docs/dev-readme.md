@@ -41,7 +41,7 @@ This should all succeed without problems. Sometimes we have needed to run `opam 
 
 Once these have been installed, try navigating to the root of the Coral directory and running `make`. This should create a "coral" executable which can be used as an interpreter or compiler.
 
-# Linux
+## Linux
 
 Linux builds will depend on the distribution. Generally, you will use your distribution's package manager to install opam and llvm, and then install dependencies as for MacOS.
 
