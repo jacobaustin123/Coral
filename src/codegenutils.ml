@@ -14,6 +14,8 @@ module StringMap = Map.Make(String)
 module BindMap = Map.Make(struct type t = Ast.bind let compare = Pervasives.compare end)
 module SfdeclMap = Map.Make(struct type t = Sast.sfunc_decl let compare = Pervasives.compare end)
 
+let explode s = List.init (String.length s) (String.get s)
+
 (* A wrapper for an Llvalue representing data *)
 type dataunit =
     |Raw of L.llvalue     (* where llvalue = i32 or other prim *)

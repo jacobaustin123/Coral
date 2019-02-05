@@ -1293,9 +1293,9 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         | IntLit i -> (Raw(L.const_int int_t i), the_state)
         | BoolLit i -> (Raw(L.const_int bool_t (if i then 1 else 0)), the_state)
         | FloatLit i -> (Raw((L.const_float float_t i)), the_state)
-        | StringLit i -> let elements = List.rev (Seq.fold_left (fun l ch ->
+        | StringLit i -> let elements = List.rev (List.fold_left (fun l ch ->
             let cobj_of_char_ptr = build_new_cobj_init char_t (L.const_int char_t (Char.code ch)) the_state.b in
-            cobj_of_char_ptr :: l) [] (String.to_seq i)) in
+            cobj_of_char_ptr :: l) [] (explode i)) in
 
           let (objptr, dataptr) = build_new_cobj cstring_t the_state.b in 
           let _ = build_new_clist dataptr elements the_state.b in
