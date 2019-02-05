@@ -4,11 +4,11 @@ This document contains details about the implementation of the Coral language/co
 
 # Overview
 
-Coral is written in the OCaml language, a (mostly) functional programming language similar to ML. OCaml algebraic types and match statements make constructing an AST for the language and iterating over it during semantic checking and code-generation much more convenient. 
+Coral is written in the OCaml language, a (mostly) functional programming language similar to ML. OCaml's algebraic types and match statements make constructing an AST for the language and iterating over it during semantic checking and code-generation much more convenient. 
 
 For a good tutorial on the OCaml language, see [the official OCaml tutorial](https://ocaml.org/learn/tutorials/), including especially the "99 Problems".
 
-Coral uses Make and ocamlbuild as build systems. Make is the high-level build system, used to build and run tests. See the main Makefile for more details. Ocamlbuild is used to link in the few dependencies that Coral relies on, namely llvm/ocaml-llvm, and the Unix OCaml library. To build the main library, run `make` from the home directory. To run tests, run `make test`. To remove failed tests or other additional files, run `make clean`. To install the latest version of Coral, run `make install`.
+Coral uses make and ocamlbuild as build systems. Make is the high-level build system, used to build and run tests. See the main Makefile for more details. Ocamlbuild is used to link in the few dependencies that Coral relies on, namely llvm/ocaml-llvm, and the Unix OCaml library. To build the main library, run `make` from the home directory. To run tests, run `make test`. To remove failed tests or other additional files, run `make clean`. To install the latest version of Coral, run `make install`.
 
 Coral compiles Coral/Python code to native executables using LLVM. With certain flags, Coral will emit the
 LLVM code or the assembly code as desired. Those flags are:
@@ -37,11 +37,11 @@ To build Coral, you need to have ocaml 4.07.\*, llvm, the ocaml-llvm bindings, o
 > eval $(opam env)
 ```
 
-This should all succeed without problems. Sometimes we have needed to run `opam depext conf-llvm.6.0.0` if the build process fails. The above may take a while, since it needs to build OCaml twice from the source. You should be given an option to add some lines to your .bashrc or .bash_profile to avoid having to initialize opam each time. Feel free to open an issue on GitHub if any of the above fail.
+This should all succeed without problems. Sometimes we have needed to run `opam depext conf-llvm.6.0.0` if the build process fails with an LLVM error. The above may take a while, since it needs to build OCaml twice from the source. You should be given an option to add some lines to your .bashrc or .bash_profile to avoid having to initialize opam each time. Feel free to open an issue on GitHub if any of the above fail.
 
 Once these have been installed, try navigating to the root of the Coral directory and running `make`. This should create a "coral" executable which can be used as an interpreter or compiler.
 
-## Linux
+# Linux
 
 Linux builds will depend on the distribution. Generally, you will use your distribution's package manager to install opam and llvm, and then install dependencies as for MacOS.
 

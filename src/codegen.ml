@@ -1929,10 +1929,10 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
         let fn_namespace = build_binding_list (Some(fn_b)) sfdecl.slocals false in
         let (fn_namespace, fn_state) = List.fold_left2 add_formal (fn_namespace, fn_state) sfdecl.sformals formal_vals in
-
+(* 
         let int_format_str = L.build_global_stringptr "%d\n" "fmt" fn_state.b
         and float_format_str = L.build_global_stringptr "%f\n" "fmt" fn_state.b
-        and str_format_str = L.build_global_stringptr  "%s\n" "fmt" fn_state.b in
+        and str_format_str = L.build_global_stringptr  "%s\n" "fmt" fn_state.b in *)
 
         (* build function body by calling stmt! *)
         let build_return bld = L.build_ret (build_new_cobj_init int_t (L.const_int int_t 0) bld) bld in
