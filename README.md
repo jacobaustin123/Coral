@@ -52,7 +52,7 @@ This will generate an executable called coral which acts as a compiler and inter
 > brew install opam llvm
 > opam init
 > opam switch create 4.07.1
-> opam install llvm ocamlbuild ocamlfind
+> opam install llvm ocamlbuild ocamlfind core
 ```
 
 If the above fails, you may need to run `eval $(opam env)` after opam init and opam switch. The following may also be useful instead:
