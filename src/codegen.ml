@@ -1963,7 +1963,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
   let final_state = stmt init_state (SBlock(fst prgm)) in
 
-  ignore(L.build_ret (L.const_int int_t 0) final_state.b); pm();
+  ignore(L.build_ret (L.const_int int_t 0) final_state.b);
     (* prints module *)
 
   the_module  (* return the resulting llvm module with all code!! *)
