@@ -14,7 +14,14 @@ module StringMap = Map.Make(String)
 module BindMap = Map.Make(struct type t = Ast.bind let compare = Pervasives.compare end)
 module SfdeclMap = Map.Make(struct type t = Sast.sfunc_decl let compare = Pervasives.compare end)
 
-let explode s = List.init (String.length s) (String.get s)
+let explode s = 
+    let rec aux out n =
+        match n with
+            | 0 -> out
+            | _ -> aux ((String.get s (n - 1)) :: out) (n - 1)
+    in
+
+    aux [] (String.length s)
 
 (* A wrapper for an Llvalue representing data *)
 type dataunit =
