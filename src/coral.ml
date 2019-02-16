@@ -264,10 +264,10 @@ let codegen sast fname =
     let output = (match (!emit_llvm, !assembly) with
       | (true, _) -> [] 
       | (false, true) -> 
-        let output = cmd_to_list ("clang -w " ^ !llvm_name ^ " -S -o " ^ !assembly_name) in
+        let output = cmd_to_list ("clang -lm -w " ^ !llvm_name ^ " -S -o " ^ !assembly_name) in
         safe_remove !llvm_name; output
       | (false, false) -> 
-        let output = cmd_to_list ("clang -w " ^ !llvm_name ^ " -o " ^ !executable_name ^ " && ./" ^ !executable_name) in
+        let output = cmd_to_list ("clang -lm -w " ^ !llvm_name ^ " -o " ^ !executable_name ^ " && ./" ^ !executable_name) in
         safe_remove !llvm_name; safe_remove !assembly_name; output)
 
     in output
