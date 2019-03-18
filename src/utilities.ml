@@ -270,4 +270,5 @@ let make_transforms globals =
   possible_globals := (make_dynamic globals) @ !possible_globals;
   let entry = List.map (fun (Bind(name, typ)) -> STransform(name, typ, Dyn)) globals in
   let exit = List.map (fun (Bind(name, typ)) -> STransform(name, Dyn, typ)) globals in
+  (* List.iter (fun (STransform(a, b, c)) -> print_endline ("GLOBALS: " ^ a ^ " " ^ string_of_typ b ^ " " ^ string_of_typ c)) entry; *)
   SStage(SBlock(entry), SNop, SBlock(exit))

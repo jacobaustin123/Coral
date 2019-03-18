@@ -1038,7 +1038,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       let globals_list = snd prgm  (* snd prgrm is the bind list of globals *) in
         build_binding_list None globals_list false
   in
-  let lookup_global_binding bind =   (*pbind bind;*)
+  let lookup_global_binding bind =   pbind bind;
     try BindMap.find bind globals_map
     with Not_found -> tstp (string_of_bind bind ^ " not found in globals:"); pbind bind; BindMap.find bind globals_map (* reraise error *)
   in
@@ -1062,7 +1062,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
   (* lookup: finds the address of allocated variables in memory. searches the locals
   list first and then the globals list *)
-  let lookup namespace bind = (*tstp (string_of_sbind bind);*)
+  let lookup namespace bind = pbind bind; tstp (string_of_sbind bind);
       let bind = match bind with
         | Bind(n, Int)| Bind(n, Float)| Bind(n, Bool) | Bind(n, String) | Bind(n, FuncType) | Bind(n, Arr) -> bind
         | Bind(n, _) -> Bind(n, Dyn)

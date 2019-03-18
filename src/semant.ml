@@ -542,13 +542,13 @@ and stmt map the_state = function (* evaluates statements, can pass it a func *)
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in 
     
     let (map', _, _, _) = assign map (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(fn_name, Dyn)) in
-    let (semantmap, _, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(fn_name, Dyn)) in (* empty map for semantic checking *)
+    (* let (semantmap, _, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(fn_name, Dyn)) in empty map for semantic checking *)
 
     let (map'', binds) = List.fold_left 
       (fun (map, out) (Bind(x, t)) -> 
         let (map', name, inferred_t, explicit_t) = assign map (Dyn, (SNoexpr, Dyn), None) (Bind(x, t)) in 
         (map', (Bind(name, explicit_t)) :: out)
-      ) (semantmap, []) b in
+      ) (StringMap.empty, []) b in
 
     let bindout = List.rev binds in
     let (map2, block, data, locals) = (func_stmt StringMap.empty map'' {noeval = true; forloop = false; cond = false; stack = TypeMap.empty;} c) in
