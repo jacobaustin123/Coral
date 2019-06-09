@@ -13,7 +13,7 @@ Note: if any token is added here, it must also be added in the token target belo
 and in the print utility in utilities.ml */
 
 %token NOELSE ASN EQ NEQ LT GT LEQ GEQ PLUS MINUS TIMES DIVIDE PLUSEQ MINUSEQ TIMESEQ DIVIDEEQ EXPEQ
-%token EXP NOT NEG SEP AND OR ARROW NOP TYPE PRINT FUNC
+%token EXP NOT NEG SEP AND OR ARROW NOP TYPE PRINT FUNC CONTINUE PASS BREAK
 %token TAB SPACE COLON EOF EOL IF ELSE FOR WHILE COMMA DEF IN TRUE FALSE IS RETURN NONE DOT
 %token BOOL INT FLOAT STRING ARR
 %token CLASS IMPORT CEND RANGE
@@ -92,6 +92,9 @@ token:
   | LEQ { LEQ }
   | GEQ { GEQ }
   | AND { AND }
+  | PASS { PASS }
+  | CONTINUE { CONTINUE }
+  | BREAK { BREAK }
   | OR { OR }
   | IN { IN }
   | TRUE { TRUE }
@@ -194,6 +197,9 @@ stmt:
   | lvalue EXPEQ expr { Asn([$1], Binop($1, Exp, $3)) }
   | TYPE LPAREN expr RPAREN { Type($3) }
   | PRINT LPAREN expr RPAREN { Print($3) }
+  | BREAK SEP { Break }
+  | CONTINUE SEP { Continue }
+  | PASS { Nop }
   | NOP { Nop }
 
 formal_asn_list:
@@ -300,4 +306,5 @@ expr:
 | expr TIMES expr { Binop($1, Mul, $3) }
 | expr DIVIDE expr { Binop($1, Div, $3) }
 | expr EXP expr { Binop($1, Exp, $3) }
+| typ LPAREN expr RPAREN { Cast($1, $3) }
 ;

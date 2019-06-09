@@ -30,9 +30,9 @@ rule token = parse
   | "else" { ELSE }
   | "elif" { raise (Failure("NotImplementedError: elif has not been implemented!" )) }
   | "assert" { raise (Failure("NotImplementedError: assert has not been implemented!" )) }
-  | "pass" { raise (Failure("NotImplementedError: pass has not been implemented!" )) }
-  | "continue" { raise (Failure("NotImplementedError: continue has not been implemented!" )) }
-  | "break" { raise (Failure("NotImplementedError: break has not been implemented!" )) }
+  | "pass" { PASS }
+  | "continue" { CONTINUE }
+  | "break" { BREAK }
   | "class" { CLASS }
   | "for" { FOR }
   | "while" { WHILE }

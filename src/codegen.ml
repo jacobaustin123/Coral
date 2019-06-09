@@ -1307,6 +1307,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       let (namespace,the_function) = (the_state.namespace,the_state.func) in
       let (e, ty) = typed_e in
       (match e with
+
+    | SCast (from_type, to_type, expr) -> (raise (Failure "CodegenError: Type casting not implemented in codegen!"))
     | SLit lit -> let (res, the_state) = (match lit with
         | IntLit i -> (Raw(L.const_int int_t i), the_state)
         | BoolLit i -> (Raw(L.const_int bool_t (if i then 1 else 0)), the_state)
@@ -1631,6 +1633,9 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       match s with
       | SBlock s -> List.fold_left stmt the_state s
       | SExpr e ->  let (_,the_state) = expr the_state e in the_state
+      | SContinue -> raise (Failure ("CodegenError: Continue has not been implemented for codegen"))
+      | SBreak -> raise (Failure ("CodegenError: Break has not been implemented for codegen"))
+
       | SAsn (lvalue_list, e) -> (*L.dump_module the_module;*)
         let (_, tp_rhs) = e in
         let (e', the_state) = expr the_state e in

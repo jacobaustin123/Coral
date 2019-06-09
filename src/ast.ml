@@ -34,6 +34,7 @@ type expr =
   | List of expr list
   | ListAccess of expr * expr (* expr, entry *)
   | ListSlice of expr * expr * expr (* expr, left, right *)
+  | Cast of typ * expr (* type casting *)
 
 type stmt =
   | Func of bind * bind list * stmt
@@ -49,6 +50,8 @@ type stmt =
   | Type of expr
   | Print of expr
   | Import of string
+  | Continue
+  | Break
   | Nop
 
 
@@ -102,7 +105,8 @@ let rec string_of_expr = function
   | List(el) -> String.concat ", " (List.map string_of_expr el)
   | ListAccess(e1, e2) -> string_of_expr e1 ^ "[" ^ string_of_expr e2 ^ "]"
   | ListSlice(e1, e2, e3) -> string_of_expr e1 ^ "[" ^ string_of_expr e2 ^ ":" ^ string_of_expr e3 ^ "]"
-
+  | Cast(a, b) -> string_of_typ a ^ "(" ^ string_of_expr b ^ ")"
+  
 let rec string_of_stmt = function
   | Func(b, bl, s) -> "def " ^ string_of_bind b ^ "(" ^ String.concat ", " (List.map string_of_bind bl) ^ ")\n" ^ string_of_stmt s
   | Block(sl) -> String.concat "\n" (List.map string_of_stmt sl) ^ "\n"
@@ -118,6 +122,8 @@ let rec string_of_stmt = function
   | Print(e) -> string_of_expr e
   | Import(e) -> "import " ^ e
   | Nop -> ""
+  | Continue -> "continue"
+  | Break -> "break"
 
 and string_of_program l = String.concat "" (List.map string_of_stmt l) ^ "\n\n"
 

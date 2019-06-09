@@ -97,6 +97,9 @@ let print = function
   | Parser.CEND -> "CEND"
   | Parser.LBRACE -> "LBRACE"
   | Parser.RBRACE -> "RBRACE"
+  | Parser.PASS -> "PASS"
+  | Parser.BREAK -> "BREAK"
+  | Parser.CONTINUE -> "CONTINUE"
 
 (* stmt_to_string converts stmt to string for error handling *)
 let stmt_to_string = function
@@ -114,6 +117,8 @@ let stmt_to_string = function
   | Print(_) -> "print"
   | Import(_) -> "import"
   | Nop -> "nop"
+  | Break -> "break"
+  | Continue -> "continue"
 
 (* expr_to_string: converts expr to string for error handling *)
 let expr_to_string = function
@@ -127,6 +132,7 @@ let expr_to_string = function
   | List(_) -> "list"
   | ListAccess(_, _) -> "list access"
   | ListSlice(_, _, _) -> "list slice"
+  | Cast(a, b) -> "cast"
 
 (* type_to_string converts type to string for error handling *)
 let type_to_string = function
@@ -255,6 +261,7 @@ type flag = {
   cond : bool; (* in a conditional branch? *)
   forloop : bool; (* in a for loop? *)
   func : bool;
+  inclass : bool;
   locals: (Ast.typ * Ast.typ * Ast.stmt option) StringMap.t;
   globals: (Ast.typ * Ast.typ * Ast.stmt option) StringMap.t;
 }
@@ -265,6 +272,7 @@ type state_component =
   | S_forloop of (Ast.typ * Ast.typ * Ast.stmt option) StringMap.t (* entering a for loop with new locals map *)
   | S_cond (* entering conditional branch *)
   | S_setmaps of ((Ast.typ * Ast.typ * Ast.stmt option) StringMap.t * (Ast.typ * Ast.typ * Ast.stmt option) StringMap.t) (* just set the locals and globals *)
+  | S_class
 
 let change_state the_state = function
   | S_func -> if the_state.func then the_state else { the_state with globals = the_state.locals; }
@@ -272,6 +280,7 @@ let change_state the_state = function
   | S_cond -> { the_state with cond = true; }
   | S_forloop(locals) -> {the_state with cond = true; forloop = true; locals = locals; }
   | S_setmaps(locals, globals) -> {the_state with locals = locals; globals = globals; }
+  | S_class -> {the_state with inclass = true; }
 
 (* make a list of binds all dynamic *)
 let make_dynamic bindlist = List.map (fun (Bind(name, typ)) -> Bind(name, Dyn)) bindlist

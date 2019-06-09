@@ -201,38 +201,55 @@ let rec strip_stmt = function
 
 and strip_print ast = List.rev (List.fold_left (fun acc x -> (strip_stmt x) :: acc) [] ast)
 
-(* strip_return: no LLVM statement can occur in a basic block which has already returned.
+(* strip_after_stmt: no LLVM statement can occur in a basic block which has already returned.
 this utility makes sure there are no statements in any given block after a return statement has
-already occured. the most common occurence of this is when STransforms are inserted. 
+already occured. the most common occurence of this is when STransforms are inserted. *)
 
-This also handles printing the types of expressions. *)
+let rec strip_after_stmt = function 
+  | If(a, b, c) -> If(a, strip_after_stmt b, strip_after_stmt c)
+  | While(a, b) -> While(a, strip_after_stmt b)
+  | For(a, b, c) -> For(a, b, strip_after_stmt c)
+  | Range(a, b, c) -> Range(a, b, strip_after_stmt c)
+  | Block(x) -> Block(strip_after [] x)
+  | Func(a, b, c) -> Func(a, b, strip_after_stmt c)
+  | _ as x -> x
 
-let rec strip_return_stmt = function 
-  | SIf(a, b, c) -> SIf(strip_return_expr a, strip_return_stmt b, strip_return_stmt c)
-  | SWhile(a, b) -> SWhile(strip_return_expr a, strip_return_stmt b)
-  | SFor(a, b, c) -> SFor(a, strip_return_expr b, strip_return_stmt c)
-  | SRange(a, b, c) -> SRange(a, strip_return_expr b, strip_return_stmt c)
+and strip_after out = function
+  | [] -> List.rev out
+  | Return e :: t -> List.rev ((strip_after_stmt (Return e)) :: out)
+  | Continue :: t -> List.rev ((strip_after_stmt Continue) :: out)
+  | Break :: t -> List.rev ((strip_after_stmt Break) :: out)
+  | a :: t -> strip_after ((strip_after_stmt a) :: out) t
+
+(* sstmt_iterator: this handles printing the types of expressions, and 
+stripping and pathological transformations. *)
+
+let rec sstmt_iterator = function 
+  | SIf(a, b, c) -> SIf(strip_return_expr a, sstmt_iterator b, sstmt_iterator c)
+  | SWhile(a, b) -> SWhile(strip_return_expr a, sstmt_iterator b)
+  | SFor(a, b, c) -> SFor(a, strip_return_expr b, sstmt_iterator c)
+  | SRange(a, b, c) -> SRange(a, strip_return_expr b, sstmt_iterator c)
   | SBlock(x) -> SBlock(strip_return [] x)
-  | SFunc({ styp; sfname; sformals; slocals; sbody }) -> SFunc({ styp; sfname; sformals; slocals; sbody = strip_return_stmt sbody; })
+  | SFunc({ styp; sfname; sformals; slocals; sbody }) -> SFunc({ styp; sfname; sformals; slocals; sbody = sstmt_iterator sbody; })
   | SExpr(e) -> SExpr(strip_return_expr e)
   | SReturn(e) -> SReturn(strip_return_expr e)
   | SAsn(a, e) -> SAsn(a, strip_return_expr e)
   | SPrint(e) -> SPrint(strip_return_expr e)
-  | SClass(a, b) -> SClass(a, strip_return_stmt b)
-  | SStage(a, b, c) -> SStage(strip_return_stmt a, strip_return_stmt b, strip_return_stmt c)
+  | SClass(a, b) -> SClass(a, sstmt_iterator b)
+  | SStage(a, b, c) -> SStage(sstmt_iterator a, sstmt_iterator b, sstmt_iterator c)
   | SType(e) -> let (e', typ) = e in print_endline (string_of_typ typ); let _ = strip_return_expr e in SNop
   | _ as x -> x
 
 and strip_return_expr sexpr = let (e, t) = sexpr in 
   let e' = (match e with
-  | SCall(e, el, s) -> SCall(e, el, strip_return_stmt s)
+  | SCall(e, el, s) -> SCall(e, el, sstmt_iterator s)
   | _ as x -> x) in
   (e', t)
 
 and strip_return out = function
   | [] -> List.rev out
-  | SReturn e :: t -> List.rev ((strip_return_stmt (SReturn e)) :: out)
-  | a :: t -> strip_return ((strip_return_stmt a) :: out) t
+  | SReturn e :: t -> List.rev ((sstmt_iterator (SReturn e)) :: out)
+  | a :: t -> strip_return ((sstmt_iterator a) :: out) t
 
 (* safe_remove: try Sys.remove with full error handling *)
 let safe_remove name = try Sys.remove name with _ -> () (* cleanup files *)
@@ -325,8 +342,9 @@ let rec from_console map past run =
 
     let program = (strip_print past) @ (Parser.program token (Lexing.from_string "")) in
     let imported_program = parse_imports program in
+    let after_program = strip_after [] imported_program in
 
-    let (sast, map') = (Semant.check [] [] { forloop = false; cond = false; noeval = false; stack = TypeMap.empty; func = false; locals = map; globals = map; } imported_program) in (* temporarily here to check validity of SAST *)
+    let (sast, map') = (Semant.check [] [] { forloop = false; inclass = false; cond = false; noeval = false; stack = TypeMap.empty; func = false; locals = map; globals = map; } after_program) in (* temporarily here to check validity of SAST *)
     let (sast, globals) = sast in
     let sast = (strip_return [] sast, globals) in 
     let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
@@ -335,9 +353,9 @@ let rec from_console map past run =
       let output = codegen sast "source" in
       List.iter print_endline output; flush stdout; 
       safe_remove !llvm_name; safe_remove !assembly_name; safe_remove !executable_name;
-      from_console map imported_program run
+      from_console map after_program run
 
-    else flush stdout; from_console map' imported_program false
+    else flush stdout; from_console map' after_program false
 
   with
     | Not_found -> Printf.printf "NotFoundError: unknown error\n"; from_console map past run
@@ -355,8 +373,9 @@ let rec from_file map fname run = (* todo combine with loop *)
     let original_path = Sys.getcwd () in
     let program = Sys.chdir (Filename.dirname fname); ast_from_path (Filename.basename fname) in
     let imported_program = parse_imports program in
+    let after_program = strip_after [] imported_program in
 
-    let (sast, map') = (Semant.check [] [] { forloop = false; cond = false; noeval = false; stack = TypeMap.empty; func = false; globals = map; locals = map; } imported_program) in (* temporarily here to check validity of SAST *)
+    let (sast, map') = (Semant.check [] [] { forloop = false; inclass = false; cond = false; noeval = false; stack = TypeMap.empty; func = false; globals = map; locals = map; } after_program) in (* temporarily here to check validity of SAST *)
     let (sast, globals) = sast in
     let sast = (strip_return [] sast, globals) in 
     let () = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)

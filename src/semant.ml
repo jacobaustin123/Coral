@@ -6,6 +6,20 @@ open Utilities
 syntax checking, and other features. expr objects are converted to sexpr, and stmt objects are converted
 to sstmts. *)
 
+(* needs_cast: checks if a given type needs to be manually cast to another *)
+
+let needs_cast t1 t2 = 
+    let except = (Failure ("STypeError: cannot cast operand of typ '" ^ string_of_typ t1 ^ "' to type '" ^ string_of_typ t2 ^ "'")) in
+    match t2 with 
+    | Dyn | Arr | FuncType | Null -> raise (Failure ("SSyntaxError: Invalid Syntax"))
+    | _ -> 
+      if t1 = t2 then false
+      else match (t1, t2) with
+        | (Dyn, _) -> true
+        | (Int, Float) | (Float, Int) -> true
+        | (_, String) -> true
+        | _ -> raise except
+
 (* binop: evaluate types of two binary operations and check if the binary operation is valid.
 This currently is quite restrictive and does not permit automatic type casting like in Python.
 This may be changed in the future. The commented-out line would allow that feature *)
@@ -74,6 +88,11 @@ and exp the_state = function
       let () = debug ("noeval set and possible global for " ^ x) in 
       let () = possible_globals := (Bind(x, Dyn)) :: !possible_globals in (Dyn, SVar(x), None) 
     else raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
+
+  | Cast(typ, e) ->
+      let (t1, e', _) = expr the_state e in
+      if needs_cast t1 typ then (typ, SCast(t1, typ, e'), None)
+      else let (e'', _) = e' in (t1, e'', None) (* extract expr from sexpr *)
 
   | ListAccess(e, x) -> (* parse List access to determine the LHS is a list and the RHS is an int if possible *)
     let (t1, e1, _) = expr the_state e in
@@ -283,6 +302,9 @@ and stmt the_state = function (* evaluates statements, can pass it a func *)
 
   | Expr(e) -> let (t, e', _) = expr the_state e in (the_state.locals, SExpr(e'), None, [])
 
+  | Continue -> if not the_state.forloop then raise (Failure ("SSyntaxError: continue not in loop")) else let () = debug "semantic checking for continue not fully supported" in (the_state.locals, SContinue, None, [])
+  | Break -> if not the_state.forloop then raise (Failure ("SSyntaxError: break not in loop")) else let () = debug "semantic checking for break not fully supported" in (the_state.locals, SBreak, None, [])
+
   | Asn(exprs, e) -> 
     let data = expr the_state e in 
     let (typ, e', d) = data in
@@ -406,6 +428,10 @@ and stmt the_state = function (* evaluates statements, can pass it a func *)
   | Print(e) -> let (t, e', _) = expr the_state e in (the_state.locals, SPrint(e'), None, [])
   | Type(e) -> let (t, e', _) = expr the_state e in
     (the_state.locals, SType(e'), None, [])
+
+  | Class(name, body) ->
+      let (m', x', data, binds) = stmt (change_state the_state S_class) body in
+      (m', SClass(name, x'), data, binds)
 
   | _ as temp -> 
     print_endline ("SNotImplementedError: '" ^ (stmt_to_string temp) ^ "' semantic checking not implemented"); (the_state.locals, SNop, None, [])
