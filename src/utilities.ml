@@ -144,6 +144,7 @@ let type_to_string = function
   | Arr -> "list"
   | FuncType -> "func"
   | Null -> "null"
+  | Object -> "object"
 
 (* unop_to_string: converts unop to string for error handling *)
 let unop_to_string = function

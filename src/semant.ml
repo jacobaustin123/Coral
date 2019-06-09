@@ -11,7 +11,7 @@ to sstmts. *)
 let needs_cast t1 t2 = 
     let except = (Failure ("STypeError: cannot cast operand of typ '" ^ string_of_typ t1 ^ "' to type '" ^ string_of_typ t2 ^ "'")) in
     match t2 with 
-    | Dyn | Arr | FuncType | Null -> raise (Failure ("SSyntaxError: Invalid Syntax"))
+    | Dyn | Arr | FuncType | Null | Object -> raise (Failure ("SSyntaxError: Invalid Syntax"))
     | _ -> 
       if t1 = t2 then false
       else match (t1, t2) with
@@ -93,6 +93,17 @@ and exp the_state = function
       let (t1, e', _) = expr the_state e in
       if needs_cast t1 typ then (typ, SCast(t1, typ, e'), None)
       else let (e'', _) = e' in (t1, e'', None) (* extract expr from sexpr *)
+
+  | Field(obj, field) ->
+      let (t, e', _) = expr the_state obj in
+      if t <> Dyn && t <> Object then raise (Failure "TypeError: primitive types have no fields (yet)") else
+      (t, SField(e', field), None)
+
+  | Method(obj, name, args) ->
+    let (t, e', data) = expr the_state obj in 
+    if t <> Dyn && t <> Object then raise (Failure "TypeError: primitive types have no methods (yet)") else
+    let args = List.map (fun e -> let (t, e', _) = expr the_state e in e') args in 
+    (Dyn, SMethod(e', name, args), None) 
 
   | ListAccess(e, x) -> (* parse List access to determine the LHS is a list and the RHS is an int if possible *)
     let (t1, e1, _) = expr the_state e in

@@ -19,7 +19,7 @@ type literal =
   | FloatLit of float
   | StringLit of string
 
-type typ = Int | Float | Bool | String | Dyn | Arr | FuncType | Null
+type typ = Int | Float | Bool | String | Dyn | Arr | Object | FuncType | Null
 
 type bind = Bind of string * typ
 
@@ -89,6 +89,7 @@ let rec string_of_typ = function
   | Dyn -> "dyn"
   | Arr -> "list"
   | FuncType -> "func"
+  | Object -> "object"
   | Null -> "null"
 
 let rec string_of_bind = function
@@ -106,7 +107,7 @@ let rec string_of_expr = function
   | ListAccess(e1, e2) -> string_of_expr e1 ^ "[" ^ string_of_expr e2 ^ "]"
   | ListSlice(e1, e2, e3) -> string_of_expr e1 ^ "[" ^ string_of_expr e2 ^ ":" ^ string_of_expr e3 ^ "]"
   | Cast(a, b) -> string_of_typ a ^ "(" ^ string_of_expr b ^ ")"
-  
+
 let rec string_of_stmt = function
   | Func(b, bl, s) -> "def " ^ string_of_bind b ^ "(" ^ String.concat ", " (List.map string_of_bind bl) ^ ")\n" ^ string_of_stmt s
   | Block(sl) -> String.concat "\n" (List.map string_of_stmt sl) ^ "\n"
