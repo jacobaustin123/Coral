@@ -1635,7 +1635,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       | SExpr e ->  let (_,the_state) = expr the_state e in the_state
       | SContinue -> raise (Failure ("CodegenError: Continue has not been implemented for codegen"))
       | SBreak -> raise (Failure ("CodegenError: Break has not been implemented for codegen"))
-
+      | SClass -> raise (Failure ("CodegenError: Class has not been implemented for codegen"))
       | SAsn (lvalue_list, e) -> (*L.dump_module the_module;*)
         let (_, tp_rhs) = e in
         let (e', the_state) = expr the_state e in
