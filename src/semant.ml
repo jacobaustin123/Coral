@@ -109,7 +109,7 @@ and exp the_state = function
     if t <> Dyn && t <> FuncType (* if it's known not to be a function, throw an error *)
         then raise (Failure ("STypeError: cannot call objects of type " ^ type_to_string t)) else
     
-    let the_state = if not the_state.func then {the_state with globals = the_state.locals; } else the_state in  
+    let the_state = change_state the_state S_func in
     let transforms = if the_state.func then make_transforms (globals_to_list the_state.globals) else SBlock([]) in (* empty in case not in function *)
     (* print_endline ("printing transforms " ^ (string_of_sstmt 0 transforms)); *)
     (match data with 
@@ -233,12 +233,13 @@ returned. *)
 and check_func out data local_vars the_state = (function  
   | [] -> ((List.rev out), data, the_state.locals  , List.sort_uniq compare (List.rev local_vars))
   | a :: t -> let (m', value, d, loc) = stmt the_state a in
+    let the_state = (change_state the_state (S_setmaps (m', the_state.globals))) in
     (match (data, d) with
-      | (None, None) -> check_func (value :: out) None (loc @ local_vars) {the_state with func = true; globals = the_state.globals; locals = m'; } t
-      | (None, _) -> check_func (value :: out) d (loc @ local_vars) {the_state with func = true; globals = the_state.globals; locals = m'; } t
-      | (_, None) -> check_func (value :: out) data (loc @ local_vars) {the_state with func = true; globals = the_state.globals; locals = m'; } t
-      | (_, _) when d = data -> check_func (value :: out) data (loc @ local_vars) {the_state with func = true; globals = the_state.globals; locals = m'; } t
-      | _ -> check_func (value :: out) (Some (Dyn, (SNoexpr, Dyn), None)) (loc @ local_vars) {the_state with func = true; globals = the_state.globals; locals = m'; } t))
+      | (None, None) -> check_func (value :: out) None (loc @ local_vars) the_state t
+      | (None, _) -> check_func (value :: out) d (loc @ local_vars) the_state t
+      | (_, None) -> check_func (value :: out) data (loc @ local_vars) the_state t
+      | (_, _) when d = data -> check_func (value :: out) data (loc @ local_vars) the_state t
+      | _ -> check_func (value :: out) (Some (Dyn, (SNoexpr, Dyn), None)) (loc @ local_vars) the_state t))
 
 (* match_data: when reconciling branches in a conditional branch, this function
   checks what return types can still be inferred. If both return the same type, 
@@ -319,7 +320,7 @@ and stmt the_state = function (* evaluates statements, can pass it a func *)
       | _ :: t -> dups t
     in let _ = dups (List.sort (fun (Bind(a, _)) (Bind(b, _)) -> compare a b) b) in 
 
-    let the_state = if not the_state.func then let () = debug "not in function!" in {the_state with globals = the_state.locals; } else the_state in  
+    let the_state = change_state the_state S_func in
     let (map', _, _, _) = assign the_state.locals (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(fn_name, Dyn)) in
     let (semantmap, _, _, _) = assign StringMap.empty (FuncType, (SNoexpr, FuncType), Some(Func(a, b, c))) (Bind(fn_name, Dyn)) in (* empty map for semantic checking *)
 
@@ -330,7 +331,7 @@ and stmt the_state = function (* evaluates statements, can pass it a func *)
       ) (semantmap, []) b in
 
     let bindout = List.rev binds in
-    let (map2, block, data, locals) = (stmt {the_state with noeval = true; forloop = false; cond = false; stack = TypeMap.empty; locals = map''; func = true; globals = StringMap.empty; } c) in
+    let (map2, block, data, locals) = (stmt (change_state the_state (S_noeval(map''))) c) in
       (match data with
         | Some (typ2, e', d) ->
             if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn then 
@@ -349,8 +350,8 @@ and stmt the_state = function (* evaluates statements, can pass it a func *)
   | If(a, b, c) -> let (typ, e', _) = expr the_state a in 
     if typ <> Bool && typ <> Dyn 
       then raise (Failure (Printf.sprintf "STypeError: invalid boolean type in 'if' statement (found %s but expected bool)" (string_of_typ typ)))
-    else let (map', value, data, out) = stmt {the_state with cond = true;} b in 
-    let (map'', value', data', out') = stmt {the_state with cond = true;} c in 
+    else let (map', value, data, out) = stmt (change_state the_state S_cond) b in 
+    let (map'', value', data', out') = stmt (change_state the_state S_cond)  c in 
     if equals map' map'' then (map', SIf(e', value, value'), match_data data data', out) 
     else let (merged, main, alt, binds) = transform map' map'' in 
     (merged, SIf(e', merge_blocks value main, merge_blocks value' alt), match_data data data', binds @ out @ out')
@@ -360,11 +361,11 @@ and stmt the_state = function (* evaluates statements, can pass it a func *)
       let (m, name, inferred_t, explicit_t) = check_array the_state b a in 
       let bind_for_locals = Bind(name, inferred_t) in
       let bind_for_sast = Bind(name, inferred_t) in
-      let (m', x', d, out) = stmt {the_state with cond = true; forloop = true; locals = m; } c in 
+      let (m', x', d, out) = stmt (change_state the_state (S_forloop(m))) c in 
       if equals the_state.locals m' then let () = debug "equal first time" in (m', SFor(bind_for_sast, e', x'), d, bind_for_locals :: out)
       else let (merged_out, _, exit, binds) = transform the_state.locals m' in
       let (merged, entry, _, _) = transform m m' in 
-      let (m', x', d, out) = stmt {the_state with cond = true; forloop = true; locals = merged;} c in 
+      let (m', x', d, out) = stmt (change_state the_state (S_forloop(merged)))  c in 
       if equals merged m' then let () = debug "equal second time" in (merged_out, SStage(entry, SFor(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ binds) 
       else let (merged, _, _, _) = transform merged_out m' in 
       (merged, SStage(entry, SFor(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ binds) 
@@ -379,11 +380,11 @@ and stmt the_state = function (* evaluates statements, can pass it a func *)
 
     let bind_for_locals = Bind(name, inferred_t) in
     let bind_for_sast = Bind(name, inferred_t) in
-    let (m', x', d, out) = stmt {the_state with cond = true; forloop = true; locals = m; } c in 
+    let (m', x', d, out) = stmt (change_state the_state (S_forloop m)) c in 
     if equals the_state.locals m' then let () = debug "equal first time" in (m', SRange(bind_for_sast, e', x'), d, bind_for_locals :: out)
     else let (merged_out, _, exit, binds) = transform the_state.locals m' in
     let (merged, entry, _, _) = transform m m' in 
-    let (m', x', d, out) = stmt {the_state with cond = true; forloop = true; locals = m;} c in 
+    let (m', x', d, out) = stmt (change_state the_state (S_forloop(m))) c in 
     if equals merged m' then let () = debug "equal second time" in (merged_out, SStage(entry, SRange(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ binds) 
     else let (merged, _, _, _) = transform merged_out m' in
     (merged, SStage(entry, SRange(bind_for_sast, e', x'), exit), match_data d None, bind_for_locals :: out @ binds) 
@@ -392,10 +393,10 @@ and stmt the_state = function (* evaluates statements, can pass it a func *)
     let (typ, e, data) = expr the_state a in 
     if typ <> Bool && typ <> Dyn 
       then raise (Failure (Printf.sprintf "STypeError: invalid boolean type in 'while' statement (found %s but expected bool)" (string_of_typ typ)))
-    else let (m', x', d, out) = stmt {the_state with cond = true; forloop = true; } b in 
+    else let (m', x', d, out) = stmt (change_state the_state (S_forloop the_state.locals)) b in 
     if equals the_state.locals m' then let () = debug "equal first time" in (m', SWhile(e, x'), d, out) else
     let (merged, entry, exit, binds) = transform the_state.locals m' in 
-    let (m', x', d, out) = stmt {the_state with cond = true; forloop = true; locals = merged;} b in 
+    let (m', x', d, out) = stmt (change_state the_state (S_forloop merged))  b in 
     if equals merged m' then let () = debug "equal second time" in (m', SStage(entry, SWhile(e, x'), exit), d, out @ binds)
     else let (merged, _, _, _) = transform merged m' in 
     (merged, SStage(entry, SWhile(e, x'), exit), match_data d None, out @ binds)
@@ -414,4 +415,4 @@ statements and returning a list of sstmts, a list of globals, and the updated ma
 
 and check sast_out globals_out the_state = function
   | [] -> ((List.rev sast_out, List.sort_uniq Pervasives.compare (List.rev (globals_out @ !possible_globals))), the_state.locals)
-  | a :: t -> let (m', statement, data, binds) = stmt the_state a in check (statement :: sast_out) (binds @ globals_out) {the_state with locals = m'; globals = m'; } t
+  | a :: t -> let (m', statement, data, binds) = stmt the_state a in check (statement :: sast_out) (binds @ globals_out) (change_state the_state (S_setmaps (m', m'))) t

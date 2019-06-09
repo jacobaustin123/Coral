@@ -260,10 +260,18 @@ type flag = {
 }
 
 type state_component = 
-  | S_func of stmt * typ list
+  | S_func (* enter function and set globals to locals *)
+  | S_noeval of (Ast.typ * Ast.typ * Ast.stmt option) StringMap.t (* entering function to generate dynamic function *)
+  | S_forloop of (Ast.typ * Ast.typ * Ast.stmt option) StringMap.t (* entering a for loop with new locals map *)
+  | S_cond (* entering conditional branch *)
+  | S_setmaps of ((Ast.typ * Ast.typ * Ast.stmt option) StringMap.t * (Ast.typ * Ast.typ * Ast.stmt option) StringMap.t) (* just set the locals and globals *)
 
-let change_state old = function
-  | S_func(a, b) -> {old with func = true; stack=TypeMap.add (a, b) true old.stack}
+let change_state the_state = function
+  | S_func -> if the_state.func then the_state else { the_state with globals = the_state.locals; }
+  | S_noeval(locals) -> { the_state with noeval = true; forloop = false; cond = false; stack = TypeMap.empty; locals = locals; func = true; globals = StringMap.empty; }
+  | S_cond -> { the_state with cond = true; }
+  | S_forloop(locals) -> {the_state with cond = true; forloop = true; locals = locals; }
+  | S_setmaps(locals, globals) -> {the_state with locals = locals; globals = globals; }
 
 (* make a list of binds all dynamic *)
 let make_dynamic bindlist = List.map (fun (Bind(name, typ)) -> Bind(name, Dyn)) bindlist
