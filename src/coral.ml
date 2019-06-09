@@ -326,7 +326,7 @@ let rec from_console map past run =
     let program = (strip_print past) @ (Parser.program token (Lexing.from_string "")) in
     let imported_program = parse_imports program in
 
-    let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; stack = TypeMap.empty; } imported_program) in (* temporarily here to check validity of SAST *)
+    let (sast, map') = (Semant.check [] [] { forloop = false; cond = false; noeval = false; stack = TypeMap.empty; func = false; locals = map; globals = map; } imported_program) in (* temporarily here to check validity of SAST *)
     let (sast, globals) = sast in
     let sast = (strip_return [] sast, globals) in 
     let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
@@ -356,7 +356,7 @@ let rec from_file map fname run = (* todo combine with loop *)
     let program = Sys.chdir (Filename.dirname fname); ast_from_path (Filename.basename fname) in
     let imported_program = parse_imports program in
 
-    let (sast, map') = (Semant.check map [] [] { forloop = false; cond = false; noeval = false; stack = TypeMap.empty; } imported_program) in (* temporarily here to check validity of SAST *)
+    let (sast, map') = (Semant.check [] [] { forloop = false; cond = false; noeval = false; stack = TypeMap.empty; func = false; globals = map; locals = map; } imported_program) in (* temporarily here to check validity of SAST *)
     let (sast, globals) = sast in
     let sast = (strip_return [] sast, globals) in 
     let () = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)

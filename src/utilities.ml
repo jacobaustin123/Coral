@@ -206,6 +206,8 @@ module TypeMap = Map.Make(struct type t = stmt * typ list let compare = Pervasiv
 (* map with string keys, used for variable lookup *)
 module StringMap = Map.Make(String)
 
+let print_map m = debug "Printing the current type inference map:\n"; StringMap.iter (fun key value -> let (a, b, c) = value in debug (key ^ " with explicit type: " ^ string_of_typ a ^ " and infered type: " ^ string_of_typ b ^ " and data is None: " ^ string_of_bool (c == None))) m
+
 let rec1 = ref [] (* these are used to extract Transform objects for use in codegen from merge *)
 let rec2 = ref []
 
@@ -252,7 +254,16 @@ type flag = {
   noeval : bool; (* in a SFunc doing a generic analysis *)
   cond : bool; (* in a conditional branch? *)
   forloop : bool; (* in a for loop? *)
+  func : bool;
+  locals: (Ast.typ * Ast.typ * Ast.stmt option) StringMap.t;
+  globals: (Ast.typ * Ast.typ * Ast.stmt option) StringMap.t;
 }
+
+type state_component = 
+  | S_func of stmt * typ list
+
+let change_state old = function
+  | S_func(a, b) -> {old with func = true; stack=TypeMap.add (a, b) true old.stack}
 
 (* make a list of binds all dynamic *)
 let make_dynamic bindlist = List.map (fun (Bind(name, typ)) -> Bind(name, Dyn)) bindlist
@@ -267,6 +278,7 @@ let globals_to_list globals =
   bindings
 
 let make_transforms globals = 
+  (* List.iter (fun (Bind(name, typ)) -> print_endline (name ^ " " ^ string_of_typ typ)) globals;  *)
   possible_globals := (make_dynamic globals) @ !possible_globals;
   let entry = List.map (fun (Bind(name, typ)) -> STransform(name, typ, Dyn)) globals in
   let exit = List.map (fun (Bind(name, typ)) -> STransform(name, Dyn, typ)) globals in

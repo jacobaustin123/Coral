@@ -1,10 +1,10 @@
 def foo(y):
-	return bez(y)
+    return bez(y)
 
 def bez(x):
-	return x + y
+    return x + y
 
 def bar(y):
-	foo(y)
+    foo(y)
 
 bar(3)
