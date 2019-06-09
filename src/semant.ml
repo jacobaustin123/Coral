@@ -6,7 +6,7 @@ open Utilities
 syntax checking, and other features. expr objects are converted to sexpr, and stmt objects are converted
 to sstmts. *)
 
-(* needs_cast: checks if a given type needs to be manually cast to another *)
+(* needs_cast: checks if a given type needs to be manually cast to another (or if cast can be discarded). throws error if invalid *)
 
 let needs_cast t1 t2 = 
     let except = (Failure ("STypeError: cannot cast operand of typ '" ^ string_of_typ t1 ^ "' to type '" ^ string_of_typ t2 ^ "'")) in
@@ -66,7 +66,7 @@ let convert (t, e, d) = (t, (e, t), d)
 (* expr: syntactically check an expression, returning its type, the sexp object, and any relevant data *)
 let rec expr the_state x = convert (exp the_state x)
 
-(* exp: evaluate expressions, return their types, a partial sast, and any relevant data *)
+(* exp: evaluate expressions, return their types, a partial sast, and any relevant data (basically just a function AST) *)
 
 and exp the_state = function 
   | Unop(op, e) -> (* parse Unops, making sure the argument and ops have valid type combinations *)
@@ -78,28 +78,26 @@ and exp the_state = function
     let (t2, e2, _) = expr the_state b in 
     let t3 = binop t1 t2 op in (t3, SBinop(e1, op, e2), None)
 
-  | Var(Bind(x, t)) -> (* parse Variables, throwing an error if they are not found in the global lookup table *)
-    (* print_map the_state.locals; *)
-    (* print_map the_state.globals; *)
-    if StringMap.mem x the_state.locals then 
-    if (StringMap.mem x the_state.globals) && the_state.noeval && the_state.func then let () = debug ("noeval literal for " ^ x) in (Dyn, SVar(x), None)
+  | Var(Bind(x, t)) -> (* parse a Var, throwing an error if they are not found in the global lookup table *)
+    if StringMap.mem x the_state.locals then (* if found in locals *)
+    if (StringMap.mem x the_state.globals) && the_state.noeval && the_state.func then (Dyn, SVar(x), None) (* we're inside a Func and this is a global *)
     else let (t', typ, data) = StringMap.find x the_state.locals in (typ, SVar(x), data)
-    else if the_state.noeval && the_state.func then 
+    else if the_state.noeval && the_state.func then (* we're inside a Func and this is also potentially a global that will be defined in the future *)
       let () = debug ("noeval set and possible global for " ^ x) in 
       let () = possible_globals := (Bind(x, Dyn)) :: !possible_globals in (Dyn, SVar(x), None) 
     else raise (Failure ("SNameError: name '" ^ x ^ "' is not defined"))
 
   | Cast(typ, e) ->
       let (t1, e', _) = expr the_state e in
-      if needs_cast t1 typ then (typ, SCast(t1, typ, e'), None)
+      if needs_cast t1 typ then (typ, SCast(t1, typ, e'), None) (* check if the types can be cast *)
       else let (e'', _) = e' in (t1, e'', None) (* extract expr from sexpr *)
 
-  | Field(obj, field) ->
+  | Field(obj, field) -> (* TODO expand *)
       let (t, e', _) = expr the_state obj in
       if t <> Dyn && t <> Object then raise (Failure "TypeError: primitive types have no fields (yet)") else
       (t, SField(e', field), None)
 
-  | Method(obj, name, args) ->
+  | Method(obj, name, args) -> (* todo expand *)
     let (t, e', data) = expr the_state obj in 
     if t <> Dyn && t <> Object then raise (Failure "TypeError: primitive types have no methods (yet)") else
     let args = List.map (fun e -> let (t, e', _) = expr the_state e in e') args in 
@@ -110,6 +108,7 @@ and exp the_state = function
     let (t2, e2, _) = expr the_state x in
     if t1 <> Dyn && not (is_arr t1) || t2 <> Int && t2 <> Dyn 
       then raise (Failure (Printf.sprintf "STypeError: invalid types (%s, %s) for list access" (type_to_string t1) (type_to_string t2)))
+    else if t1 == String then (String, SListAccess(e1, e2), None)
     else (Dyn, SListAccess(e1, e2), None)
 
   | ListSlice(e, x1, x2) -> raise (Failure "SNotImplementedError: List Slicing has not been implemented")
@@ -139,9 +138,11 @@ and exp the_state = function
     if t <> Dyn && t <> FuncType (* if it's known not to be a function, throw an error *)
         then raise (Failure ("STypeError: cannot call objects of type " ^ type_to_string t)) else
     
-    let the_state = change_state the_state S_func in
-    let transforms = if the_state.func then make_transforms (globals_to_list the_state.globals) else SBlock([]) in (* empty in case not in function *)
+    let the_state = change_state the_state S_func in (* transform state when entering the function *)
+    let transforms = make_transforms (globals_to_list the_state.globals) in (* empty in case not in function *)
+    
     (* print_endline ("printing transforms " ^ (string_of_sstmt 0 transforms)); *)
+   
     (match data with 
       | Some(x) -> 
         (match x with 
@@ -150,7 +151,7 @@ and exp the_state = function
             if List.length formals <> param_length 
             then raise (Failure (Printf.sprintf "SSyntaxError: unexpected number of arguments in function call (expected %d but found %d)" (List.length formals) param_length))
 
-            else let rec handle_args (map, bindout, exprout) bind exp = 
+            else let rec handle_args (map, bindout, exprout) bind exp = (* add args to a given map *)
                 let data = expr the_state exp in 
                 let (t', e', _) = data in 
                 let (map', name, inferred_t, explicit_t) = assign map data bind in 
@@ -160,14 +161,13 @@ and exp the_state = function
             let clear_explicit_types map = StringMap.map (fun (a, b, c) -> (Dyn, b, c)) map in (* ignore dynamic types when not in same scope *)
 
             let fn_namespace = clear_explicit_types the_state.globals in (* we use this map to allow us to overwrite explicit global types *)
-            let (map', bindout, exprout) = (List.fold_left2 handle_args (fn_namespace, [], []) formals args) in            
-            let map'' = if the_state.func then let (map'', _, _, _) = assign map' (Dyn, (SCall (e, (List.rev exprout), transforms), Dyn), data) name in map'' else map' in (* add the function itself to the namespace *)
-            (* let () = print_map map'' in  *)
+            let (map', bindout, exprout) = (List.fold_left2 handle_args (fn_namespace, [], []) formals args) in (* add args to globals *)
+            let (map'', _, _, _) = assign map' (Dyn, (SCall (e, (List.rev exprout), transforms), Dyn), data) name in (* add the function itself to the namespace *)
 
             let (_, types) = split_sbind bindout in
 
             if the_state.func && TypeMap.mem (x, types) the_state.stack then let () = debug "recursive callstack return" in (Dyn, SCall(e, (List.rev exprout), transforms), None)
-            else let stack' = TypeMap.add (x, types) true the_state.stack in
+            else let stack' = TypeMap.add (x, types) true the_state.stack in (* check recursive stack *)
 
             let (map2, block, data, locals) = (stmt {the_state with stack = stack'; func = true; locals = map''; } body) in
 
