@@ -79,15 +79,15 @@ let rec string_of_lit = function
   | IntLit(i) -> string_of_int i
   | BoolLit(b) -> string_of_bool b
   | FloatLit(f) -> string_of_float f
-  | StringLit(s) -> s
+  | StringLit(s) -> "\"" ^ s ^ "\""
 
 let rec string_of_typ = function
   | Int -> "int"
   | Float -> "float"
   | Bool -> "bool"
-  | String -> "str"
+  | String -> "std::string"
   | Dyn -> "dyn"
-  | Arr -> "list"
+  | Arr -> "std::vector"
   | FuncType -> "func"
   | Object -> "object"
   | Null -> "null"

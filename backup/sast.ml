@@ -79,8 +79,6 @@ let append_list v = List.map (fun c -> c ^ v)
 
 (* let rec string_of_sexpr (e, t) = "(" ^ string_of_sexp e ^ ": " ^ string_of_typ t ^ ")" *)
 
-let funcs = ref []
-
 let string_of_sbind = function
   | Bind(s, t) -> (string_of_typ t) ^ " " ^ s
 
@@ -90,46 +88,37 @@ let rec string_of_sexpr e = let (e, t) = e in
   | SLit(l) -> string_of_lit l
   | SVar(str) -> str
   | SUnop(o, e) -> string_of_uop o ^ string_of_sexpr e
-  | SCall(e, el, s) -> funcs := ((string_of_func s) :: !funcs); string_of_sexpr e ^ "(" ^ String.concat ", " (List.map string_of_sexpr el) ^ ")"
+  | SCall(e, el, s) -> string_of_sexpr e ^ "(" ^ String.concat ", " (List.map string_of_sexpr el) ^ "):\n" ^ string_of_sstmt 1 s
   | SMethod(obj, m, el) -> string_of_sexpr obj ^ "." ^ m ^ "(" ^ String.concat ", " (List.map string_of_sexpr el) ^ ")"
   | SField(obj, s) -> string_of_sexpr obj ^ "." ^ s
-  | SList(el, t) -> "{" ^ String.concat ", " (List.map string_of_sexpr el) ^ "}"
+  | SList(el, t) -> string_of_typ t ^ " list : " ^ String.concat ", " (List.map string_of_sexpr el)
   | SListAccess(e1, e2) -> string_of_sexpr e1 ^ "[" ^ string_of_sexpr e2 ^ "]"
   | SListSlice(e1, e2, e3) -> string_of_sexpr e1 ^ "[" ^ string_of_sexpr e2 ^ ":" ^ string_of_sexpr e3 ^ "]"
   | SCast(t1, t2, e) -> string_of_typ t2 ^ "(" ^ string_of_sexpr e ^ ") -> " ^ string_of_typ t1
   | SNoexpr -> "")
 
+
 and string_of_sstmt depth = function
-  | SFunc({ styp; sfname; sformals; slocals; sbody }) -> ""
-  | SBlock(sl) -> string_of_stmt_list depth sl
+  | SFunc({ styp; sfname; sformals; slocals; sbody }) -> string_of_typ styp ^ " " ^ sfname ^ "(" ^ String.concat ", " (List.map string_of_sbind sformals) ^ ") {\n" ^ string_of_sstmt depth sbody ^ " }"
+  | SBlock(sl) -> concat_end (String.make (2 * depth) ' ') (append_list "\n" (List.map (string_of_sstmt (depth + 1)) sl))
   | SExpr(e) -> string_of_sexpr e
-  | SIf(e, s1, s2) ->  "if (" ^ string_of_sexpr e ^ ") {\n" ^ string_of_sstmt depth s1 ^ (String.make (2 * (depth - 1)) ' ') ^ "} else {\n" ^ string_of_sstmt depth s2 ^ "}\n"
-  | SFor(b, e, s) -> let Bind(s1, t1) = b in "for (auto " ^ s1 ^ " : " ^ string_of_sexpr e ^ ") {\n" ^ string_of_sstmt depth s ^ "}\n"
-  | SRange(b, e, s) -> let Bind(s1, t1) = b in "for (int " ^ s1 ^ "=0; i < " ^ string_of_sexpr e ^ "; " ^ s1 ^ "++){\n" ^ string_of_sstmt depth s ^ "}\n"
-  | SWhile(e, s) -> "while (" ^ string_of_sexpr e ^ ") {\n" ^ string_of_sstmt depth s ^ "}\n"
+  | SIf(e, s1, s2) ->  "if " ^ string_of_sexpr e ^ ":\n" ^ string_of_sstmt depth s1 ^ (String.make (2 * (depth - 1)) ' ') ^ "else:\n" ^ string_of_sstmt depth s2
+  | SFor(b, e, s) -> "for " ^ string_of_sbind b ^ " in " ^ string_of_sexpr e ^ ":\n" ^ string_of_sstmt depth s
+  | SRange(b, e, s) -> "range " ^ string_of_sbind b ^ " in range (" ^ string_of_sexpr e ^ ") :\n" ^ string_of_sstmt depth s
+  | SWhile(e, s) -> "while " ^ string_of_sexpr e ^ ":\n" ^ string_of_sstmt depth s
   | SReturn(e) -> "return " ^ string_of_sexpr e
-  | SClass(b, s) -> funcs := string_of_class (SClass(b, s)) :: !funcs; ""
+  | SClass(b, s) -> "class " ^ b ^ ":\n" ^ string_of_sstmt depth s
   | SAsn(lvalues, e) -> let (e', t) = e in String.concat ", " (List.map (string_of_lvalue t) lvalues) ^ " = "  ^ string_of_sexpr e
   | STransform(s, t1, t2) -> ""
-  | SStage(s1, s2, s3) -> string_of_sstmt depth s2
-  | SPrint(e) -> let (e', t) = e in "std::cout << " ^ string_of_sexpr e ^ " << std::endl"
+  | SStage(s1, s2, s3) -> ""
+  | SPrint(e) -> let (e', t) = e in "std::cout << " ^ (match t with | Int -> "\"%d\"" | Float -> "\"%f\"" | String -> "\"%s\"" | Bool -> "\"%s\"" | _ -> "\"%s\"") ^ ", " ^ string_of_sexpr e ^ ")"
   | SBreak -> "break"
   | SContinue -> "continue"
   | SNop -> ""
 
-and string_of_class = function
-  | SClass(b, s) -> "class " ^ b ^ " {\npublic:\n" ^ string_of_sstmt 1 s ^ "}"
-  | _ -> raise (Failure("type not found"));
-
-and string_of_func = function
-  | (SFunc({ styp; sfname; sformals; slocals; sbody })) -> let locals = String.concat "\n" (List.map (fun x -> x ^ ";") (List.map string_of_sbind (List.filter (fun x -> not (List.mem x sformals)) slocals))) in List.iter print_endline (List.map string_of_sbind slocals); string_of_typ styp ^ " " ^ sfname ^ "(" ^ String.concat ", " (List.map string_of_sbind sformals) ^ ") {\n" ^ locals ^ string_of_sstmt 1 sbody ^ " }"
-  | _ -> raise (Failure("type not found"));
-
 and string_of_lvalue t = function
-  | SLVar(sbind) -> let (Bind(str, t')) = sbind in str
+  | SLVar(sbind) -> let (Bind(str, t')) = sbind in string_of_sbind (Bind(str, t))
   | SLListAccess(e1, e2) ->  string_of_sexpr e1 ^ "[" ^ string_of_sexpr e2 ^ "]"
   | SLListSlice(e1, e2, e3) -> string_of_sexpr e1 ^ "[" ^ string_of_sexpr e2 ^ ":" ^ string_of_sexpr e3 ^ "]"
 
-and string_of_stmt_list depth sl = concat_end (String.make (2 * depth) ' ') (append_list "\n" (List.map (fun x -> x ^ ";") (List.filter_map (fun x -> match String.length x with | 0 -> None | _ -> Some x) (List.map (string_of_sstmt (depth + 1)) sl))))
-
-and string_of_sprogram (sl, bl) = let locals = String.concat "\n" (List.map (fun x -> x ^ ";") (List.map string_of_sbind bl)) in let body = "int main(int argc, char ** argv) {\n" ^ locals ^ string_of_stmt_list 1 sl ^ "\n }" in let temp_funcs = List.sort_uniq Stdlib.compare !funcs in (String.concat "\n" temp_funcs ^ "\n\n" ^ body)
+and string_of_sprogram (sl, bl) = "int main(int argc, char ** argv) {\n" ^ (String.concat "\n" (List.map (fun x -> x ^ ";") (List.map (string_of_sstmt 2) sl))) ^ "\n }"

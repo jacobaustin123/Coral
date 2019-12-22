@@ -5,4 +5,4 @@ z = x + y
 print(z)
 
 print(z[0])
-print(z[10])
+print(z[10]) # should throw error

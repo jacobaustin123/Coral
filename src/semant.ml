@@ -155,7 +155,7 @@ and exp the_state = function
                 let data = expr the_state exp in 
                 let (t', e', _) = data in 
                 let (map', name, inferred_t, explicit_t) = assign map data bind in 
-                (map', ((Bind(name, explicit_t)) :: bindout), (e' :: exprout))
+                (map', ((Bind(name, inferred_t)) :: bindout), (e' :: exprout))
             in 
             
             let clear_explicit_types map = StringMap.map (fun (a, b, c) -> (Dyn, b, c)) map in (* ignore dynamic types when not in same scope *)
@@ -383,9 +383,10 @@ and stmt the_state = function (* evaluates statements, can pass it a func *)
   | If(a, b, c) -> let (typ, e', _) = expr the_state a in 
     if typ <> Bool && typ <> Dyn 
       then raise (Failure (Printf.sprintf "STypeError: invalid boolean type in 'if' statement (found %s but expected bool)" (string_of_typ typ)))
-    else let (map', value, data, out) = stmt (change_state the_state S_cond) b in 
-    let (map'', value', data', out') = stmt (change_state the_state S_cond)  c in 
-    if equals map' map'' then (map', SIf(e', value, value'), match_data data data', out) 
+    else 
+      let (map', value, data, out) = stmt (change_state the_state S_cond) b in 
+      let (map'', value', data', out') = stmt (change_state the_state S_cond) c in 
+    if equals map' map'' then (map', SIf(e', value, value'), match_data data data', out @ out') 
     else let (merged, main, alt, binds) = transform map' map'' in 
     (merged, SIf(e', merge_blocks value main, merge_blocks value' alt), match_data data data', binds @ out @ out')
 
@@ -451,5 +452,5 @@ and stmt the_state = function (* evaluates statements, can pass it a func *)
 statements and returning a list of sstmts, a list of globals, and the updated map *)
 
 and check sast_out globals_out the_state = function
-  | [] -> ((List.rev sast_out, List.sort_uniq Pervasives.compare (List.rev (globals_out @ !possible_globals))), the_state.locals)
+  | [] -> ((List.rev sast_out, List.sort_uniq Stdlib.compare (List.rev (globals_out @ !possible_globals))), the_state.locals)
   | a :: t -> let (m', statement, data, binds) = stmt the_state a in check (statement :: sast_out) (binds @ globals_out) (change_state the_state (S_setmaps (m', m'))) t

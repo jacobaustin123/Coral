@@ -32,6 +32,8 @@ let executable_name = ref ""
 let llvm_name = ref ""
 let assembly_name = ref ""
 
+let preamble = "#include <initializer_list>\n#include <string>\n#include <vector>\n#include <iostream>"
+
 (* usage: usage message for function calls *)
 let usage = "usage: " ^ Sys.argv.(0) ^ " [file] [-d] [-r]"
 
@@ -257,7 +259,7 @@ let safe_remove name = try Sys.remove name with _ -> () (* cleanup files *)
 (* codegen: command to run codegen to a generated sast, save it to a file (source.ll), compile and
 evaluate it, and return the output *)
 
-let codegen sast fname = 
+(* let codegen sast fname = 
   let output = 
   (try 
     let m = Codegen.translate sast !exceptions in
@@ -290,7 +292,7 @@ let codegen sast fname =
     in output
   with
     | Not_found -> raise (Failure ("CodegenError: variable not found!"))
-  ) in output
+  ) in output *)
 
 
 (* this is the main function loop for the interpreter. We lex the input from stdin,
@@ -343,18 +345,25 @@ let rec from_console map past run =
     let program = (strip_print past) @ (Parser.program token (Lexing.from_string "")) in
     let imported_program = parse_imports program in
     let after_program = strip_after [] imported_program in
+    let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_program after_program)) in (* print debug messages *)
 
     let (sast, map') = (Semant.check [] [] { forloop = false; inclass = false; cond = false; noeval = false; stack = TypeMap.empty; func = false; locals = map; globals = map; } after_program) in (* temporarily here to check validity of SAST *)
     let (sast, globals) = sast in
     let sast = (strip_return [] sast, globals) in 
     let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
     
-    if run then
-      let output = codegen sast "source" in
-      List.iter print_endline output; flush stdout; 
-      safe_remove !llvm_name; safe_remove !assembly_name; safe_remove !executable_name;
-      from_console map after_program run
-
+      if run then
+      let oc = open_out "main.cpp" in
+      Printf.fprintf oc "%s\n\n" preamble;
+      Printf.fprintf oc "%s\n" (string_of_sprogram sast); close_out oc;
+      let compilation = cmd_to_list "clang++ -std=c++11 -w main.cpp -o main" in 
+      let () = List.iter print_endline compilation in
+      if List.length compilation == 0 then
+        let output = cmd_to_list "./main" in
+        List.iter print_endline output; flush stdout;
+        from_console map' after_program run;
+      else from_console map' past run
+      
     else flush stdout; from_console map' after_program false
 
   with
@@ -374,6 +383,7 @@ let rec from_file map fname run = (* todo combine with loop *)
     let program = Sys.chdir (Filename.dirname fname); ast_from_path (Filename.basename fname) in
     let imported_program = parse_imports program in
     let after_program = strip_after [] imported_program in
+    let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_program after_program)) in (* print debug messages *)
 
     let (sast, map') = (Semant.check [] [] { forloop = false; inclass = false; cond = false; noeval = false; stack = TypeMap.empty; func = false; globals = map; locals = map; } after_program) in (* temporarily here to check validity of SAST *)
     let (sast, globals) = sast in
@@ -381,9 +391,12 @@ let rec from_file map fname run = (* todo combine with loop *)
     let () = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)
     let () = Sys.chdir original_path in
 
-    if run then 
-      let output = codegen sast (Filename.remove_extension (Filename.basename fname)) in
-      List.iter print_endline output; flush stdout;
+    if run then
+      let oc = open_out "main.cpp" in
+      Printf.fprintf oc "%s\n\n" preamble;
+      Printf.fprintf oc "%s\n" (string_of_sprogram sast); close_out oc;
+      let compilation = cmd_to_list "clang++ -std=c++11 -w main.cpp -o main > /dev/null 2>&1 && ./main" in 
+      List.iter print_endline compilation; flush stdout;
 
   with
     | Not_found -> Printf.printf "NotFoundError: unknown error!\n"; flush stdout
