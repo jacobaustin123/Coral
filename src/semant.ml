@@ -385,7 +385,7 @@ and stmt the_state = function (* evaluates statements, can pass it a func *)
       then raise (Failure (Printf.sprintf "STypeError: invalid boolean type in 'if' statement (found %s but expected bool)" (string_of_typ typ)))
     else let (map', value, data, out) = stmt (change_state the_state S_cond) b in 
     let (map'', value', data', out') = stmt (change_state the_state S_cond)  c in 
-    if equals map' map'' then (map', SIf(e', value, value'), match_data data data', out) 
+    if equals map' map'' then (map', SIf(e', value, value'), match_data data data', out @ out') 
     else let (merged, main, alt, binds) = transform map' map'' in 
     (merged, SIf(e', merge_blocks value main, merge_blocks value' alt), match_data data data', binds @ out @ out')
 
