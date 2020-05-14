@@ -11,4 +11,4 @@ before_install:
   - docker pull ja3067/coral-build
 
 script:
-  - docker run -u 0 -v $(pwd):/data -w /data --rm -t ja3067/coral-build /bin/bash -c "chown -R \$USER:\$USER /data && make test"
+  - docker run -u 0 -v $(pwd):/data -w /data --rm -t ja3067/coral-build make test
