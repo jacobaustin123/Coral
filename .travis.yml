@@ -7,7 +7,6 @@ services:
 
 before_install:
   - docker pull ja3067/coral-build
-  - docker run -v $(pwd):/data -w /data --rm -t ja3067/coral-build make test
 
 script:
-  - make test
+  - docker run -v $(pwd):/data -w /data --rm -t ja3067/coral-build make test
