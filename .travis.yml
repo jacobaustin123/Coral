@@ -7,7 +7,7 @@ services:
 
 before_install:
   - docker pull ja3067/coral-build
-  - sudo chown -R travis:travis /home/travis/
+  - pwd
 
 script:
-  - docker run -v $(pwd):/data -w /data --rm -t ja3067/coral-build make test
+  - docker run -v $(pwd):/data -w /data --rm -it coral-build /bin/bash -c "chown -R \$USER:\$USER /data && make test"
