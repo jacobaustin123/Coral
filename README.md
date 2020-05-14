@@ -4,6 +4,7 @@ The **Coral** programming language: a blazingly-fast, gradually typed Python-lik
 
 [![Build Status](https://travis-ci.org/jacobaustin123/Coral.svg?branch=master)](https://travis-ci.org/jacobaustin123/Coral)
 
+
 # Table of Contents
 * [Examples](#examples)
 * [Installation](#installation)
