@@ -1,0 +1,13 @@
+# Project Configuration
+
+language: c
+
+services:
+  - docker
+
+before_install:
+  - docker pull ja3067/coral-build
+  - docker run --rm -t ja3067/coral-build make test
+
+script:
+  - make test
