@@ -10,4 +10,4 @@ before_install:
   - pwd
 
 script:
-  - docker run -v $(pwd):/data -w /data --rm -it coral-build /bin/bash -c "chown -R \$USER:\$USER /data && make test"
+  - docker run -v $(pwd):/data -w /data --rm -it ja3067/coral-build /bin/bash -c "chown -R \$USER:\$USER /data && make test"
