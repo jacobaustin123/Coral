@@ -794,7 +794,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let dataptr = L.build_array_malloc cobj_pt total "__new_dataptr" b in
     let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" b in
 
-    let load_list listptr dataptr fn b =
+    let load_list listptr dataptr size fn b =
       let nptr = L.build_alloca int_t "nptr" b in
       ignore(L.build_store (L.const_int int_t 0) nptr b);
 
@@ -806,7 +806,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
       ignore(L.build_store nnext nptr iter_builder);
 
-      let iter_complete = (L.build_icmp L.Icmp.Sge) n total "iter_complete" iter_builder in (* true if n exceeds list length *)
+      let iter_complete = (L.build_icmp L.Icmp.Sge) n size "iter_complete" iter_builder in (* true if n exceeds list length *)
 
       let body_bb = L.append_block context "list_add_body" fn in
       let body_builder = L.builder_at_end context body_bb in
@@ -824,9 +824,9 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       end_builder
     in
 
-    let builder1 = load_list self_data dataptr (L.block_parent (L.insertion_block b)) b in
+    let builder1 = load_list self_data dataptr self_ln (L.block_parent (L.insertion_block b)) b in
     let dataptr1 = L.build_gep dataptr [|self_ln|] "__next_dataptr" builder1 in
-    let builder2 = load_list other_data dataptr1 (L.block_parent (L.insertion_block b)) builder1 in
+    let builder2 = load_list other_data dataptr1 other_ln (L.block_parent (L.insertion_block b)) builder1 in
     (builder2, dataptr_as_i8ptr, total)
   in
 
