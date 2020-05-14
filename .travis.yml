@@ -12,4 +12,5 @@ before_install:
 script:
   - pwd
   - docker run -v $(pwd):/data -w /data --rm -t ja3067/coral-build pwd
-  - docker run -v $(pwd):/data -w /data --rm -t ja3067/coral-build /bin/bash -c "chown -R \$USER:\$USER /data && make test"
+  - docker run -v $(pwd):/data -w /data --rm -t ja3067/coral-build ls -ahl
+  - docker run -u 0 -v $(pwd):/data -w /data --rm -t ja3067/coral-build /bin/bash -c "chown -R \$USER:\$USER /data && make test"
