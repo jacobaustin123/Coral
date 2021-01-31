@@ -16,7 +16,7 @@ The **Coral** programming language: a blazingly-fast, gradually typed Python-lik
 
 # Examples
 
-Coral is syntactically identical to a subset of Python, so any valid Coral program is also a valid Python program. This code snippet is a simple gcd program using some optional explicit typing. This program runs correctly in Python, but takes ten minutes to run. When compiled to machine code using the Coral compiler, it takes less than a second - nearly as fast as C code.
+Coral is syntactically identical to a subset of Python, so any valid Coral program is also a valid Python program. This code snippet is a simple gcd program using some optional explicit typing. This program runs correctly in Python, but takes ten minutes to run. When compiled to machine code using the Coral compiler, it takes less than a second - as fast as C code.
 
 ```python
 def gcd(a, b):
@@ -31,7 +31,7 @@ def add(a : int, b : int) -> int:
     return a + b
 
 x = add(50, 40)
-y = 100052312523
+y = 800052312523
 print(gcd(x, y))
 ```
 
