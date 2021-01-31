@@ -70,6 +70,7 @@ If the above fails, you may need to run `eval $(opam env)` after opam init and o
 On Linux, follow the OCaml/Opam installation instructions [here](https://opam.ocaml.org/doc/Install.html) for your distribution, install llvm following instructions [here](https://apt.llvm.org/), and then run
 
 ```
+> sudo apt-get install cmake llvm-10 opam
 > opam install llvm ocamlbuild ocamlfind
 ```
 
