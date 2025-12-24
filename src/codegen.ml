@@ -32,34 +32,35 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   and bool_t     = L.i1_type     context
   and char_t     = L.i8_type     context in
 
-  (* ptr types *)
-  let int_pt = L.pointer_type int_t
-  and float_pt = L.pointer_type float_t
-  and bool_pt = L.pointer_type bool_t
-  and char_pt = L.pointer_type char_t in
-  let char_ppt = L.pointer_type char_pt in
+  (* ptr types - all pointers are opaque in LLVM 15+ *)
+  let ptr_t = L.pointer_type context in
+  let int_pt = ptr_t
+  and float_pt = ptr_t
+  and bool_pt = ptr_t
+  and char_pt = ptr_t in
+  let char_ppt = ptr_t in
 
   (* define cobj and ctype structs *)
   let cobj_t = L.named_struct_type context "CObj" in (*define a named struct*)
-  let cobj_pt = L.pointer_type cobj_t in
-  let cobj_ppt = L.pointer_type cobj_pt in
+  let cobj_pt = ptr_t in
+  let cobj_ppt = ptr_t in
 
   (* all generic userdef functions follow this type *)
   let userdef_fn_t = L.function_type cobj_pt [| cobj_ppt |] in   (* takes an argv *)
-  let userdef_fn_pt = L.pointer_type userdef_fn_t in
+  let userdef_fn_pt = ptr_t in
 
   (* define cobj_list and ctype_list structs *)
   let clist_t = L.named_struct_type context "CList" in (*define a named struct*)
-  let clist_pt = L.pointer_type clist_t in
+  let clist_pt = ptr_t in
 
   (* define cobj_list and ctype_list structs *)
   let cstring_t = L.named_struct_type context "CString" in (*define a named struct*)
-  let cstring_pt = L.pointer_type cstring_t in
+  let cstring_pt = ptr_t in
 
   (* define ctype and ctype structs *)
   let ctype_t = L.named_struct_type context "CType" in (*define a named struct*)
-  let ctype_pt = L.pointer_type ctype_t in
-  let ctype_ppt = L.pointer_type ctype_pt in
+  let ctype_pt = ptr_t in
+  let ctype_ppt = ptr_t in
 
   (* cobj idxs *)
   let cobj_data_idx = 0
@@ -109,63 +110,20 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   and ctype_and_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
   and ctype_or_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
   and ctype_idx_t = L.function_type cobj_pt [| cobj_pt; cobj_pt |]
-  and ctype_idx_parent_t = L.function_type (L.pointer_type cobj_pt) [| cobj_pt; cobj_pt |]
+  and ctype_idx_parent_t = L.function_type ptr_t [| cobj_pt; cobj_pt |]
   and ctype_neg_t = L.function_type cobj_pt [| cobj_pt |]
   and ctype_not_t = L.function_type cobj_pt [| cobj_pt |]
   and ctype_heapify_t = L.function_type int_t [| cobj_pt |]
   and ctype_print_t = L.function_type int_t [| cobj_pt |]
   and ctype_call_t = L.function_type cobj_pt [| cobj_pt ; cobj_ppt |] in
 
-  (* type sigs for ptrs to fns in ctype *)
-  let ctype_add_pt = L.pointer_type ctype_add_t
-  and ctype_sub_pt = L.pointer_type ctype_sub_t
-  and ctype_mul_pt = L.pointer_type ctype_mul_t
-  and ctype_div_pt = L.pointer_type ctype_div_t
-  and ctype_exp_pt = L.pointer_type ctype_exp_t
-  and ctype_eq_pt = L.pointer_type ctype_eq_t
-  and ctype_neq_pt = L.pointer_type ctype_neq_t
-  and ctype_lesser_pt = L.pointer_type ctype_lesser_t
-  and ctype_leq_pt = L.pointer_type ctype_leq_t
-  and ctype_greater_pt = L.pointer_type ctype_greater_t
-  and ctype_geq_pt = L.pointer_type ctype_geq_t
-  and ctype_and_pt = L.pointer_type ctype_and_t
-  and ctype_or_pt = L.pointer_type ctype_or_t
-  and ctype_idx_pt = L.pointer_type ctype_idx_t
-  and ctype_idx_parent_pt = L.pointer_type ctype_idx_parent_t
-  and ctype_neg_pt = L.pointer_type ctype_neg_t
-  and ctype_not_pt = L.pointer_type ctype_not_t
-  and ctype_heapify_pt = L.pointer_type ctype_heapify_t
-  and ctype_print_pt = L.pointer_type ctype_print_t
-  and ctype_call_pt = L.pointer_type ctype_call_t in
-  let ctype_t = L.named_struct_type context "CType" in (*define a named struct*)
-  let ctype_pt = L.pointer_type ctype_t in
-
   (* set ctype and cobj struct bodies *)
   ignore(L.struct_set_body cobj_t [| char_pt; ctype_pt |] false);
   ignore(L.struct_set_body clist_t [| char_pt; int_t; int_t |] false);
   ignore(L.struct_set_body cstring_t [| char_pt; int_t; int_t |] false);
 
-  ignore(L.struct_set_body ctype_t [|
-  	ctype_add_pt;
-  	ctype_sub_pt;
-  	ctype_mul_pt;
-    ctype_div_pt;
-    ctype_exp_pt;
-    ctype_eq_pt;
-    ctype_neq_pt;
-    ctype_lesser_pt;
-  	ctype_leq_pt;
-  	ctype_greater_pt;
-  	ctype_geq_pt;
-  	ctype_and_pt;
-  	ctype_or_pt;
-  	ctype_idx_pt;
-    ctype_idx_parent_pt;
-  	ctype_neg_pt;
-    ctype_not_pt;
-    ctype_heapify_pt;
-    ctype_print_pt;
-    ctype_call_pt |] false);
+  (* ctype struct: 20 function pointer slots, all opaque pointers *)
+  ignore(L.struct_set_body ctype_t (Array.make 20 ptr_t) false);
 
    let get_t = function
      | "int" -> int_t
@@ -203,47 +161,44 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   (* here's how you go from a cobj to the data value: *)
   let build_getdata_cobj data_type cobj_p b =  (* data_type = int_t etc *) (*tstp "hi"; L.dump_value cobj_p;*)
     (*let x1 = L.build_load (lookup_global_binding "a") "x1" b in*)
-    let x2 = L.build_struct_gep cobj_p cobj_data_idx "x2" b in (* segfault this line *) 
-    let x3 = L.build_load x2 "x3" b in 
-    let x4 = L.build_bitcast x3 (L.pointer_type data_type) "x4" b in 
-    let data = L.build_load x4 "data" b in 
+    let x2 = L.build_struct_gep cobj_t cobj_p cobj_data_idx "x2" b in (* segfault this line *)
+    let x3 = L.build_load ptr_t x2 "x3" b in
+    let data = L.build_load data_type x3 "data" b in
     data
   in
 
-  (* here's how you go from a cobj_p to the data value: *)
-  let build_gettype_cobj cobj_p b =  (* data_type = int_t etc *)
-    let x2 = L.build_struct_gep cobj_p cobj_type_idx "x2" b in
-    let x3 = L.build_load x2 "x3" b in
-    let x4 = L.build_bitcast x3 (L.pointer_type ctype_t) "x4" b in
-    x4
+  (* here's how you go from a cobj_p to the ctype pointer: *)
+  let build_gettype_cobj cobj_p b =
+    let x2 = L.build_struct_gep cobj_t cobj_p cobj_type_idx "x2" b in
+    L.build_load ptr_t x2 "ctype_ptr" b
   in
 
   let build_getlist_cobj cobj_p b =
-    let gep_addr = L.build_struct_gep cobj_p cobj_data_idx "__gep_addr" b in
-    let objptr = L.build_load gep_addr "__objptr" b in
+    let gep_addr = L.build_struct_gep cobj_t cobj_p cobj_data_idx "__gep_addr" b in
+    let objptr = L.build_load ptr_t gep_addr "__objptr" b in
     L.build_bitcast objptr clist_pt "__clistptr" b
   in
 
   (* get list length *)
   let build_getlen_clist clist_p b =
-    let gep_addr = L.build_struct_gep clist_p clist_len_idx "__gep_addr" b in
+    let gep_addr = L.build_struct_gep clist_t clist_p clist_len_idx "__gep_addr" b in
     let gep_addr_as_intptr = L.build_bitcast gep_addr int_pt "__gep_addr_as_intptr" b in
-    let length = L.build_load gep_addr_as_intptr "__length" b in
+    let length = L.build_load int_t gep_addr_as_intptr "__length" b in
     length
   in
 
   (* get list capacity *)
   let build_getcap_clist clist_p b =
-    let gep_addr = L.build_struct_gep clist_p clist_cap_idx "__gep_addr" b in (* DA PROBLEM *)
+    let gep_addr = L.build_struct_gep clist_t clist_p clist_cap_idx "__gep_addr" b in (* DA PROBLEM *)
     let gep_addr_as_intptr = L.build_bitcast gep_addr int_pt "__gep_addr_as_intptr" b in
-    let capacity = L.build_load gep_addr_as_intptr "__capacity" b in
+    let capacity = L.build_load int_t gep_addr_as_intptr "__capacity" b in
     capacity
   in
 
   (* get function pointer from function object cobj_p *)
   let build_fnptr_of_cfo cobj_p b =
-    let x2 = L.build_struct_gep cobj_p cobj_data_idx "x2" b in
-    let x3 = L.build_load x2 "x3" b in
+    let x2 = L.build_struct_gep cobj_t cobj_p cobj_data_idx "x2" b in
+    let x3 = L.build_load ptr_t x2 "x3" b in
     let fnptr = L.build_bitcast x3 userdef_fn_pt "fnptr" b in
     fnptr
   in
@@ -251,18 +206,18 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   (* get the func pointer given the index of it in ctype and the cobj_p
    * e.g. ctype_fn_idx=ctype_add_idx for the '+' operator's function ptr *)
   let build_getctypefn_cobj ctype_fn_idx cobj_p b =
-    let x2 = L.build_struct_gep cobj_p cobj_type_idx "x2" b in
-    let x3 = L.build_load x2 "x3" b in  (* x3: ctype_pt *)
-    let x4 = L.build_struct_gep x3 ctype_fn_idx "x4" b in
-    let fn_ptr = L.build_load x4 "fn_ptr" b in
+    let x2 = L.build_struct_gep cobj_t cobj_p cobj_type_idx "x2" b in
+    let x3 = L.build_load ptr_t x2 "x3" b in  (* x3: ctype_pt *)
+    let x4 = L.build_struct_gep ctype_t x3 ctype_fn_idx "x4" b in
+    let fn_ptr = L.build_load ptr_t x4 "fn_ptr" b in
     fn_ptr
   in
 
   (* new cobject with undefined type / undef data *)
   let build_new_cobj_empty builder =
     let objptr = L.build_malloc cobj_t "__new_objptr" builder in (* objptr: cobj_pt* *)
-    let datafieldptr = L.build_struct_gep objptr cobj_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
-    let ctypefieldptr = L.build_struct_gep objptr cobj_type_idx "ctypefieldptr" builder in
+    let datafieldptr = L.build_struct_gep cobj_t objptr cobj_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
+    let ctypefieldptr = L.build_struct_gep cobj_t objptr cobj_type_idx "ctypefieldptr" builder in
     (objptr, datafieldptr, ctypefieldptr)
   in
 
@@ -277,7 +232,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let cap = L.const_int int_t capacity in
 
     (* dataptr: mallocs empty CObj array *)
-    let dataptr = L.build_malloc (L.array_type cobj_pt capacity) "__new_dataptr" builder in
+    let arr_t = L.array_type cobj_pt capacity in
+    let dataptr = L.build_malloc arr_t "__new_dataptr" builder in
     let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" builder in
 
     (* elm_pts must be list of cobj* *)
@@ -292,22 +248,22 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
     (* stores the data *)
     let store_elms elm idx =
-      let gep_addr = L.build_gep dataptr [|L.const_int int_t 0; L.const_int int_t idx|] "__elem_ptr" builder in
+      let gep_addr = L.build_gep arr_t dataptr [|L.const_int int_t 0; L.const_int int_t idx|] "__elem_ptr" builder in
       ignore(L.build_store elm gep_addr builder); ()
     in
     ignore(List.iter2 store_elms elms_w_nulls (seq capacity));
 
     (* store dataptr the struct *)
-    let datafieldptr = L.build_struct_gep dataptr_of_cobj clist_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
-    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in
+    let datafieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
+    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr ptr_t "datafieldptr_as_i8ptrptr" builder in
     ignore(L.build_store dataptr_as_i8ptr datafieldptr_as_i8ptrptr builder);
 
     (* store len in the struct *)
-    let lenfieldptr = L.build_struct_gep dataptr_of_cobj clist_len_idx "lenfieldptr" builder in  (* lenfieldptr: i32* *)
+    let lenfieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_len_idx "lenfieldptr" builder in  (* lenfieldptr: i32* *)
     ignore(L.build_store len lenfieldptr builder);
 
     (* store cap in the struct *)
-    let capfieldptr = L.build_struct_gep dataptr_of_cobj clist_cap_idx "capfieldptr" builder in  (* capfieldptr: i32* *)
+    let capfieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_cap_idx "capfieldptr" builder in  (* capfieldptr: i32* *)
     ignore(L.build_store cap capfieldptr builder);
   in
 
@@ -317,17 +273,17 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let cap = length in
 
     (* store dataptr the struct *)
-    let datafieldptr = L.build_struct_gep dataptr_of_cobj clist_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
-    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in
-    (* let listptr_as_i8ptrptr = L.build_bitcast listptr_as_i8ptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in *)
+    let datafieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
+    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr ptr_t "datafieldptr_as_i8ptrptr" builder in
+    (* let listptr_as_i8ptrptr = L.build_bitcast listptr_as_i8ptr ptr_t "datafieldptr_as_i8ptrptr" builder in *)
     ignore(L.build_store listptr_as_i8ptr datafieldptr_as_i8ptrptr builder);
 
     (* store len in the struct *)
-    let lenfieldptr = L.build_struct_gep dataptr_of_cobj clist_len_idx "lenfieldptr" builder in  (* lenfieldptr: i32* *)
+    let lenfieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_len_idx "lenfieldptr" builder in  (* lenfieldptr: i32* *)
     ignore(L.build_store len lenfieldptr builder);
 
     (* store cap in the struct *)
-    let capfieldptr = L.build_struct_gep dataptr_of_cobj clist_cap_idx "capfieldptr" builder in  (* capfieldptr: i32* *)
+    let capfieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_cap_idx "capfieldptr" builder in  (* capfieldptr: i32* *)
     ignore(L.build_store cap capfieldptr builder);
   in
 
@@ -336,7 +292,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     ignore(L.set_value_name ("remote_" ^ prettyname) remote_cobj_p);
     let cobj_pp = L.build_alloca cobj_pt (prettyname ^ "_p") b in
     ignore(L.build_store remote_cobj_p cobj_pp b);
-    let cobj_p = L.build_load cobj_pp (prettyname ^ "_p") b in
+    let cobj_p = L.build_load ptr_t cobj_pp (prettyname ^ "_p") b in
     cobj_p
   in
 
@@ -402,42 +358,41 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   let build_pow self_p other_p name b =
     let self_as_float = L.build_sitofp self_p float_t "self_as_float" b in
     let other_as_float = L.build_sitofp other_p float_t "other_as_float" b in
-    let result = L.build_call pow_func [| self_as_float; other_as_float |] "pow" b in
+    let result = L.build_call pow_t pow_func [| self_as_float; other_as_float |] "pow" b in
     let result_as_int = L.build_fptosi result int_t "result_as_int" b in
     result_as_int
   in
 
   let build_fpow self_p other_p name b =
-    let result = L.build_call pow_func [| self_p ; other_p |] "pow" b in
+    let result = L.build_call pow_t pow_func [| self_p ; other_p |] "pow" b in
     result
   in
 
   let build_idx self_p other_p name b =
      (* get elememnt *)
-     let gep_addr = L.build_struct_gep self_p clist_data_idx "__gep_addr" b in
-     let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (L.pointer_type (L.pointer_type cobj_pt)) "__gep_addr_as_cobjptrptrptr" b in
-     let gep_addr_as_cobjptrptr = L.build_load gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
-     let gep_addr_as_cobjptrptr = L.build_gep gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
-     let cobjptr = L.build_load gep_addr_as_cobjptrptr "__cobjptr" b in
+     let gep_addr = L.build_struct_gep clist_t self_p clist_data_idx "__gep_addr" b in
+     let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (ptr_t) "__gep_addr_as_cobjptrptrptr" b in
+     let gep_addr_as_cobjptrptr = L.build_load ptr_t gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
+     let gep_addr_as_cobjptrptr = L.build_gep ptr_t gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
+     let cobjptr = L.build_load ptr_t gep_addr_as_cobjptrptr "__cobjptr" b in
      cobjptr
   in
 
   let build_idx_parent self_p other_p name b =
    (* get elememnt *)
-   let gep_addr = L.build_struct_gep self_p clist_data_idx "__gep_addr" b in
-   let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (L.pointer_type (L.pointer_type cobj_pt)) "__gep_addr_as_cobjptrptrptr" b in
-   let gep_addr_as_cobjptrptr = L.build_load gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
-   let parent = L.build_gep gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
+   let gep_addr = L.build_struct_gep clist_t self_p clist_data_idx "__gep_addr" b in
+   let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (ptr_t) "__gep_addr_as_cobjptrptrptr" b in
+   let gep_addr_as_cobjptrptr = L.build_load ptr_t gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
+   let parent = L.build_gep ptr_t gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
    parent
   in
 
   (* heapify(self_p) modifies self by copying its data to the heap and pointing to the new heap data: int version *)
-  let build_iheapify self_p name b =   (* data_type = int_t etc *)
+  let build_iheapify self_p _ b =
     (* the box dataptr_addr points to the raw data we want to copy *)
-    let dataptr_addr_i8pp = L.build_struct_gep self_p cobj_data_idx "dat" b in
-    let dataptr_addr = L.build_bitcast dataptr_addr_i8pp (L.pointer_type (L.pointer_type int_t)) "dat" b in
-    let rawdata_addr = L.build_load dataptr_addr "raw_data_addr" b in
-    let rawdata = L.build_load rawdata_addr "raw_data" b in
+    let dataptr_addr_i8pp = L.build_struct_gep cobj_t self_p cobj_data_idx "dat" b in
+    let rawdata_addr = L.build_load ptr_t dataptr_addr_i8pp "raw_data_addr" b in
+    let rawdata = L.build_load int_t rawdata_addr "raw_data" b in
     let heap_data_p = L.build_malloc int_t "heap_data_p" b in
     ignore(L.build_store rawdata heap_data_p b);
     let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
@@ -446,12 +401,11 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   in
 
   (* heapify(self_p) modifies self by copying its data to the heap and pointing to the new heap data: float version *)
-  let build_fheapify self_p name b =   (* data_type = int_t etc *)
+  let build_fheapify self_p _ b =
     (* the box dataptr_addr points to the raw data we want to copy *)
-    let dataptr_addr_i8pp = L.build_struct_gep self_p cobj_data_idx "dat" b in
-    let dataptr_addr = L.build_bitcast dataptr_addr_i8pp (L.pointer_type (L.pointer_type float_t)) "dat" b in
-    let rawdata_addr = L.build_load dataptr_addr "raw_data_addr" b in
-    let rawdata = L.build_load rawdata_addr "raw_data" b in
+    let dataptr_addr_i8pp = L.build_struct_gep cobj_t self_p cobj_data_idx "dat" b in
+    let rawdata_addr = L.build_load ptr_t dataptr_addr_i8pp "raw_data_addr" b in
+    let rawdata = L.build_load float_t rawdata_addr "raw_data" b in
     let heap_data_p = L.build_malloc float_t "heap_data_p" b in
     ignore(L.build_store rawdata heap_data_p b);
     let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
@@ -460,12 +414,11 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   in
 
   (* heapify(self_p) modifies self by copying its data to the heap and pointing to the new heap data: bool version *)
-  let build_bheapify self_p name b =   (* data_type = int_t etc *)
+  let build_bheapify self_p _ b =
     (* the box dataptr_addr points to the raw data we want to copy *)
-    let dataptr_addr_i8pp = L.build_struct_gep self_p cobj_data_idx "dat" b in
-    let dataptr_addr = L.build_bitcast dataptr_addr_i8pp (L.pointer_type (L.pointer_type bool_t)) "dat" b in
-    let rawdata_addr = L.build_load dataptr_addr "raw_data_addr" b in
-    let rawdata = L.build_load rawdata_addr "raw_data" b in
+    let dataptr_addr_i8pp = L.build_struct_gep cobj_t self_p cobj_data_idx "dat" b in
+    let rawdata_addr = L.build_load ptr_t dataptr_addr_i8pp "raw_data_addr" b in
+    let rawdata = L.build_load bool_t rawdata_addr "raw_data" b in
     let heap_data_p = L.build_malloc bool_t "heap_data_p" b in
     ignore(L.build_store rawdata heap_data_p b);
     let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
@@ -489,46 +442,42 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   in
 
   (* builds the print function for ints *)
-  let build_iprint self_p name b =   (* data_type = int_t etc *)
-      let dataptr_addr_i8pp = L.build_struct_gep self_p cobj_data_idx "dat" b in
-      let dataptr_addr = L.build_bitcast dataptr_addr_i8pp (L.pointer_type (L.pointer_type int_t)) "dat" b in
-      let rawdata_addr = L.build_load dataptr_addr "raw_data_addr" b in
-      let rawdata = L.build_load rawdata_addr "raw_data" b in
+  let build_iprint self_p _ b =
+      let dataptr_addr_i8pp = L.build_struct_gep cobj_t self_p cobj_data_idx "dat" b in
+      let rawdata_addr = L.build_load ptr_t dataptr_addr_i8pp "raw_data_addr" b in
+      let rawdata = L.build_load int_t rawdata_addr "raw_data" b in
       let format_str = L.build_global_stringptr "%d" "fmt" b in
-      ignore(L.build_call printf_func [| format_str ; rawdata |] "printf" b);
+      ignore(L.build_call printf_t printf_func [| format_str ; rawdata |] "printf" b);
       L.build_ret (L.const_int int_t 0) b
   in
 
   (* builds the print function for floats *)
-  let build_fprint self_p name b =   (* data_type = int_t etc *)
-      let dataptr_addr_i8pp = L.build_struct_gep self_p cobj_data_idx "dat" b in
-      let dataptr_addr = L.build_bitcast dataptr_addr_i8pp (L.pointer_type (L.pointer_type float_t)) "dat" b in
-      let rawdata_addr = L.build_load dataptr_addr "raw_data_addr" b in
-      let rawdata = L.build_load rawdata_addr "raw_data" b in
+  let build_fprint self_p _ b =
+      let dataptr_addr_i8pp = L.build_struct_gep cobj_t self_p cobj_data_idx "dat" b in
+      let rawdata_addr = L.build_load ptr_t dataptr_addr_i8pp "raw_data_addr" b in
+      let rawdata = L.build_load float_t rawdata_addr "raw_data" b in
       let format_str = L.build_global_stringptr "%g" "fmt" b in
-      ignore(L.build_call printf_func [| format_str ; rawdata |] "printf" b);
+      ignore(L.build_call printf_t printf_func [| format_str ; rawdata |] "printf" b);
       L.build_ret (L.const_int int_t 0) b
   in
 
   (* builds the print function for bools *)
-  let build_bprint self_p name b =   (* data_type = int_t etc *)
-      let dataptr_addr_i8pp = L.build_struct_gep self_p cobj_data_idx "dat" b in
-      let dataptr_addr = L.build_bitcast dataptr_addr_i8pp (L.pointer_type (L.pointer_type bool_t)) "dat" b in
-      let rawdata_addr = L.build_load dataptr_addr "raw_data_addr" b in
-      let rawdata = L.build_load rawdata_addr "raw_data" b in
+  let build_bprint self_p _ b =
+      let dataptr_addr_i8pp = L.build_struct_gep cobj_t self_p cobj_data_idx "dat" b in
+      let rawdata_addr = L.build_load ptr_t dataptr_addr_i8pp "raw_data_addr" b in
+      let rawdata = L.build_load bool_t rawdata_addr "raw_data" b in
       let format_str = L.build_global_stringptr "%d" "fmt" b in
-      ignore(L.build_call printf_func [| format_str ; rawdata |] "printf" b);
+      ignore(L.build_call printf_t printf_func [| format_str ; rawdata |] "printf" b);
       L.build_ret (L.const_int int_t 0) b
   in
 
   (* builds the print function for chars *)
-  let build_cprint self_p name b =   (* data_type = int_t etc *)
-      let dataptr_addr_i8pp = L.build_struct_gep self_p cobj_data_idx "dat" b in
-      let dataptr_addr = L.build_bitcast dataptr_addr_i8pp (L.pointer_type (L.pointer_type bool_t)) "dat" b in
-      let rawdata_addr = L.build_load dataptr_addr "raw_data_addr" b in
-      let rawdata = L.build_load rawdata_addr "raw_data" b in
+  let build_cprint self_p _ b =
+      let dataptr_addr_i8pp = L.build_struct_gep cobj_t self_p cobj_data_idx "dat" b in
+      let rawdata_addr = L.build_load ptr_t dataptr_addr_i8pp "raw_data_addr" b in
+      let rawdata = L.build_load char_t rawdata_addr "raw_data" b in
       let format_str = L.build_global_stringptr "%c" "fmt" b in
-      ignore(L.build_call printf_func [| format_str ; rawdata |] "printf" b);
+      ignore(L.build_call printf_t printf_func [| format_str ; rawdata |] "printf" b);
       L.build_ret (L.const_int int_t 0) b
   in
 
@@ -537,19 +486,19 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let listptr = build_getlist_cobj self_p b in
     let nptr = L.build_alloca int_t "nptr" b in
     ignore(L.build_store (L.const_int int_t (0)) nptr b);
-    let n = L.build_load nptr "n" b in
+    let n = L.build_load int_t nptr "n" b in
     let ln = build_getlen_clist listptr b in
     let fs1 = L.build_global_stringptr "[" "fmt" b in
     let fs2 = L.build_global_stringptr ", " "fmt" b in
     let fs3 = L.build_global_stringptr "]" "fmt" b in
-    ignore(L.build_call printf_func [| fs1 ; L.const_int int_t 0 |] "printf" b);
+    ignore(L.build_call printf_t printf_func [| fs1 ; L.const_int int_t 0 |] "printf" b);
 
     (* iter block *)
     let iter_bb = L.append_block context "iter" (L.block_parent (L.insertion_block b)) in
     ignore(L.build_br iter_bb b);
     let iter_builder = L.builder_at_end context iter_bb in
 
-    let n = L.build_load nptr "n" iter_builder in
+    let n = L.build_load int_t nptr "n" iter_builder in
     let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
     ignore(L.build_store nnext nptr iter_builder);
 
@@ -561,8 +510,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let elmptr = build_idx listptr n "list_index_result" body_builder in
 
     let fn_p = build_getctypefn_cobj ctype_print_idx elmptr body_builder in
-    ignore(L.build_call fn_p [|elmptr|] "print_cob" body_builder);
-    ignore(L.build_call printf_func [| fs2 ; L.const_int int_t 0 |] "printf" body_builder);
+    ignore(L.build_call ctype_print_t fn_p [|elmptr|] "print_cob" body_builder);
+    ignore(L.build_call printf_t printf_func [| fs2 ; L.const_int int_t 0 |] "printf" body_builder);
 
     ignore(L.build_br iter_bb body_builder);
 
@@ -570,7 +519,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     ignore(L.build_cond_br iter_complete merge_bb body_bb iter_builder);
 
     let end_builder = L.builder_at_end context merge_bb in
-    ignore(L.build_call printf_func [| fs3 ; L.const_int int_t 0 |] "printf" end_builder);
+    ignore(L.build_call printf_t printf_func [| fs3 ; L.const_int int_t 0 |] "printf" end_builder);
 
     L.build_ret (L.const_int int_t 0) end_builder
   in
@@ -580,7 +529,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let listptr = build_getlist_cobj self_p b in
     let nptr = L.build_alloca int_t "nptr" b in
     ignore(L.build_store (L.const_int int_t (0)) nptr b);
-    let n = L.build_load nptr "n" b in
+    let n = L.build_load int_t nptr "n" b in
     let ln = build_getlen_clist listptr b in
 
     (* iter block *)
@@ -588,7 +537,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     ignore(L.build_br iter_bb b);
 
     let iter_builder = L.builder_at_end context iter_bb in
-    let n = L.build_load nptr "n" iter_builder in
+    let n = L.build_load int_t nptr "n" iter_builder in
     let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
     ignore(L.build_store nnext nptr iter_builder);
 
@@ -600,7 +549,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let elmptr = build_idx listptr n "list_index_result" body_builder in
 
     let fn_p = build_getctypefn_cobj ctype_print_idx elmptr body_builder in
-    ignore(L.build_call fn_p [|elmptr|] "print_cob" body_builder);
+    ignore(L.build_call ctype_print_t fn_p [|elmptr|] "print_cob" body_builder);
 
     ignore(L.build_br iter_bb body_builder);
 
@@ -635,7 +584,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
        Uoprt("not", Some((L.build_not), int_t), None, Some((L.build_not), bool_t), Some((L.build_not), char_t), None, None, None);
        Uoprt("heapify", Some((build_iheapify), int_t), Some((build_fheapify), int_t), Some((build_bheapify), int_t), None, Some((build_lheapify), int_t), Some((build_sheapify), int_t), Some((build_fcheapify), int_t));
        Uoprt("print", Some((build_iprint), int_t), Some((build_fprint), int_t), Some((build_bprint), int_t), Some((build_cprint), int_t), Some((build_lprint), int_t), Some((build_sprint), int_t), None);
-       Coprt("call", None, None, None, None, None, None, Some((L.build_call), int_t));
+       Coprt("call", None, None, None, None, None, None, Some(((fun fn args name bd -> L.build_call userdef_fn_t fn args name bd)), int_t));
        ] in
 
   	 List.map (fun t -> let bops = List.map (function
@@ -711,24 +660,18 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       in
 
   (* define the default CTypes *)
+  let null_ptr = L.const_pointer_null ptr_t in
   let [ctype_int; ctype_float; ctype_bool; ctype_char; ctype_list; ctype_string; ctype_func] =
   	List.map (fun (t, bops) -> L.define_global ("ctype_" ^ t) (L.const_named_struct ctype_t (Array.of_list (List.map (function
-  	  | BOprt(fn, o) -> (match o with
-  	    | Some(((fn, bd), tfn)) -> fn
-  	    | None -> (match fn with
-          | "idx" -> L.const_pointer_null ctype_idx_pt
-          | "idx_parent" -> L.const_pointer_null ctype_idx_parent_pt
-          | _ ->  L.const_pointer_null ctype_add_pt))
-      | BUoprt(fn, o) -> (match o with
-        | Some(((fn, bd), tfn)) -> fn
-        | None -> (match fn with
-          | "heapify" -> L.const_pointer_null ctype_heapify_pt
-          | "print" -> L.const_pointer_null ctype_print_pt
-          | _ -> L.const_pointer_null ctype_neg_pt))
-  	  | BCoprt(fn, o) -> (match o with
-  	    | Some(((fn, bd), tfn)) -> fn
-  	    | None -> (match fn with
-          | _ -> L.const_pointer_null ctype_call_pt))) bops))) the_module) built_ops in
+  	  | BOprt(_, o) -> (match o with
+  	    | Some(((fn, _), _)) -> fn
+  	    | None -> null_ptr)
+      | BUoprt(_, o) -> (match o with
+        | Some(((fn, _), _)) -> fn
+        | None -> null_ptr)
+  	  | BCoprt(_, o) -> (match o with
+  	    | Some(((fn, _), _)) -> fn
+  	    | None -> null_ptr)) bops))) the_module) built_ops in
 
   let ctype_of_ASTtype = function
     | Int -> Some ctype_int
@@ -765,12 +708,12 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" builder in
 
     (* store ctypeptr in the struct *)
-    let ctypefieldptr = L.build_struct_gep objptr cobj_type_idx "ctypefieldptr" builder in
+    let ctypefieldptr = L.build_struct_gep cobj_t objptr cobj_type_idx "ctypefieldptr" builder in
     ignore(L.build_store (ctype_of_datatype data_type) ctypefieldptr builder);
 
     (* store dataptr in the struct *)
-    let datafieldptr = L.build_struct_gep objptr cobj_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
-    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr (L.pointer_type char_pt) "datafieldptr_as_i8ptrptr" builder in
+    let datafieldptr = L.build_struct_gep cobj_t objptr cobj_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
+    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr ptr_t "datafieldptr_as_i8ptrptr" builder in
     ignore(L.build_store dataptr_as_i8ptr datafieldptr_as_i8ptrptr builder);
 
     (objptr, dataptr)
@@ -802,7 +745,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       ignore(L.build_br iter_bb b);
       let iter_builder = L.builder_at_end context iter_bb in
 
-      let n = L.build_load nptr "n" iter_builder in
+      let n = L.build_load int_t nptr "n" iter_builder in
       let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
       ignore(L.build_store nnext nptr iter_builder);
 
@@ -812,7 +755,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       let body_builder = L.builder_at_end context body_bb in
       let elmptr = build_idx listptr n "list_index_result" body_builder in
 
-      let gep_addr = L.build_gep dataptr [|n|] "__elem_ptr" body_builder in
+      let gep_addr = L.build_gep ptr_t dataptr [|n|] "__elem_ptr" body_builder in
       ignore(L.build_store elmptr gep_addr body_builder);
 
       ignore(L.build_br iter_bb body_builder);
@@ -825,7 +768,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     in
 
     let builder1 = load_list self_data dataptr self_ln (L.block_parent (L.insertion_block b)) b in
-    let dataptr1 = L.build_gep dataptr [|self_ln|] "__next_dataptr" builder1 in
+    let dataptr1 = L.build_gep ptr_t dataptr [|self_ln|] "__next_dataptr" builder1 in
     let builder2 = load_list other_data dataptr1 other_ln (L.block_parent (L.insertion_block b)) builder1 in
     (builder2, dataptr_as_i8ptr, total)
   in
@@ -848,11 +791,11 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
   let build_string_idx self_p other_p name b =
      (* get elememnt *)
-     let gep_addr = L.build_struct_gep self_p clist_data_idx "__gep_addr" b in
-     let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (L.pointer_type (L.pointer_type cobj_pt)) "__gep_addr_as_cobjptrptrptr" b in
-     let gep_addr_as_cobjptrptr = L.build_load gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
-     let gep_addr_as_cobjptrptr = L.build_gep gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
-     let cobjptr = L.build_load gep_addr_as_cobjptrptr "__cobjptr" b in
+     let gep_addr = L.build_struct_gep clist_t self_p clist_data_idx "__gep_addr" b in
+     let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (ptr_t) "__gep_addr_as_cobjptrptrptr" b in
+     let gep_addr_as_cobjptrptr = L.build_load ptr_t gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
+     let gep_addr_as_cobjptrptr = L.build_gep ptr_t gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
+     let cobjptr = L.build_load ptr_t gep_addr_as_cobjptrptr "__cobjptr" b in
     
      let (objptr, dataptr) = build_new_cobj cstring_t b in 
      let _ = build_new_clist dataptr [cobjptr] b in
@@ -950,7 +893,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         ignore(L.set_value_name ("remote_argv") remote_argv);
         let argv_p = L.build_alloca cobj_ppt "argv_p" bd in
         ignore(L.build_store remote_argv argv_p bd);
-        let argv = L.build_load argv_p "argv" bd in
+        let argv = L.build_load ptr_t argv_p "argv" bd in
         let fn_p = build_fnptr_of_cfo self_p bd in
         let result = tf fn_p [|argv|] "result" bd in
         ignore(L.build_ret result bd)
@@ -995,7 +938,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       let dyns_list =   (* redundant list where every bind is dynamic *)
           List.map dynify binds
       in
-      let binds = if dynify_all then let () = tstp "dynifying all vars" in List.sort_uniq Pervasives.compare (binds @ dyns_list) else binds
+      let binds = if dynify_all then let () = tstp "dynifying all vars" in List.sort_uniq compare (binds @ dyns_list) else binds
       in   (* now binds has a dyn() version of each variable *)
       let prettyname_of_bind bind = (name_of_bind bind) ^ "_" ^ (string_of_typ (type_of_bind bind))
       in
@@ -1080,9 +1023,9 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       let heap_data_p = L.build_malloc raw_ltyp "heap_data_temp_box" b in
       ignore(L.build_store rawval heap_data_p b);
       let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
-      let dataptr_addr = L.build_struct_gep box_ptr cobj_data_idx "dat" b in
-      let typeptr_addr = L.build_struct_gep box_ptr cobj_type_idx "ty" b in
-      let typeptr_addr = L.build_bitcast typeptr_addr (L.pointer_type ctype_pt) "ty" b in
+      let dataptr_addr = L.build_struct_gep cobj_t box_ptr cobj_data_idx "dat" b in
+      let typeptr_addr = L.build_struct_gep cobj_t box_ptr cobj_type_idx "ty" b in
+      let typeptr_addr = L.build_bitcast typeptr_addr ptr_t "ty" b in
       ignore(L.build_store heap_data_p dataptr_addr b);
       ignore(L.build_store (ctype_of_typ raw_ty) typeptr_addr b);
       Box(box_ptr)
@@ -1109,9 +1052,9 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   let rebox_if_needed boxaddr name the_state =
     match boxaddr with 
       | BoxAddr(addr, true) -> tstp ("Boxing " ^ name);
-        let cobj_p = L.build_load addr name the_state.b in
+        let cobj_p = L.build_load ptr_t addr name the_state.b in
         let fn_p = build_getctypefn_cobj ctype_heapify_idx cobj_p the_state.b in
-        ignore(L.build_call fn_p [|cobj_p|] "heapify_result" the_state.b);
+        ignore(L.build_call ctype_heapify_t fn_p [|cobj_p|] "heapify_result" the_state.b);
         change_state the_state (S_needs_reboxing(name, false))
 
       | BoxAddr(_, false) -> the_state  (* do nothing *)
@@ -1127,9 +1070,9 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let proceed_bb = L.append_block context "proceed" the_state.func in
 
     (* check for undefined box exception *)
-    let cobj_addr = L.build_load addr "load_ptr" the_state.b in
-    let dataptr_addr = L.build_struct_gep cobj_addr cobj_data_idx "dat_p_p" the_state.b in
-    let dataptr = L.build_load dataptr_addr "load_ptr2" the_state.b in
+    let cobj_addr = L.build_load ptr_t addr "load_ptr" the_state.b in
+    let dataptr_addr = L.build_struct_gep cobj_t cobj_addr cobj_data_idx "dat_p_p" the_state.b in
+    let dataptr = L.build_load ptr_t dataptr_addr "load_ptr2" the_state.b in
     let invalid_addr = L.build_is_null dataptr "invalid_defined" the_state.b in
       ignore(L.build_cond_br invalid_addr bad_op_bb proceed_bb the_state.b);
 
@@ -1138,8 +1081,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       let info = message in
         L.build_global_string info "error message" bad_op_bd in
     let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_op_bd in
-      ignore(L.build_call printf_func [| str_format_str1 ; err_message |] "printf" bad_op_bd);
-      ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_op_bd);
+      ignore(L.build_call printf_t printf_func [| str_format_str1 ; err_message |] "printf" bad_op_bd);
+      ignore(L.build_call exit_t exit_func [| (L.const_int int_t 1) |] "exit" bad_op_bd);
 
     let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
           ignore(L.build_br proceed_bb bad_op_bd); the_state
@@ -1164,8 +1107,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       let info = message in
         L.build_global_string info "error message" bad_op_bd in
     let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_op_bd in
-      ignore(L.build_call printf_func [| str_format_str1 ; err_message |] "printf" bad_op_bd);
-      ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_op_bd);
+      ignore(L.build_call printf_t printf_func [| str_format_str1 ; err_message |] "printf" bad_op_bd);
+      ignore(L.build_call exit_t exit_func [| (L.const_int int_t 1) |] "exit" bad_op_bd);
 
     (* return to normal control flow *)
     let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
@@ -1195,8 +1138,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       let info = message in
         L.build_global_string info "error message" bad_arg_bd in
     let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_arg_bd in
-      ignore(L.build_call printf_func [| str_format_str1 ; err_message |] "printf" bad_arg_bd);
-      ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_arg_bd);
+      ignore(L.build_call printf_t printf_func [| str_format_str1 ; err_message |] "printf" bad_arg_bd);
+      ignore(L.build_call exit_t exit_func [| (L.const_int int_t 1) |] "exit" bad_arg_bd);
 
     (* return to normal control flow *)
     let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
@@ -1230,8 +1173,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       let info = message in
         L.build_global_string info "error message" bad_arg_bd in
     let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_arg_bd in
-      ignore(L.build_call printf_func [| str_format_str1 ; err_message |] "printf" bad_arg_bd);
-      ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_arg_bd);
+      ignore(L.build_call printf_t printf_func [| str_format_str1 ; err_message |] "printf" bad_arg_bd);
+      ignore(L.build_call exit_t exit_func [| (L.const_int int_t 1) |] "exit" bad_arg_bd);
 
     (* return to normal control flow *)
     let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
@@ -1260,8 +1203,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
        let info = message in
          L.build_global_string info "error message" bad_acc_bd in
      let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_acc_bd in
-       ignore(L.build_call printf_func [| str_format_str1; err_message |] "printf" bad_acc_bd);
-       ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_acc_bd);
+       ignore(L.build_call printf_t printf_func [| str_format_str1; err_message |] "printf" bad_acc_bd);
+       ignore(L.build_call exit_t exit_func [| (L.const_int int_t 1) |] "exit" bad_acc_bd);
 
      let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
        ignore(L.build_br proceed_bb bad_acc_bd); the_state
@@ -1274,7 +1217,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let the_state = check_null fn_p "RuntimeError: unsupported operand type(s) for list access" the_state in
     let the_state = check_explicit_type Int index_pointer "RuntimeError: unsupported operand type(s) for list access" the_state in
     let the_state = check_bounds list_pointer index_pointer "RuntimeError: list index out of bounds" the_state in
-    let result = L.build_call fn_p [| list_pointer ; index_pointer |] "binop_result" the_state.b in
+    let result = L.build_call ctype_idx_t fn_p [| list_pointer ; index_pointer |] "binop_result" the_state.b in
     (Box(result), the_state)
   in
 
@@ -1285,7 +1228,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let the_state = check_null fn_p "RuntimeError: unsupported operand type(s) for list assignment" the_state in
     let the_state = check_explicit_type Int index_pointer "RuntimeError: unsupported index type for list access" the_state in
     let the_state = check_bounds list_pointer index_pointer "RuntimeError: list index out of bounds" the_state in
-    let result = L.build_call fn_p [| list_pointer ; index_pointer |] "parent_binop_result" the_state.b in
+    let result = L.build_call ctype_idx_parent_t fn_p [| list_pointer ; index_pointer |] "parent_binop_result" the_state.b in
     (Box(result), the_state)
   
   in
@@ -1297,8 +1240,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let info = message in
     L.build_global_string info "error message" the_state.b in
     let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" the_state.b in
-    ignore(L.build_call printf_func [| str_format_str1; err_message |] "printf" the_state.b);
-    ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" the_state.b); the_state
+    ignore(L.build_call printf_t printf_func [| str_format_str1; err_message |] "printf" the_state.b);
+    ignore(L.build_call exit_t exit_func [| (L.const_int int_t 1) |] "exit" the_state.b); the_state
 
   in
 
@@ -1328,11 +1271,11 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
     | SVar name ->
         (match (lookup namespace (Bind(name, ty))) with
-          | RawAddr(addr) -> (Raw(L.build_load addr name the_state.b),the_state)
+          | RawAddr(addr) -> (Raw(L.build_load (ltyp_of_typ ty) addr name the_state.b),the_state)
           | BoxAddr(addr, needs_update) ->
             let the_state = check_defined addr ("RuntimeError: name '" ^ name ^ "' is not defined") the_state in (* maybe could be optimized sometimes *)
             let the_state = rebox_if_needed (BoxAddr(addr, needs_update)) name the_state in
-            (Box(L.build_load addr name the_state.b),the_state)
+            (Box(L.build_load ptr_t addr name the_state.b),the_state)
         )
 
     | SBinop(e1, op, e2) ->
@@ -1366,7 +1309,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
             let fn_p = build_getctypefn_cobj fn_idx v1 the_state.b in
             let the_state = check_null fn_p ("RuntimeError: unsupported operand type(s) for binary " ^ (Utilities.binop_to_string op)) the_state in
             let the_state = check_same_type v1 v2 ("RuntimeError: unsupported operand type(s) for binary " ^ (Utilities.binop_to_string op)) the_state in
-            let result = L.build_call fn_p [| v1 ; v2 |] "binop_result" the_state.b in
+            let result = L.build_call ctype_add_t fn_p [| v1 ; v2 |] "binop_result" the_state.b in
             (Box(result), the_state))
 
       in
@@ -1451,7 +1394,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
         (* store llargs values in argv *)
         let store_arg llarg idx =
-          let gep_addr = L.build_gep argv_as_arr [|L.const_int int_t 0; L.const_int int_t idx|] "arg" the_state.b in
+          let gep_addr = L.build_gep cobj_p_arr_t argv_as_arr [|L.const_int int_t 0; L.const_int int_t idx|] "arg" the_state.b in
           ignore(L.build_store llarg gep_addr the_state.b);()
         in
 
@@ -1461,7 +1404,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         (* now we have argv! so we just need to get the fn ptr and call it *)
         let (Box(caller_cobj_p),the_state) = expr the_state fexpr in
         let call_ptr = build_getctypefn_cobj ctype_call_idx caller_cobj_p the_state.b in
-        let result = L.build_call call_ptr [|caller_cobj_p;argv|] "result" the_state.b in
+        let result = L.build_call ctype_call_t call_ptr [|caller_cobj_p;argv|] "result" the_state.b in
         let the_state = stmt the_state exit_transforms in
         (Box(result),the_state)
         
@@ -1511,16 +1454,17 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         in let (the_state, arg_vals) = List.fold_left unwrap (the_state, []) (List.combine arg_dataunits binds) in
         let arg_vals = List.rev arg_vals in
         (* look for existing copy of optimized function, if it doesn't exist then create a new one *)
+        (* compute function type for the call - needed for opaque pointers *)
+        let ftype = L.function_type (ltyp_of_typ sfdecl.styp) (Array.of_list arg_lltypes) in
         let optim_func = (match (SfdeclMap.find_opt sfdecl the_state.optim_funcs) with
           | Some(optim_func) -> tstp ("(optimized version of " ^ sfdecl.sfname ^ " found!)"); optim_func
           | None -> tstp ("(no optimized version of " ^ sfdecl.sfname ^ " found, generating new one)");
             (* now lets build the optimized function *)
             let formal_types = (Array.of_list arg_types) in
-            let ftype = L.function_type (ltyp_of_typ sfdecl.styp) (Array.of_list arg_lltypes) in  (* note sformals would work in place of arg_types w some modification *)
             let optim_func = L.define_function sfdecl.sfname ftype the_module in   (* define_function is the core of this. Note that ftype has to be an llvalue created by function_type that includes both return type and formal param types *)
 
                 (* now lets build the body of the optimized function *)
-            let fn_builder = L.builder_at_end context (L.entry_block optim_func) in  
+            let fn_builder = L.builder_at_end context (L.entry_block optim_func) in
             (* let int_format_str = L.build_global_stringptr "%d\n" "fmt" the_state.b
             and string_format_str = L.build_global_stringptr "%d\n" "fmt" the_state.b
             and float_format_str = L.build_global_stringptr "%c\n" "fmt" the_state.b in   *)
@@ -1530,7 +1474,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
             (* let addrs = List.map (fun (bind, explicit_type) -> ((lookup fn_namespace bind), explicit_type)) binds in *)
 
-            let addr_of_bind (bind, _) = match (lookup fn_namespace bind) with 
+            let addr_of_bind (bind, _) = match (lookup fn_namespace bind) with
                 |RawAddr(addr) -> addr
                 |BoxAddr(addr,_) -> addr  (* maybe use the flag! *)
             in
@@ -1538,21 +1482,21 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
             let addrs = List.map addr_of_bind binds in
 
             let fn_state = change_state the_state (S_list([S_names(fn_namespace); S_func(optim_func); S_b(fn_builder); S_rettyp(sfdecl.styp); S_generic_func(false)])) in
-          
+
             ignore(List.iter2 (fun addr value -> ignore(L.build_store value addr fn_state.b)) addrs vals_to_store);
 
-            let fn_state = stmt fn_state sfdecl.sbody in  
+            let fn_state = stmt fn_state sfdecl.sbody in
 
             let ret_instr = (match sfdecl.styp with
               | Null -> (fun b -> tstp ("add_terminal invoked on Null for " ^ sfdecl.sfname); L.build_ret (build_new_cobj_init int_t (L.const_int int_t 0) b) b)
               | Dyn -> (fun b -> tstp ("add_terminal invoked on Dyn for " ^ sfdecl.sfname); L.build_ret (build_new_cobj_init int_t (L.const_int int_t 0) b) b)
               | _ -> (fun b -> tstp ("add_terminal invoked on known type for " ^ sfdecl.sfname); L.build_ret (const_of_typ sfdecl.styp) b)
-            ) in 
+            ) in
 
             (* add terminal if needed (usually not needed) *)
             let fn_state = add_terminal fn_state ret_instr in optim_func
         ) in
-        let result = L.build_call optim_func (Array.of_list arg_vals) "result" the_state.b in
+        let result = L.build_call ftype optim_func (Array.of_list arg_vals) "result" the_state.b in
         let the_state = change_state the_state (S_optimfuncs(SfdeclMap.add sfdecl optim_func the_state.optim_funcs)) in
 
         let res = (match sfdecl.styp with
@@ -1587,14 +1531,14 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
             let info = "RuntimeError: unsupported operand type for unary " ^ (Utilities.unop_to_string op) in
               L.build_global_string info "error message" bad_op_bd in
           let str_format_str1 = L.build_global_stringptr  "%s\n" "fmt" bad_op_bd in
-            ignore(L.build_call printf_func [| str_format_str1 ; err_message |] "printf" bad_op_bd);
-            ignore(L.build_call exit_func [| (L.const_int int_t 1) |] "exit" bad_op_bd);
+            ignore(L.build_call printf_t printf_func [| str_format_str1 ; err_message |] "printf" bad_op_bd);
+            ignore(L.build_call exit_t exit_func [| (L.const_int int_t 1) |] "exit" bad_op_bd);
 
           (* return to normal control flow *)
           let the_state = change_state the_state (S_b(L.builder_at_end context proceed_bb)) in
           ignore(L.build_br proceed_bb bad_op_bd);
 
-          let result = L.build_call fn_p [| v1 |] "uop_result" the_state.b in
+          let result = L.build_call ctype_neg_t fn_p [| v1 |] "uop_result" the_state.b in
           (Box(result), the_state)
         |Raw(v1) ->
                 let res  = (match op with
@@ -1701,19 +1645,19 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
             let (res, the_state) = expr the_state e in
             (match res with
                 | Raw(v) -> tstp "raw print"; (match t with
-                    | Int -> ignore(L.build_call printf_func [| int_format_str ; v |] "printf" the_state.b);  the_state
-                    | Float -> ignore(L.build_call printf_func [| float_format_str ; v |] "printf" the_state.b);  the_state
-                    | Bool -> ignore(L.build_call printf_func [| int_format_str ; v |] "printf" the_state.b);  the_state
-                    | _ -> ignore(L.build_call printf_func [| string_format_str ; v |] "printf" the_state.b);  the_state
+                    | Int -> ignore(L.build_call printf_t printf_func [| int_format_str ; v |] "printf" the_state.b);  the_state
+                    | Float -> ignore(L.build_call printf_t printf_func [| float_format_str ; v |] "printf" the_state.b);  the_state
+                    | Bool -> ignore(L.build_call printf_t printf_func [| int_format_str ; v |] "printf" the_state.b);  the_state
+                    | _ -> ignore(L.build_call printf_t printf_func [| string_format_str ; v |] "printf" the_state.b);  the_state
                 )
                 | Box(v) -> tstp "box print";
                     (* let the_state = check_explicit_type String v ("RuntimeError: invalid char type in print (reset this later)") the_state in *)
                     (*let cobjptr = L.build_alloca cobj_t "tmp" b in
                     ignore(L.build_store v cobjptr b);*)
-                    (*ignore(L.build_call printf_func [| int_format_str ; (build_getdata_cobj int_t v b) |] "printf" the_state.b); the_state*)
+                    (*ignore(L.build_call printf_t printf_func [| int_format_str ; (build_getdata_cobj int_t v b) |] "printf" the_state.b); the_state*)
                     let fn_p = build_getctypefn_cobj ctype_print_idx v the_state.b in
-                    ignore(L.build_call fn_p [|v|] "print_cob" the_state.b); 
-                    ignore(L.build_call printf_func [| newline_format_str ; L.const_int int_t 0 |] "printf" the_state.b); the_state
+                    ignore(L.build_call ctype_print_t fn_p [|v|] "print_cob" the_state.b); 
+                    ignore(L.build_call printf_t printf_func [| newline_format_str ; L.const_int int_t 0 |] "printf" the_state.b); the_state
             )
               
     
@@ -1780,7 +1724,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
          let iter_builder = L.builder_at_end context iter_bb in
 
-         let n = L.build_load nptr "n" iter_builder in
+         let n = L.build_load int_t nptr "n" iter_builder in
          let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
 
          let iter_complete = (L.build_icmp L.Icmp.Sge) n ln "iter_complete" iter_builder in (* true if n exceeds list length *)
@@ -1790,7 +1734,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
          let body_builder = L.builder_at_end context body_bb in
         
          let fn_p = build_getctypefn_cobj ctype_idx_idx objptr body_builder in
-         let elmptr = L.build_call fn_p [|objptr; idxptr|] "idx_cob" body_builder in
+         let elmptr = L.build_call ctype_idx_t fn_p [|objptr; idxptr|] "idx_cob" body_builder in
 
         ignore(L.build_store nnext nptr body_builder);
 
@@ -1829,7 +1773,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
          let iter_builder = L.builder_at_end context iter_bb in
 
-         let n = L.build_load nptr "n" iter_builder in
+         let n = L.build_load int_t nptr "n" iter_builder in
          let nnext = L.build_add n (L.const_int int_t 1) "nnext" iter_builder in
 
          let iter_complete = (L.build_icmp L.Icmp.Sge) n upperdata "iter_complete" iter_builder in (* true if n exceeds list length *)
@@ -1908,7 +1852,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         (* manually design the fn object w proper data & type ptrs and put in bind *)
         let _ = 
           let (fn_obj,datafieldptr,ctypefieldptr) = build_new_cobj_empty the_state.b in
-          let dfp_as_fp = L.build_bitcast datafieldptr (L.pointer_type userdef_fn_pt) "dfp_as_fp" the_state.b in
+          let dfp_as_fp = L.build_bitcast datafieldptr ptr_t "dfp_as_fp" the_state.b in
           ignore(L.build_store the_function dfp_as_fp the_state.b);  (* store fnptr *)
           ignore(L.build_store ctype_func ctypefieldptr the_state.b);  (* store ctype ptr *)
           (* store new object in appropriate binding *)
@@ -1924,10 +1868,9 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         
         let argc = List.length formal_names
         and argv = Array.get (L.params the_function) 0 in (* argv is first/only arg *)
-        let cobj_p_arr_pt = L.pointer_type (L.array_type cobj_pt argc) in
-        let formals_arr_p = L.build_bitcast argv cobj_p_arr_pt "formals_arr_p" fn_b in
+        let cobj_p_arr_t = L.array_type cobj_pt argc in
         (* now formals_arr_p is a ptr to an array of cobj_ps which are the formals *)
-        let formals_arr = L.build_load formals_arr_p "formals_arr" fn_b in
+        let formals_arr = L.build_load cobj_p_arr_t argv "formals_arr" fn_b in
         (* Very important! the actual extraction of the formals from formals_arr *)
         let formal_vals = List.map (fun idx -> L.build_extractvalue formals_arr idx ("arg"^(string_of_int idx)) fn_b) (seq argc)  in
         (* now formal_vals is a list of co_ps *)
@@ -1984,7 +1927,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
        | (String, Dyn) | (Dyn, String) | (Arr, Dyn) | (Dyn, Arr) | (FuncType, Dyn) | (Dyn, FuncType) -> 
           let BoxAddr(box_addr1, _) = lookup the_state.namespace (Bind(name, from_ty)) (* no need to check needs_update flag bc this is assignment *)
           and BoxAddr(box_addr2, _) = lookup the_state.namespace (Bind(name, to_ty)) in
-          let cobj_addr = L.build_load box_addr1 "load_cobj" the_state.b in
+          let cobj_addr = L.build_load ptr_t box_addr1 "load_cobj" the_state.b in
           ignore(L.build_store cobj_addr box_addr2 the_state.b); the_state
 
        | (Dyn, raw_ty) when raw_ty = Int || raw_ty = Float || raw_ty = Bool ->
@@ -1993,7 +1936,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
          let the_state = rebox_if_needed unchecked_boxaddr name the_state in 
          let BoxAddr(box_addr,_) = unchecked_boxaddr in 
          let RawAddr(raw_addr) = lookup the_state.namespace (Bind(name,raw_ty)) in 
-         let data_cobj = L.build_load box_addr name the_state.b in
+         let data_cobj = L.build_load ptr_t box_addr name the_state.b in
          let data = build_getdata_cobj (ltyp_of_typ raw_ty) data_cobj the_state.b in  
          ignore(L.build_store data raw_addr the_state.b); 
          the_state
@@ -2004,16 +1947,16 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
          let BoxAddr(box_addr, _) = lookup the_state.namespace (Bind(name, Dyn)) (* no need to check needs_update flag bc this is assignment *)
          and RawAddr(raw_addr) = lookup the_state.namespace (Bind(name, raw_ty)) in
 
-        let rawval = L.build_load raw_addr "__load_raw" the_state.b in
+        let rawval = L.build_load (ltyp_of_typ raw_ty) raw_addr "__load_raw" the_state.b in
         let tempobj = build_new_cobj_init (ltyp_of_typ raw_ty) rawval the_state.b in
 (*       
          (* gep for direct pointers to the type and data fields of box *)
-         let cobj_addr = L.build_load box_addr "load_cobj" the_state.b in
+         let cobj_addr = L.build_load ptr_t box_addr "load_cobj" the_state.b in
          (* let cobj_addr = L.build_load box_addr "cobjptr" the_state.b in *)
          let raw_addr = L.build_bitcast raw_addr char_pt "raw" the_state.b in
-         let dataptr_addr = L.build_struct_gep cobj_addr cobj_data_idx "dat_p_p" the_state.b in
-         let typeptr_addr = L.build_struct_gep cobj_addr cobj_type_idx "ty_p_p" the_state.b in
-         let typeptr_addr = L.build_bitcast typeptr_addr (L.pointer_type ctype_pt) "ty" the_state.b in *)
+         let dataptr_addr = L.build_struct_gep cobj_t cobj_addr cobj_data_idx "dat_p_p" the_state.b in
+         let typeptr_addr = L.build_struct_gep cobj_t cobj_addr cobj_type_idx "ty_p_p" the_state.b in
+         let typeptr_addr = L.build_bitcast typeptr_addr ptr_t "ty" the_state.b in *)
          (* store raw_addr in the box's dataptr field and update the typeptr *)
          (* ignore(L.build_store raw_addr dataptr_addr the_state.b); *)
 

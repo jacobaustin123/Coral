@@ -389,7 +389,7 @@ let rec from_file map fname run = (* todo combine with loop *)
     | Not_found -> Printf.printf "NotFoundError: unknown error!\n"; flush stdout
     | Parsing.Parse_error -> Printf.printf "ParseError: invalid syntax!\n"; flush stdout
     | Failure explanation -> Printf.printf "%s\n" explanation; flush stdout
-    | KeyboardInterrupt -> safe_remove !llvm_name; safe_remove !assembly_name; safe_remove !executable_name; exit 0; ()
+    | KeyboardInterrupt -> safe_remove !llvm_name; safe_remove !assembly_name; safe_remove !executable_name; exit 0
 
 (* Coral main interpreter loop. Parses command line arguments, including a single
 anonymous argument (file path) and runs either the interpreter or the from_file compiler *)
