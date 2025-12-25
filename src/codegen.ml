@@ -930,7 +930,7 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   (** allocate for all the bindings and put them in a map **)
 
   (* pass in Some(builder) to do local vars alloca() or None to do globals non-alloca *)
-  let build_binding_list local_builder_opt binds dynify_all =   (* returns a stringmap Bind -> Addr *) 
+  let build_binding_list local_builder_opt binds dynify_all =   (* returns a stringmap Bind -> Addr *)
       let dynify bind =   (* turns a bind into dynamic. a helper fn *)
          let Bind(name,_) = bind in
            Bind(name, Dyn)
@@ -942,20 +942,20 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       in   (* now binds has a dyn() version of each variable *)
       let prettyname_of_bind bind = (name_of_bind bind) ^ "_" ^ (string_of_typ (type_of_bind bind))
       in
-      let get_const bind = match (type_of_bind bind) with 
+      let get_const bind = match (type_of_bind bind) with
         | Int -> L.const_null int_t
         | Float -> L.const_null float_t
         | Bool -> L.const_null bool_t
         | _ -> L.define_global ((prettyname_of_bind bind) ^ "_obj") (L.const_named_struct cobj_t [|L.const_pointer_null char_pt; L.const_pointer_null ctype_pt|]) the_module
       in
 
-      let allocate bind = 
-        let alloc_result = 
+      let allocate bind =
+        let alloc_result =
           (match local_builder_opt with
             | None -> L.define_global (prettyname_of_bind bind) (get_const bind) the_module
             | Some(builder) -> match type_of_bind bind with
-              | Dyn -> 
-                  let addr = L.build_alloca (ltyp_of_typ (type_of_bind bind)) (prettyname_of_bind bind) builder in 
+              | Dyn ->
+                  let addr = L.build_alloca (ltyp_of_typ (type_of_bind bind)) (prettyname_of_bind bind) builder in
                   let cobj_addr = L.build_malloc cobj_t "__new_objptr" builder in
                   ignore(L.build_store cobj_addr addr builder);
                   let cobj = L.const_named_struct cobj_t [|L.const_pointer_null char_pt; L.const_pointer_null ctype_pt|] in
@@ -971,9 +971,20 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
           | _ -> (BoxAddr(alloc_result, false), Bind((name_of_bind bind), Dyn))
         in (res, newbind)
       in
-        List.fold_left (fun map bind -> 
-            let (res,newbind) = allocate bind in 
+      (* Build the map, and for FuncType bindings also add a Dyn alias pointing to same addr *)
+      let base_map = List.fold_left (fun map bind ->
+            let (res,newbind) = allocate bind in
           BindMap.add newbind res map) BindMap.empty binds
+      in
+      (* Add Dyn aliases for FuncType bindings so recursive calls with Dyn type can find them *)
+      List.fold_left (fun map bind ->
+          match bind with
+          | Bind(name, FuncType) ->
+              let func_bind = Bind(name, FuncType) in
+              (match BindMap.find_opt func_bind map with
+               | Some(addr) -> BindMap.add (Bind(name, Dyn)) addr map
+               | None -> map)
+          | _ -> map) base_map binds
   in
   
 
