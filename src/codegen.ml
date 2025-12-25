@@ -34,33 +34,27 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
   (* ptr types - all pointers are opaque in LLVM 15+ *)
   let ptr_t = L.pointer_type context in
-  let int_pt = ptr_t
-  and float_pt = ptr_t
-  and bool_pt = ptr_t
-  and char_pt = ptr_t in
-  let char_ppt = ptr_t in
+  (* Semantic aliases for ptr_t - all equivalent but document intent *)
+  let char_pt = ptr_t    (* pointer to i8/char data *)
+  and cobj_pt = ptr_t    (* pointer to CObj *)
+  and cobj_ppt = ptr_t   (* pointer to pointer to CObj (argv) *)
+  and ctype_pt = ptr_t   (* pointer to CType *)
+  in
 
   (* define cobj and ctype structs *)
-  let cobj_t = L.named_struct_type context "CObj" in (*define a named struct*)
-  let cobj_pt = ptr_t in
-  let cobj_ppt = ptr_t in
+  let cobj_t = L.named_struct_type context "CObj" in
 
   (* all generic userdef functions follow this type *)
   let userdef_fn_t = L.function_type cobj_pt [| cobj_ppt |] in   (* takes an argv *)
-  let userdef_fn_pt = ptr_t in
 
   (* define cobj_list and ctype_list structs *)
-  let clist_t = L.named_struct_type context "CList" in (*define a named struct*)
-  let clist_pt = ptr_t in
+  let clist_t = L.named_struct_type context "CList" in
 
-  (* define cobj_list and ctype_list structs *)
-  let cstring_t = L.named_struct_type context "CString" in (*define a named struct*)
-  let cstring_pt = ptr_t in
+  (* define cobj_string struct *)
+  let cstring_t = L.named_struct_type context "CString" in
 
-  (* define ctype and ctype structs *)
-  let ctype_t = L.named_struct_type context "CType" in (*define a named struct*)
-  let ctype_pt = ptr_t in
-  let ctype_ppt = ptr_t in
+  (* define ctype struct *)
+  let ctype_t = L.named_struct_type context "CType" in
 
   (* cobj idxs *)
   let cobj_data_idx = 0
