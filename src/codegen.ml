@@ -175,32 +175,25 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
   let build_getlist_cobj cobj_p b =
     let gep_addr = L.build_struct_gep cobj_t cobj_p cobj_data_idx "__gep_addr" b in
-    let objptr = L.build_load ptr_t gep_addr "__objptr" b in
-    L.build_bitcast objptr clist_pt "__clistptr" b
+    L.build_load ptr_t gep_addr "__clistptr" b
   in
 
   (* get list length *)
   let build_getlen_clist clist_p b =
     let gep_addr = L.build_struct_gep clist_t clist_p clist_len_idx "__gep_addr" b in
-    let gep_addr_as_intptr = L.build_bitcast gep_addr int_pt "__gep_addr_as_intptr" b in
-    let length = L.build_load int_t gep_addr_as_intptr "__length" b in
-    length
+    L.build_load int_t gep_addr "__length" b
   in
 
   (* get list capacity *)
   let build_getcap_clist clist_p b =
-    let gep_addr = L.build_struct_gep clist_t clist_p clist_cap_idx "__gep_addr" b in (* DA PROBLEM *)
-    let gep_addr_as_intptr = L.build_bitcast gep_addr int_pt "__gep_addr_as_intptr" b in
-    let capacity = L.build_load int_t gep_addr_as_intptr "__capacity" b in
-    capacity
+    let gep_addr = L.build_struct_gep clist_t clist_p clist_cap_idx "__gep_addr" b in
+    L.build_load int_t gep_addr "__capacity" b
   in
 
   (* get function pointer from function object cobj_p *)
   let build_fnptr_of_cfo cobj_p b =
     let x2 = L.build_struct_gep cobj_t cobj_p cobj_data_idx "x2" b in
-    let x3 = L.build_load ptr_t x2 "x3" b in
-    let fnptr = L.build_bitcast x3 userdef_fn_pt "fnptr" b in
-    fnptr
+    L.build_load ptr_t x2 "fnptr" b
   in
 
   (* get the func pointer given the index of it in ctype and the cobj_p
@@ -234,17 +227,11 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     (* dataptr: mallocs empty CObj array *)
     let arr_t = L.array_type cobj_pt capacity in
     let dataptr = L.build_malloc arr_t "__new_dataptr" builder in
-    let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" builder in
-
-    (* elm_pts must be list of cobj* *)
-    let elm_pts_as_cobjptrs = List.map (fun e ->
-      let elm_pt_as_cobjptr = L.build_bitcast e cobj_pt "elm_ptr_as_cobjptr" builder
-      in elm_pt_as_cobjptr) elm_pts in
 
     (* null pointers to fill empty capacity *)
-    let elms_w_nulls = if List.length elm_pts_as_cobjptrs < capacity
-      then elm_pts_as_cobjptrs @ (Array.to_list (Array.make (capacity - List.length elm_pts) (L.const_pointer_null cobj_pt)))
-      else elm_pts_as_cobjptrs in
+    let elms_w_nulls = if List.length elm_pts < capacity
+      then elm_pts @ (Array.to_list (Array.make (capacity - List.length elm_pts) (L.const_pointer_null cobj_pt)))
+      else elm_pts in
 
     (* stores the data *)
     let store_elms elm idx =
@@ -254,36 +241,33 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     ignore(List.iter2 store_elms elms_w_nulls (seq capacity));
 
     (* store dataptr the struct *)
-    let datafieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
-    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr ptr_t "datafieldptr_as_i8ptrptr" builder in
-    ignore(L.build_store dataptr_as_i8ptr datafieldptr_as_i8ptrptr builder);
+    let datafieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_data_idx "datafieldptr" builder in
+    ignore(L.build_store dataptr datafieldptr builder);
 
     (* store len in the struct *)
-    let lenfieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_len_idx "lenfieldptr" builder in  (* lenfieldptr: i32* *)
+    let lenfieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_len_idx "lenfieldptr" builder in
     ignore(L.build_store len lenfieldptr builder);
 
     (* store cap in the struct *)
-    let capfieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_cap_idx "capfieldptr" builder in  (* capfieldptr: i32* *)
+    let capfieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_cap_idx "capfieldptr" builder in
     ignore(L.build_store cap capfieldptr builder);
   in
 
   (* builds a new clist with a pointer to an existing array of cobj pointers. used for adding lists *)
-  let build_new_clist_init dataptr_of_cobj listptr_as_i8ptr length builder =
+  let build_new_clist_init dataptr_of_cobj listptr length builder =
     let len = length in
     let cap = length in
 
     (* store dataptr the struct *)
-    let datafieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
-    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr ptr_t "datafieldptr_as_i8ptrptr" builder in
-    (* let listptr_as_i8ptrptr = L.build_bitcast listptr_as_i8ptr ptr_t "datafieldptr_as_i8ptrptr" builder in *)
-    ignore(L.build_store listptr_as_i8ptr datafieldptr_as_i8ptrptr builder);
+    let datafieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_data_idx "datafieldptr" builder in
+    ignore(L.build_store listptr datafieldptr builder);
 
     (* store len in the struct *)
-    let lenfieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_len_idx "lenfieldptr" builder in  (* lenfieldptr: i32* *)
+    let lenfieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_len_idx "lenfieldptr" builder in
     ignore(L.build_store len lenfieldptr builder);
 
     (* store cap in the struct *)
-    let capfieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_cap_idx "capfieldptr" builder in  (* capfieldptr: i32* *)
+    let capfieldptr = L.build_struct_gep clist_t dataptr_of_cobj clist_cap_idx "capfieldptr" builder in
     ignore(L.build_store cap capfieldptr builder);
   in
 
@@ -368,61 +352,54 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     result
   in
 
-  let build_idx self_p other_p name b =
-     (* get elememnt *)
+  let build_idx self_p other_p _ b =
+     (* get element *)
      let gep_addr = L.build_struct_gep clist_t self_p clist_data_idx "__gep_addr" b in
-     let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (ptr_t) "__gep_addr_as_cobjptrptrptr" b in
-     let gep_addr_as_cobjptrptr = L.build_load ptr_t gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
-     let gep_addr_as_cobjptrptr = L.build_gep ptr_t gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
-     let cobjptr = L.build_load ptr_t gep_addr_as_cobjptrptr "__cobjptr" b in
-     cobjptr
+     let data_ptr = L.build_load ptr_t gep_addr "__data_ptr" b in
+     let elem_addr = L.build_gep ptr_t data_ptr [| other_p |] "__elem_addr" b in (* other_p is offset of sought element *)
+     L.build_load ptr_t elem_addr "__cobjptr" b
   in
 
-  let build_idx_parent self_p other_p name b =
-   (* get elememnt *)
+  let build_idx_parent self_p other_p _ b =
+   (* get element address *)
    let gep_addr = L.build_struct_gep clist_t self_p clist_data_idx "__gep_addr" b in
-   let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (ptr_t) "__gep_addr_as_cobjptrptrptr" b in
-   let gep_addr_as_cobjptrptr = L.build_load ptr_t gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
-   let parent = L.build_gep ptr_t gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
-   parent
+   let data_ptr = L.build_load ptr_t gep_addr "__data_ptr" b in
+   L.build_gep ptr_t data_ptr [| other_p |] "__elem_addr" b (* other_p is offset of sought element *)
   in
 
   (* heapify(self_p) modifies self by copying its data to the heap and pointing to the new heap data: int version *)
   let build_iheapify self_p _ b =
     (* the box dataptr_addr points to the raw data we want to copy *)
-    let dataptr_addr_i8pp = L.build_struct_gep cobj_t self_p cobj_data_idx "dat" b in
-    let rawdata_addr = L.build_load ptr_t dataptr_addr_i8pp "raw_data_addr" b in
+    let dataptr_addr = L.build_struct_gep cobj_t self_p cobj_data_idx "dat" b in
+    let rawdata_addr = L.build_load ptr_t dataptr_addr "raw_data_addr" b in
     let rawdata = L.build_load int_t rawdata_addr "raw_data" b in
     let heap_data_p = L.build_malloc int_t "heap_data_p" b in
     ignore(L.build_store rawdata heap_data_p b);
-    let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
-    ignore(L.build_store heap_data_p dataptr_addr_i8pp b);
+    ignore(L.build_store heap_data_p dataptr_addr b);
     L.build_ret (L.const_int int_t 0) b
   in
 
   (* heapify(self_p) modifies self by copying its data to the heap and pointing to the new heap data: float version *)
   let build_fheapify self_p _ b =
     (* the box dataptr_addr points to the raw data we want to copy *)
-    let dataptr_addr_i8pp = L.build_struct_gep cobj_t self_p cobj_data_idx "dat" b in
-    let rawdata_addr = L.build_load ptr_t dataptr_addr_i8pp "raw_data_addr" b in
+    let dataptr_addr = L.build_struct_gep cobj_t self_p cobj_data_idx "dat" b in
+    let rawdata_addr = L.build_load ptr_t dataptr_addr "raw_data_addr" b in
     let rawdata = L.build_load float_t rawdata_addr "raw_data" b in
     let heap_data_p = L.build_malloc float_t "heap_data_p" b in
     ignore(L.build_store rawdata heap_data_p b);
-    let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
-    ignore(L.build_store heap_data_p dataptr_addr_i8pp b);
+    ignore(L.build_store heap_data_p dataptr_addr b);
     L.build_ret (L.const_int int_t 0) b
   in
 
   (* heapify(self_p) modifies self by copying its data to the heap and pointing to the new heap data: bool version *)
   let build_bheapify self_p _ b =
     (* the box dataptr_addr points to the raw data we want to copy *)
-    let dataptr_addr_i8pp = L.build_struct_gep cobj_t self_p cobj_data_idx "dat" b in
-    let rawdata_addr = L.build_load ptr_t dataptr_addr_i8pp "raw_data_addr" b in
+    let dataptr_addr = L.build_struct_gep cobj_t self_p cobj_data_idx "dat" b in
+    let rawdata_addr = L.build_load ptr_t dataptr_addr "raw_data_addr" b in
     let rawdata = L.build_load bool_t rawdata_addr "raw_data" b in
     let heap_data_p = L.build_malloc bool_t "heap_data_p" b in
     ignore(L.build_store rawdata heap_data_p b);
-    let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
-    ignore(L.build_store heap_data_p dataptr_addr_i8pp b);
+    ignore(L.build_store heap_data_p dataptr_addr b);
     L.build_ret (L.const_int int_t 0) b
   in
 
@@ -703,18 +680,16 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
   (* builds a new cobj of a given type and returns a pointer to the cobj and a pointer to its data *)
   let build_new_cobj data_type builder =
     (* malloc the new object and its data *)
-    let objptr = L.build_malloc cobj_t "__new_objptr" builder in (* objptr: cobj_pt *)
+    let objptr = L.build_malloc cobj_t "__new_objptr" builder in
     let dataptr = L.build_malloc data_type "__new_dataptr" builder in
-    let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" builder in
 
     (* store ctypeptr in the struct *)
     let ctypefieldptr = L.build_struct_gep cobj_t objptr cobj_type_idx "ctypefieldptr" builder in
     ignore(L.build_store (ctype_of_datatype data_type) ctypefieldptr builder);
 
     (* store dataptr in the struct *)
-    let datafieldptr = L.build_struct_gep cobj_t objptr cobj_data_idx "datafieldptr" builder in  (* datafieldptr: i8* *)
-    let datafieldptr_as_i8ptrptr = L.build_bitcast datafieldptr ptr_t "datafieldptr_as_i8ptrptr" builder in
-    ignore(L.build_store dataptr_as_i8ptr datafieldptr_as_i8ptrptr builder);
+    let datafieldptr = L.build_struct_gep cobj_t objptr cobj_data_idx "datafieldptr" builder in
+    ignore(L.build_store dataptr datafieldptr builder);
 
     (objptr, dataptr)
   in
@@ -732,10 +707,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let other_ln = build_getlen_clist other_data b in
 
     let total = L.build_add self_ln other_ln "total_length" b in
-    (* let dataptr = L.build_malloc (L.array_type cobj_pt 10) "__new_dataptr1" b in *)
 
     let dataptr = L.build_array_malloc cobj_pt total "__new_dataptr" b in
-    let dataptr_as_i8ptr = L.build_bitcast dataptr char_pt "dataptr_as_i8" b in
 
     let load_list listptr dataptr size fn b =
       let nptr = L.build_alloca int_t "nptr" b in
@@ -770,30 +743,29 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
     let builder1 = load_list self_data dataptr self_ln (L.block_parent (L.insertion_block b)) b in
     let dataptr1 = L.build_gep ptr_t dataptr [|self_ln|] "__next_dataptr" builder1 in
     let builder2 = load_list other_data dataptr1 other_ln (L.block_parent (L.insertion_block b)) builder1 in
-    (builder2, dataptr_as_i8ptr, total)
+    (builder2, dataptr, total)
   in
 
   (* builds the addition function for lists *)
   let build_ladd self_p other_p name b =
-    let (builder, dataptr_as_i8ptr, total) = add_lists self_p other_p b in
+    let (builder, dataptr, total) = add_lists self_p other_p b in
     let (newobjptr, newdataptr) = build_new_cobj clist_t builder in
-    let _ = build_new_clist_init newdataptr dataptr_as_i8ptr total builder in
+    let _ = build_new_clist_init newdataptr dataptr total builder in
     (builder, newobjptr)
   in
 
   (* builds the addition function for strings *)
   let build_sadd self_p other_p name b =
-    let (builder, dataptr_as_i8ptr, total) = add_lists self_p other_p b in
+    let (builder, dataptr, total) = add_lists self_p other_p b in
     let (newobjptr, newdataptr) = build_new_cobj cstring_t builder in
-    let _ = build_new_clist_init newdataptr dataptr_as_i8ptr total builder in
+    let _ = build_new_clist_init newdataptr dataptr total builder in
     (builder, newobjptr)
   in
 
   let build_string_idx self_p other_p name b =
      (* get elememnt *)
      let gep_addr = L.build_struct_gep clist_t self_p clist_data_idx "__gep_addr" b in
-     let gep_addr_as_cobjptrptrptr = L.build_bitcast gep_addr (ptr_t) "__gep_addr_as_cobjptrptrptr" b in
-     let gep_addr_as_cobjptrptr = L.build_load ptr_t gep_addr_as_cobjptrptrptr "__gep_addr_as_cobjptrptr" b in
+     let gep_addr_as_cobjptrptr = L.build_load ptr_t gep_addr "__gep_addr_as_cobjptrptr" b in
      let gep_addr_as_cobjptrptr = L.build_gep ptr_t gep_addr_as_cobjptrptr [| other_p |] "__gep_addr_as_cobjptrptr" b in (* other_p is offset of sought element *)
      let cobjptr = L.build_load ptr_t gep_addr_as_cobjptrptr "__cobjptr" b in
     
@@ -1033,10 +1005,8 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
       let box_ptr = L.build_malloc cobj_t "box" b in
       let heap_data_p = L.build_malloc raw_ltyp "heap_data_temp_box" b in
       ignore(L.build_store rawval heap_data_p b);
-      let heap_data_p = L.build_bitcast heap_data_p char_pt "heap_data_p" b in
       let dataptr_addr = L.build_struct_gep cobj_t box_ptr cobj_data_idx "dat" b in
       let typeptr_addr = L.build_struct_gep cobj_t box_ptr cobj_type_idx "ty" b in
-      let typeptr_addr = L.build_bitcast typeptr_addr ptr_t "ty" b in
       ignore(L.build_store heap_data_p dataptr_addr b);
       ignore(L.build_store (ctype_of_typ raw_ty) typeptr_addr b);
       Box(box_ptr)
@@ -1410,12 +1380,11 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         in
 
         ignore(List.iter2 store_arg llargs (seq argc));
-        let argv = L.build_bitcast argv_as_arr cobj_ppt "argv" the_state.b in
 
         (* now we have argv! so we just need to get the fn ptr and call it *)
         let (Box(caller_cobj_p),the_state) = expr the_state fexpr in
         let call_ptr = build_getctypefn_cobj ctype_call_idx caller_cobj_p the_state.b in
-        let result = L.build_call ctype_call_t call_ptr [|caller_cobj_p;argv|] "result" the_state.b in
+        let result = L.build_call ctype_call_t call_ptr [|caller_cobj_p;argv_as_arr|] "result" the_state.b in
         let the_state = stmt the_state exit_transforms in
         (Box(result),the_state)
         
@@ -1861,10 +1830,9 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         let the_function = L.define_function fname userdef_fn_t the_module in
 
         (* manually design the fn object w proper data & type ptrs and put in bind *)
-        let _ = 
+        let _ =
           let (fn_obj,datafieldptr,ctypefieldptr) = build_new_cobj_empty the_state.b in
-          let dfp_as_fp = L.build_bitcast datafieldptr ptr_t "dfp_as_fp" the_state.b in
-          ignore(L.build_store the_function dfp_as_fp the_state.b);  (* store fnptr *)
+          ignore(L.build_store the_function datafieldptr the_state.b);  (* store fnptr *)
           ignore(L.build_store ctype_func ctypefieldptr the_state.b);  (* store ctype ptr *)
           (* store new object in appropriate binding *)
           let BoxAddr(boxaddr,_) = (lookup namespace (Bind(fname, FuncType))) in (*ok to throw away need_update bool in assignment! *)
