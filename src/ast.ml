@@ -19,7 +19,7 @@ type literal =
   | FloatLit of float
   | StringLit of string
 
-type typ = Int | Float | Bool | String | Dyn | Arr | Object | FuncType | Null
+type typ = Int | Float | Bool | String | Dyn | Arr | Object | FuncType | Null | TVar of int
 
 type bind = Bind of string * typ
 
@@ -91,6 +91,7 @@ let rec string_of_typ = function
   | FuncType -> "func"
   | Object -> "object"
   | Null -> "null"
+  | TVar n -> "'" ^ string_of_int n
 
 let rec string_of_bind = function
   | Bind(s, t) -> s ^ ": " ^ string_of_typ t

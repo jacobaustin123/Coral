@@ -1,6 +1,7 @@
 open Ast
 open Sast
 open Utilities
+open Infer
 
 (* Semant takes an Abstract Syntax Tree and returns a Syntactically Checked AST with partial type inferrence,
 syntax checking, and other features. expr objects are converted to sexpr, and stmt objects are converted
@@ -24,10 +25,34 @@ let needs_cast t1 t2 =
 This currently is quite restrictive and does not permit automatic type casting like in Python.
 This may be changed in the future. The commented-out line would allow that feature *)
 
-let binop t1 t2 op = 
+(* Helper to check if a type is a type variable *)
+let is_tvar = function
+  | TVar _ -> true
+  | _ -> false
+
+(* Check if an operation is a comparison that returns Bool *)
+let is_comparison = function
+  | Eq | Neq | Less | Leq | Greater | Geq -> true
+  | _ -> false
+
+(* Check if an operation is a logical operation that returns Bool *)
+let is_logical = function
+  | And | Or -> true
+  | _ -> false
+
+let binop t1 t2 op =
   let except = (Failure ("STypeError: unsupported operand type(s) for binary " ^ binop_to_string op ^ ": '" ^ type_to_string t1 ^ "' and '" ^ type_to_string t2 ^ "'")) in
   match (t1, t2) with
-  | (Dyn, Dyn) | (Dyn, _) | (_, Dyn) -> Dyn
+  (* If either operand is Dyn, result is Dyn (or Bool for comparisons) *)
+  | (Dyn, Dyn) | (Dyn, _) | (_, Dyn) ->
+    if is_comparison op || is_logical op then Bool else Dyn
+  (* Handle type variables - infer from the known operand *)
+  | (TVar a, TVar b) when a = b ->  (* Same TVar *)
+    if is_comparison op || is_logical op then Bool else TVar a
+  | (TVar _, TVar _) -> Dyn  (* Different TVars -> Dyn *)
+  | (TVar _, t) | (t, TVar _) ->
+    if is_comparison op || is_logical op then Bool
+    else t  (* Infer result type from the known operand *)
   | _ -> let same = t1 = t2 in (match op with
     | Add | Sub | Mul | Exp when same && t1 = Int -> Int
     | Add | Sub | Mul | Div | Exp when same && t1 = Float -> Float
@@ -165,27 +190,50 @@ and exp the_state = function
             let (map'', _, _, _) = assign map' (Dyn, (SCall (e, (List.rev exprout), transforms), Dyn), data) name in (* add the function itself to the namespace *)
 
             let (_, types) = split_sbind bindout in
+            let Bind(n1, btype) = name in
 
-            if the_state.func && TypeMap.mem (x, types) the_state.stack then let () = debug "recursive callstack return" in (Dyn, SCall(e, (List.rev exprout), transforms), None)
-            else let stack' = TypeMap.add (x, types) true the_state.stack in (* check recursive stack *)
+            (* For HM inference: create a return type variable if no explicit type *)
+            let ret_tvar = if btype = Dyn then fresh_var () else btype in
 
-            let (map2, block, data, locals) = (stmt {the_state with stack = stack'; func = true; locals = map''; } body) in
+            (* Check for recursive call - if so, return the type variable for inference *)
+            if the_state.func && TypeMap.mem (x, types) the_state.stack then
+              let ret_tvar = TypeMap.find (x, types) the_state.stack in
+              let () = debug "recursive callstack return with type var" in
+              (* Use transforms (SStage) for recursive calls - dynamic calling convention *)
+              (ret_tvar, SCall(e, (List.rev exprout), transforms), None)
+            else
+              (* Add function with its return type variable to the stack *)
+              let stack' = TypeMap.add (x, types) ret_tvar the_state.stack in
 
-            (match data with (* match return type with *)
-              | Some (typ2, e', d) -> (* it did return something *)
-                  let Bind(n1, btype) = name in 
-                  if btype <> Dyn && btype <> typ2 then if typ2 <> Dyn 
-                  then raise (Failure (Printf.sprintf "STypeError: invalid return type (expected %s but found %s)" (string_of_typ btype) (string_of_typ typ2))) 
-                  else let func = { styp = btype; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in 
-                    (btype, (SCall(e, (List.rev exprout), SFunc(func))), d) 
-                  else let func = { styp = typ2; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in (* case where definite return type and Dynamic inferrence still has  bind*)
-                  (typ2, (SCall(e, (List.rev exprout), SFunc(func))), d)
-              
-              | None -> (* function didn't return anything, null function *)
-                  let Bind(n1, btype) = name in if btype <> Dyn then
-                  raise (Failure (Printf.sprintf "STypeError: invalid return type (expected %s but found None)" (string_of_typ btype))) else
-                  let func = { styp = Null; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in
-                  (Null, (SCall(e, (List.rev exprout), SFunc(func))), None))
+              let (map2, block, data, locals) = (stmt {the_state with stack = stack'; func = true; locals = map''; } body) in
+
+              (match data with (* match return type with *)
+                | Some (typ2, e', d) -> (* it did return something *)
+                    (* Unify the inferred return type with our type variable *)
+                    let (resolved_type, final_subst) =
+                      if btype <> Dyn then
+                        (* Explicit return type - check it matches *)
+                        if btype <> typ2 && typ2 <> Dyn then
+                          raise (Failure (Printf.sprintf "STypeError: invalid return type (expected %s but found %s)" (string_of_typ btype) (string_of_typ typ2)))
+                        else (btype, the_state.subst)
+                      else
+                        (* No explicit type - use unification to resolve TVar *)
+                        try
+                          let subst' = unify ret_tvar typ2 the_state.subst in
+                          (finalize_type subst' ret_tvar, subst')
+                        with UnificationError _ -> (typ2, the_state.subst)
+                    in
+                    (* Apply substitution to resolve all TVars in the function body *)
+                    let resolved_block = apply_subst_sstmt final_subst block in
+                    let func = { styp = resolved_type; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = resolved_block } in
+                    (resolved_type, (SCall(e, (List.rev exprout), SFunc(func))), d)
+
+                | None -> (* function didn't return anything, null function *)
+                    if btype <> Dyn then
+                      raise (Failure (Printf.sprintf "STypeError: invalid return type (expected %s but found None)" (string_of_typ btype)))
+                    else
+                      let func = { styp = Null; sfname = n1; sformals = (List.rev bindout); slocals = locals; sbody = block } in
+                      (Null, (SCall(e, (List.rev exprout), SFunc(func))), None))
           
           | _ -> raise (Failure ("SCriticalFailure: unexpected type encountered internally in Call evaluation"))) (* can be expanded to allow classes in the future *)
       
@@ -260,7 +308,7 @@ stack is a TypeMap containing the function call stack.
 TODO distinguish between outer and inner scope return statements to stop evaluating when definitely
 returned. *)
 
-and check_func out data local_vars the_state = (function  
+and check_func out data local_vars the_state = (function
   | [] -> ((List.rev out), data, the_state.locals  , List.sort_uniq compare (List.rev local_vars))
   | a :: t -> let (m', value, d, loc) = stmt the_state a in
     let the_state = (change_state the_state (S_setmaps (m', the_state.globals))) in
@@ -269,6 +317,17 @@ and check_func out data local_vars the_state = (function
       | (None, _) -> check_func (value :: out) d (loc @ local_vars) the_state t
       | (_, None) -> check_func (value :: out) data (loc @ local_vars) the_state t
       | (_, _) when d = data -> check_func (value :: out) data (loc @ local_vars) the_state t
+      | (Some x, Some y) ->
+        (* Use unification to reconcile return types *)
+        let (t1, _, _) = x and (t2, _, _) = y in
+        let unified_type =
+          if t1 = t2 then t1
+          else try
+            let subst = unify t1 t2 empty_subst in
+            finalize_type subst t1
+          with UnificationError _ -> Dyn
+        in
+        check_func (value :: out) (Some (unified_type, (SNoexpr, Dyn), None)) (loc @ local_vars) the_state t
       | _ -> check_func (value :: out) (Some (Dyn, (SNoexpr, Dyn), None)) (loc @ local_vars) the_state t))
 
 (* match_data: when reconciling branches in a conditional branch, this function
@@ -281,10 +340,18 @@ and check_func out data local_vars the_state = (function
 and match_data d1 d2 = match d1, d2 with
   | (None, None) -> None
   | (None, _) | (_, None) -> (Some (Dyn, (SNoexpr, Dyn), None))
-  | (Some x, Some y) -> 
+  | (Some x, Some y) ->
     if x = y then d1
-    else let (t1, _, _) = x and (t2, _, _) = y in 
-    (Some ((if t1 = t2 then t1 else Dyn), (SNoexpr, Dyn), None))
+    else let (t1, _, _) = x and (t2, _, _) = y in
+    (* Use unification to reconcile types - e.g., TVar(1) and Int can unify to Int *)
+    let unified_type =
+      if t1 = t2 then t1
+      else try
+        let subst = unify t1 t2 empty_subst in
+        finalize_type subst t1
+      with UnificationError _ -> Dyn
+    in
+    (Some (unified_type, (SNoexpr, Dyn), None))
 
 (* func_stmt: syntactically checkts statements inside functions. Exists mostly to handle 
   function calls which recurse and to redirect calls to expr to expr. We may be able

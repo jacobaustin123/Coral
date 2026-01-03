@@ -1,6 +1,7 @@
 open Ast
 open Sast
 open Utilities
+open Infer
 
 (* coral.ml: the main compiler file for the Coral Programming Language. coral.ml handles command line
 parsing, generating and interpretering the compiler and interpreter, handling tab-based indentation, 
@@ -344,7 +345,7 @@ let rec from_console map past run =
     let imported_program = parse_imports program in
     let after_program = strip_after [] imported_program in
 
-    let (sast, map') = (Semant.check [] [] { forloop = false; inclass = false; cond = false; noeval = false; stack = TypeMap.empty; func = false; locals = map; globals = map; } after_program) in (* temporarily here to check validity of SAST *)
+    let (sast, map') = (Semant.check [] [] { forloop = false; inclass = false; cond = false; noeval = false; stack = TypeMap.empty; func = false; locals = map; globals = map; subst = Infer.empty_subst; } after_program) in (* temporarily here to check validity of SAST *)
     let (sast, globals) = sast in
     let sast = (strip_return [] sast, globals) in 
     let _ = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)) in (* print debug messages *)
@@ -375,7 +376,7 @@ let rec from_file map fname run = (* todo combine with loop *)
     let imported_program = parse_imports program in
     let after_program = strip_after [] imported_program in
 
-    let (sast, map') = (Semant.check [] [] { forloop = false; inclass = false; cond = false; noeval = false; stack = TypeMap.empty; func = false; globals = map; locals = map; } after_program) in (* temporarily here to check validity of SAST *)
+    let (sast, map') = (Semant.check [] [] { forloop = false; inclass = false; cond = false; noeval = false; stack = TypeMap.empty; func = false; globals = map; locals = map; subst = Infer.empty_subst; } after_program) in (* temporarily here to check validity of SAST *)
     let (sast, globals) = sast in
     let sast = (strip_return [] sast, globals) in 
     let () = if !debug then print_endline ("Parser: \n\n" ^ (string_of_sprogram sast)); flush stdout; in (* print debug messages *)
