@@ -1444,6 +1444,45 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
             and float_format_str = L.build_global_stringptr "%c\n" "fmt" the_state.b in   *)
             (* List.iter (fun (Bind (n, t)) -> print_endline (n ^ ": " ^ string_of_typ t)) sfdecl.sformals; *)
             let fn_namespace = build_binding_list (Some(fn_builder)) (typed_formals @ sfdecl.slocals) false in
+            (* For nested function recursion: if the function is defined in an enclosing scope,
+               we need to make it accessible within its own body. Since we can't directly reference
+               allocas from other functions, we load the function object at the call site (before
+               entering the optimized function) and pass it via a global variable. *)
+            let fn_namespace =
+              let is_nested_func =
+                (* Check if function is in enclosing scope but not in globals *)
+                (match BindMap.find_opt (Bind(sfdecl.sfname, FuncType)) the_state.namespace with
+                 | Some(_) -> not (BindMap.mem (Bind(sfdecl.sfname, FuncType)) globals_map)
+                 | None -> false)
+              in
+              if is_nested_func then begin
+                (* Load the function from outer scope at call site (in the_state.b which is the caller) *)
+                let BoxAddr(outer_addr, _) = BindMap.find (Bind(sfdecl.sfname, FuncType)) the_state.namespace in
+                let func_cobj = L.build_load ptr_t outer_addr "nested_func_load" the_state.b in
+                (* Create a global to pass the function to the inner scope (simple approach for single-threaded) *)
+                let global_name = "__nested_" ^ sfdecl.sfname in
+                let nested_global =
+                  match L.lookup_global global_name the_module with
+                  | Some(g) -> g
+                  | None -> L.define_global global_name (L.const_pointer_null cobj_pt) the_module
+                in
+                ignore(L.build_store func_cobj nested_global the_state.b);
+                (* Now inside the optimized function, load from global and store in local *)
+                let local_addr = L.build_alloca cobj_pt (sfdecl.sfname ^ "_local") fn_builder in
+                let loaded_func = L.build_load ptr_t nested_global "load_nested" fn_builder in
+                ignore(L.build_store loaded_func local_addr fn_builder);
+                (* Add both FuncType and Dyn bindings *)
+                let fn_namespace = BindMap.add (Bind(sfdecl.sfname, FuncType)) (BoxAddr(local_addr, false)) fn_namespace in
+                BindMap.add (Bind(sfdecl.sfname, Dyn)) (BoxAddr(local_addr, false)) fn_namespace
+              end
+              else
+                (* Not a nested function or already in globals, try adding from globals if available *)
+                try
+                  let func_addr = BindMap.find (Bind(sfdecl.sfname, FuncType)) globals_map in
+                  let fn_namespace = BindMap.add (Bind(sfdecl.sfname, FuncType)) func_addr fn_namespace in
+                  BindMap.add (Bind(sfdecl.sfname, Dyn)) func_addr fn_namespace
+                with Not_found -> fn_namespace
+            in
             let vals_to_store = Array.to_list (L.params optim_func) in
 
             (* let addrs = List.map (fun (bind, explicit_type) -> ((lookup fn_namespace bind), explicit_type)) binds in *)
@@ -1824,13 +1863,15 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
         let the_function = L.define_function fname userdef_fn_t the_module in
 
         (* manually design the fn object w proper data & type ptrs and put in bind *)
-        let _ =
+        (* Keep boxaddr accessible so we can add the function to its own namespace for recursion *)
+        let boxaddr =
           let (fn_obj,datafieldptr,ctypefieldptr) = build_new_cobj_empty the_state.b in
           ignore(L.build_store the_function datafieldptr the_state.b);  (* store fnptr *)
           ignore(L.build_store ctype_func ctypefieldptr the_state.b);  (* store ctype ptr *)
           (* store new object in appropriate binding *)
           let BoxAddr(boxaddr,_) = (lookup namespace (Bind(fname, FuncType))) in (*ok to throw away need_update bool in assignment! *)
-          ignore(L.build_store fn_obj boxaddr the_state.b)
+          ignore(L.build_store fn_obj boxaddr the_state.b);
+          boxaddr
         in
 
         let fn_b = L.builder_at_end context (L.entry_block the_function) in
@@ -1873,7 +1914,39 @@ let translate prgm except =   (* note this whole thing only takes two things: gl
 
         let fn_namespace = build_binding_list (Some(fn_b)) sfdecl.slocals false in
         let (fn_namespace, fn_state) = List.fold_left2 add_formal (fn_namespace, fn_state) sfdecl.sformals formal_vals in
-(* 
+        (* For nested function recursion: make the function accessible within its own body.
+           Since boxaddr is in the outer function's frame, we use a global to pass the function
+           to the inner function. *)
+        let fn_namespace =
+          (* Check if this is a nested function (not in globals) *)
+          let is_nested = not (BindMap.mem (Bind(fname, FuncType)) globals_map) in
+          if is_nested then begin
+            (* Load function from outer scope and store in a global *)
+            let func_cobj = L.build_load ptr_t boxaddr "nested_func_load_gen" the_state.b in
+            let global_name = "__nested_gen_" ^ fname in
+            let nested_global =
+              match L.lookup_global global_name the_module with
+              | Some(g) -> g
+              | None -> L.define_global global_name (L.const_pointer_null cobj_pt) the_module
+            in
+            ignore(L.build_store func_cobj nested_global the_state.b);
+            (* Load from global into a local in the inner function *)
+            let local_addr = L.build_alloca cobj_pt (fname ^ "_gen_local") fn_b in
+            let loaded_func = L.build_load ptr_t nested_global "load_nested_gen" fn_b in
+            ignore(L.build_store loaded_func local_addr fn_b);
+            let fn_namespace = BindMap.add (Bind(fname, FuncType)) (BoxAddr(local_addr, false)) fn_namespace in
+            BindMap.add (Bind(fname, Dyn)) (BoxAddr(local_addr, false)) fn_namespace
+          end
+          else begin
+            (* Top-level function, add from globals *)
+            try
+              let func_addr = BindMap.find (Bind(fname, FuncType)) globals_map in
+              let fn_namespace = BindMap.add (Bind(fname, FuncType)) func_addr fn_namespace in
+              BindMap.add (Bind(fname, Dyn)) func_addr fn_namespace
+            with Not_found -> fn_namespace
+          end
+        in
+(*
         let int_format_str = L.build_global_stringptr "%d\n" "fmt" fn_state.b
         and float_format_str = L.build_global_stringptr "%f\n" "fmt" fn_state.b
         and str_format_str = L.build_global_stringptr  "%s\n" "fmt" fn_state.b in *)
