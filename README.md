@@ -12,6 +12,8 @@ The **Coral** programming language: a blazingly-fast, gradually typed Python-lik
 * [Adding Type Annotations](#adding-type-annotations)
 * [Exceptions](#exceptions)
 * [Differences from Python](#differences-from-python)
+* [Optimization](#optimization)
+* [Acknowledgments](#acknowledgments)
 
 # Examples
 
@@ -79,7 +81,7 @@ You may need to add the llvm bin directory to your PATH variable using bashrc or
 
 ### Familiarity
 
-Coral's syntax is identical to Python's, with all its usual convenience. Python programmers can simply copy their code into the Coral compiler, and they can add type annotations which can be used to help performance and improve safety. Python is already an easy-to-learn language, and Coral adds no additional difficult to the learning curve. Coral also imposes no further restriction on the kinds of functions which can be run.
+Coral's syntax is identical to Python's, with all its usual convenience. Python programmers can simply copy their code into the Coral compiler, and they can add type annotations which can be used to help performance and improve safety. Python is already an easy-to-learn language, and Coral adds no additional difficulty to the learning curve. Coral also imposes no further restriction on the kinds of functions which can be run.
 
 ### Type Safety
 
@@ -87,7 +89,7 @@ Coral provides type safety where desired. Type specifiers on variables and funct
 
 ### Code Optimization
 
-Because of Coral's type inference system and assisted by type annotations, Coral is able to compile code to far more efficient machine code that Python. Even without type-hints, Coral can often optimize code to be nearly as fast as equivalent C code, and type hints can allow it to overcome ambiguities in type-inference that would otherwise prevent Coral from optimizing fully. This natural interplay between typed code and optimization is at the heart of the Coral language.
+Because of Coral's type inference system and assisted by type annotations, Coral is able to compile code to far more efficient machine code than Python. Even without type-hints, Coral can often optimize code to be nearly as fast as equivalent C code, and type hints can allow it to overcome ambiguities in type-inference that would otherwise prevent Coral from optimizing fully. This natural interplay between typed code and optimization is at the heart of the Coral language.
 
 ### Seamless Interplay between Typed and Untyped Code
 
@@ -125,7 +127,7 @@ By default, this will generate the corresponding LLVM IR, compile it to an execu
 coral gcd.cl -o main
 ```
 
-This will name the file main instead. To generate only the LLVM IR, run Coral with the ```-emit-llvm``` flag. To generate only the assembly code, run Coral with the ```-S``` flag. To only run the semantic checker without compilation, use the ```-no-compile``` flag. To disable runtime error checking for improved performance, using the ```-no-except``` flag.
+This will name the file main instead. To generate only the LLVM IR, run Coral with the ```-emit-llvm``` flag. To generate only the assembly code, run Coral with the ```-S``` flag. To only run the semantic checker without compilation, use the ```-no-compile``` flag. To disable runtime error checking for improved performance, use the ```-no-except``` flag.
 
 ```bash
 coral gcd.cl -emit-llvm # only produces llvm
@@ -135,12 +137,12 @@ coral gcd.cl -S # only generates assembly code
 coral gcd.cl -d # shows debugging information about the program. can be combined with other flags
 ```
 
-Coral also has a build-in **interpreter**. To use the interpreter, simply run ```coral``` without a file specified. This will open an interactive window like the OCaml or Python interpreter in which you can run any valid Coral program. The following is an example of gcd code run in the interpreter:
+Coral also has a built-in **interpreter**. To use the interpreter, simply run ```coral``` without a file specified. This will open an interactive window like the OCaml or Python interpreter in which you can run any valid Coral program. The following is an example of gcd code run in the interpreter:
 
 ```python
 > coral
 Welcome to the Coral programming language.
->>> def gcd(a, b)
+>>> def gcd(a, b):
 ...     while a != b:
 ...         if a > b:
 ...             a = a - b
@@ -230,7 +232,7 @@ STypeError: invalid type assigned to x
 
 # Optimization
 
-Coral uses a gradual typing system that places type-inferred immutable variables on the stack instead of following Python's dynamic PyObject memory model. This optimization can speed up computational intensive numerical code by many orders of magnitude. For example, the example gcd code above, even without type annotations, runs about 1000x faster in Coral than in Python. You can test this by simply running the same program using both the Python interpreter and Coral compiler. Other highly optimized examples include:
+Coral uses a gradual typing system that places type-inferred immutable variables on the stack instead of following Python's dynamic PyObject memory model. This optimization can speed up computationally intensive numerical code by many orders of magnitude. For example, the example gcd code above, even without type annotations, runs about 1000x faster in Coral than in Python. You can test this by simply running the same program using both the Python interpreter and Coral compiler. Other highly optimized examples include:
 
 ```python
 >>> def count(x):
@@ -249,7 +251,7 @@ Coral uses a gradual typing system that places type-inferred immutable variables
 which runs much faster in Coral than Python. Type annotations make this optimization even more robust. Often types cannot be fully type inferred, but type hints allow more code to be placed on the stack. For example, in this gcd code:
 
 ```python
->>> def gcd(a : int, b : int) -> int
+>>> def gcd(a : int, b : int) -> int:
 ...     while a != b:
 ...         if a > b:
 ...             a = a - b
