@@ -11,8 +11,8 @@ let pbind bind = tstp (string_of_sbind bind); ()
 let _ = L.enable_pretty_stacktrace()
 (* Maps *)
 module StringMap = Map.Make(String)
-module BindMap = Map.Make(struct type t = Ast.bind let compare = Pervasives.compare end)
-module SfdeclMap = Map.Make(struct type t = Sast.sfunc_decl let compare = Pervasives.compare end)
+module BindMap = Map.Make(struct type t = Ast.bind let compare = compare end)
+module SfdeclMap = Map.Make(struct type t = Sast.sfunc_decl let compare = compare end)
 
 let explode s = 
     let rec aux out n =

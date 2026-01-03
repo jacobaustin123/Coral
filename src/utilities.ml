@@ -208,7 +208,7 @@ let compare_decl a b = if a = b then a else false
 let compare_data a b = if a = b then a else None
 
 (* map with SFunc and argument type list used to check recursive calls *)
-module TypeMap = Map.Make(struct type t = stmt * typ list let compare = Pervasives.compare end)
+module TypeMap = Map.Make(struct type t = stmt * typ list let compare = compare end)
 
 (* map with string keys, used for variable lookup *)
 module StringMap = Map.Make(String)
