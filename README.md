@@ -43,34 +43,34 @@ The Coral GitHub page provides installers for MacOS and several Linux distributi
 To build the language from the source, **you must have OCaml (5.x recommended), ocaml-llvm, and clang already installed**. To build Coral from the source with OCaml, ocaml-llvm, and gcc/clang already installed, run:
 
 ```bash
-> git clone https://github.com/jacobaustin123/Coral.git
-> cd Coral
-> make
+git clone https://github.com/jacobaustin123/Coral.git
+cd Coral
+make
 ```
 
 This will generate an executable called coral which acts as a compiler and interpreter for our language. If OCaml and ocaml-llvm are not already installed, you should install them. On Mac OS, run:
 
 ```bash
-> brew install opam llvm
-> opam init
-> eval $(opam env)
-> opam install llvm ocamlbuild ocamlfind
+brew install opam llvm
+opam init
+eval $(opam env)
+opam install llvm ocamlbuild ocamlfind
 ```
 
 If the above fails, you may need to run `eval $(opam env)` after opam init. You may also need to ensure the LLVM binaries are in your PATH:
 
 ```bash
-> export PATH=/opt/homebrew/opt/llvm/bin:$PATH  # Apple Silicon
-> export PATH=/usr/local/opt/llvm/bin:$PATH     # Intel Mac
+export PATH=/opt/homebrew/opt/llvm/bin:$PATH  # Apple Silicon
+export PATH=/usr/local/opt/llvm/bin:$PATH     # Intel Mac
 ```
 
 On Linux, follow the OCaml/Opam installation instructions [here](https://opam.ocaml.org/doc/Install.html) for your distribution, install llvm following instructions [here](https://apt.llvm.org/), and then run
 
 ```bash
-> sudo apt-get install cmake llvm opam
-> opam init
-> eval $(opam env)
-> opam install llvm ocamlbuild ocamlfind
+sudo apt-get install cmake llvm opam
+opam init
+eval $(opam env)
+opam install llvm ocamlbuild ocamlfind
 ```
 
 You may need to add the llvm bin directory to your PATH variable using bashrc or zshrc.
@@ -116,23 +116,23 @@ print(gcd(a,b))
 This code is syntactically identical to Python, and requires no type annotations. To compile using the Coral compiler, save this code to a file called gcd.cl and compile it with
 
 ```bash
-> coral gcd.cl
+coral gcd.cl
 ```
 
 By default, this will generate the corresponding LLVM IR, compile it to an executable file called a.out, and run it. To change the name of the output file, run
 
 ```bash
-> coral gcd.cl -o main
+coral gcd.cl -o main
 ```
 
 This will name the file main instead. To generate only the LLVM IR, run Coral with the ```-emit-llvm``` flag. To generate only the assembly code, run Coral with the ```-S``` flag. To only run the semantic checker without compilation, use the ```-no-compile``` flag. To disable runtime error checking for improved performance, using the ```-no-except``` flag.
 
 ```bash
-> coral gcd.cl -emit-llvm # only produces llvm
-> coral gcd.cl -no-compile # only run semantic checker
-> coral gcd.cl -no-except # generates machine code with no runtime error handling
-> coral gcd.cl -S # only generates assembly code
-> coral gcd.cl -d # shows debugging information about the program. can be combined with other flags
+coral gcd.cl -emit-llvm # only produces llvm
+coral gcd.cl -no-compile # only run semantic checker
+coral gcd.cl -no-except # generates machine code with no runtime error handling
+coral gcd.cl -S # only generates assembly code
+coral gcd.cl -d # shows debugging information about the program. can be combined with other flags
 ```
 
 Coral also has a build-in **interpreter**. To use the interpreter, simply run ```coral``` without a file specified. This will open an interactive window like the OCaml or Python interpreter in which you can run any valid Coral program. The following is an example of gcd code run in the interpreter:
