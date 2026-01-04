@@ -1,5 +1,6 @@
 open Ast
 open Sast
+open Infer
 
 (* Runtime: exception type used for the interpreter. KeyboardInterrupt: used to handle ctrl-c *)
 exception Runtime of string
@@ -145,6 +146,7 @@ let type_to_string = function
   | FuncType -> "func"
   | Null -> "null"
   | Object -> "object"
+  | TVar n -> "'" ^ string_of_int n
 
 (* unop_to_string: converts unop to string for error handling *)
 let unop_to_string = function
@@ -208,6 +210,7 @@ let compare_decl a b = if a = b then a else false
 let compare_data a b = if a = b then a else None
 
 (* map with SFunc and argument type list used to check recursive calls *)
+(* Maps (function_stmt, arg_types) -> return_type_variable for HM inference *)
 module TypeMap = Map.Make(struct type t = stmt * typ list let compare = compare end)
 
 (* map with string keys, used for variable lookup *)
@@ -257,7 +260,7 @@ let equals m1 m2 = (StringMap.equal (fun x y -> (compare x y) = 0) m1 m2) (* che
 
 (* flag passed around semant holding information about the current environment *)
 type flag = {
-  stack : bool TypeMap.t;
+  stack : Ast.typ TypeMap.t;  (* Maps (func, arg_types) -> return type var for HM *)
   noeval : bool; (* in a SFunc doing a generic analysis *)
   cond : bool; (* in a conditional branch? *)
   forloop : bool; (* in a for loop? *)
@@ -265,6 +268,7 @@ type flag = {
   inclass : bool;
   locals: (Ast.typ * Ast.typ * Ast.stmt option) StringMap.t;
   globals: (Ast.typ * Ast.typ * Ast.stmt option) StringMap.t;
+  subst : Infer.substitution;  (* Current substitution for HM inference *)
 }
 
 type state_component = 
@@ -277,7 +281,7 @@ type state_component =
 
 let change_state the_state = function
   | S_func -> if the_state.func then the_state else { the_state with globals = the_state.locals; }
-  | S_noeval(locals) -> { the_state with noeval = true; forloop = false; cond = false; stack = TypeMap.empty; locals = locals; func = true; globals = StringMap.empty; }
+  | S_noeval(locals) -> { the_state with noeval = true; forloop = false; cond = false; stack = TypeMap.empty; locals = locals; func = true; globals = StringMap.empty; subst = Infer.empty_subst; }
   | S_cond -> { the_state with cond = true; }
   | S_forloop(locals) -> {the_state with cond = true; forloop = true; locals = locals; }
   | S_setmaps(locals, globals) -> {the_state with locals = locals; globals = globals; }
