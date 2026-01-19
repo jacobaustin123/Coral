@@ -262,7 +262,8 @@ returned. *)
 
 and check_func out data local_vars the_state = (function  
   | [] -> ((List.rev out), data, the_state.locals  , List.sort_uniq compare (List.rev local_vars))
-  | a :: t -> let (m', value, d, loc) = stmt the_state a in
+  | a :: t ->
+    let (m', value, d, loc) = stmt the_state a in
     let the_state = (change_state the_state (S_setmaps (m', the_state.globals))) in
     (match (data, d) with
       | (None, None) -> check_func (value :: out) None (loc @ local_vars) the_state t
@@ -305,10 +306,10 @@ and stmt the_state = function (* evaluates statements, can pass it a func *)
       let (typ, e', d) = data in 
       (the_state.locals, SReturn(e'), (Some data), [])
 
-  | Block(s) -> 
-      if not the_state.func then let ((value, globals), map') = check [] [] the_state s 
+  | Block(s) ->
+      if not the_state.func then let ((value, globals), map') = check [] [] the_state s
         in (map', SBlock(value), None, globals)
-      else let (value, data, map', out) = check_func [] None [] the_state s in 
+      else let (value, data, map', out) = check_func [] None [] the_state s in
         (map', SBlock(value), data, out)
 
   | Expr(e) -> let (t, e', _) = expr the_state e in (the_state.locals, SExpr(e'), None, [])
